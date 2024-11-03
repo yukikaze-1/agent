@@ -1,0 +1,14 @@
+SenseVoice:
+    https://github.com/FunAudioLLM/SenseVoice
+
+CosyVoice:
+    https://github.com/FunAudioLLM/CosyVoice
+
+GPT-SoVits:
+    https://github.com/RVC-Boss/GPT-SoVITS
+
+yolov11:
+    https://github.com/ultralytics/ultralytics
+
+SAM2:
+    https://github.com/facebookresearch/sam2
