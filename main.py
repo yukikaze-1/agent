@@ -6,11 +6,11 @@
 
 import os
 import time
-from functions import *
 from dotenv import load_dotenv
+from Memory.memory import *
 
 # 加载环境变量
-load_dotenv()
+load_dotenv("./.env")
 
 # 全局记忆(长期记忆)# TODO 长期记忆怎么解决？放哪个文件？谁来管理？
 

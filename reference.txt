@@ -12,3 +12,7 @@ yolov11:
 
 SAM2:
     https://github.com/facebookresearch/sam2
+
+GOT-OCR2.0
+    https://github.com/Ucas-HaoranWei/GOT-OCR2.0
+
