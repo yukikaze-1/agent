@@ -1,3 +1,36 @@
+显卡算力：
+
+Tesla M40 12G
+    INT8:
+    FP16:   不支持
+    FP32:   6.832 TFLOPS
+    FP64:   0.2135 TFLOPS
+    Memory Bus: 384 bit
+    Bandwidth:  288.4 GB/s
+
+Tesla P100 16G
+    INT8:
+    FP16:   21.2 TFLOPS
+    FP32:   10.6 TFLOPS
+    FP64:   5.3 TFLOPS
+    Memory Bus: 
+    Bandwidth:  732 GB/s
+
+RTX 4060Ti 16G
+    INT8:
+    FP16:   
+    FP32:   22.1 TFLOPS
+    FP64:   
+    Memory Bus: 128bit
+    Bandwidth:  732 GB/s
+
+闭源模型:
+智谱AI：
+    GLM-4
+
+
+开源模型：
+
 SenseVoice:
     https://github.com/FunAudioLLM/SenseVoice
 
@@ -13,6 +46,26 @@ yolov11:
 SAM2:
     https://github.com/facebookresearch/sam2
 
-GOT-OCR2.0
+GOT-OCR2.0:
     https://github.com/Ucas-HaoranWei/GOT-OCR2.0
 
+VSA(Vision Search Assistant):
+    https://github.com/cnzzx/VSA
+
+LLam3.2:
+    https://github.com/meta-llama/llama3
+
+CLIP:
+    https://github.com/openai/CLIP
+
+whisper:
+    https://github.com/openai/whisper
+
+CoTracker3:
+    https://github.com/facebookresearch/co-tracker
+
+D-DINE:
+    https://github.com/Peterande/D-FINE  
+
+Surya-OCR：
+    https://github.com/VikParuchuri/surya
