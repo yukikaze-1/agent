@@ -7,7 +7,7 @@
 import os
 import time
 from dotenv import load_dotenv
-from Memory.memory import *
+from Memory.Memory import *
 
 # 加载环境变量
 load_dotenv("./.env")

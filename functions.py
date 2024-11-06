@@ -8,7 +8,7 @@ import os
 import json
 import time
 from prompt import *
-from tools import *
+from Tools.tools import *
 from memory import *
 from TTS.tts import *
 

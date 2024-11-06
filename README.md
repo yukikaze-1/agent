@@ -29,20 +29,24 @@
 
 - 听觉模块
     1. 语音识别
-        - [x] SenseVoice
+        - [ ] SenseVoice
             > https://github.com/FunAudioLLM/SenseVoice
-        - [ ] whisper
+        - [ ] StreamingSenseVoice
+            > https://github.com/pengzhendong/streaming-sensevoice
+        - [ ] ~~whisper~~
             > https://github.com/openai/whisper
     2. 实时打断
     3. 语气识别
 
 - 语音模块
     1. 语音生成
-        - [x] GPTSoVits
+        - [ ] GPTSoVits
             > https://github.com/RVC-Boss/GPT-SoVITS
         - [ ] CosyVoice
             > https://github.com/FunAudioLLM/CosyVoice
-
+    2. 其他声音生成
+        - [ ] Stable-audio-tools
+            > https://github.com/Stability-AI/stable-audio-tools
 - 记忆模块
 
 - 联网模块
@@ -51,6 +55,7 @@
     - RAG
     - [ ] LLam3.2-90B
         > https://github.com/meta-llama/llama3
+    - [ ] Qwen
 
 
 - RAG模块

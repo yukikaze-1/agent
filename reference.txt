@@ -34,6 +34,9 @@ RTX 4060Ti 16G
 SenseVoice:
     https://github.com/FunAudioLLM/SenseVoice
 
+StreamingSenseVoice
+    https://github.com/pengzhendong/streaming-sensevoice
+
 CosyVoice:
     https://github.com/FunAudioLLM/CosyVoice
 
@@ -69,3 +72,6 @@ D-DINE:
 
 Surya-OCR：
     https://github.com/VikParuchuri/surya
+
+Stable-audio-tools
+    https://github.com/Stability-AI/stable-audio-tools

@@ -9,7 +9,7 @@ import time
 from sortedcontainers import SortedDict
 
 # 确保在测试前导入 ShortMemory 类
-from memory import *
+from Memory.Memory import *
 
 def test():
     # 创建一个 ShortMemory 实例

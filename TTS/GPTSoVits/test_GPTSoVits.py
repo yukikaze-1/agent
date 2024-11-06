@@ -1,5 +1,5 @@
 import os
-from tts import infer_tts_get, infer_tts_post, set_gpt_weights, set_sovits_weights, restart_service
+from GPTSoVits import infer_tts_get, infer_tts_post, set_gpt_weights, set_sovits_weights, restart_service
 from dotenv import load_dotenv
 load_dotenv("/home/yomu/agent/.env")
 
