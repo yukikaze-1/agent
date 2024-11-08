@@ -28,7 +28,7 @@
     7. 表情识别
 
 - 听觉模块
-    1. 语音识别
+    1. 语音识别(STT)
         - [ ] SenseVoice
             > https://github.com/FunAudioLLM/SenseVoice
         - [ ] StreamingSenseVoice
@@ -39,7 +39,7 @@
     3. 语气识别
 
 - 语音模块
-    1. 语音生成
+    1. 语音生成(TTS)
         - [ ] GPTSoVits
             > https://github.com/RVC-Boss/GPT-SoVITS
         - [ ] CosyVoice

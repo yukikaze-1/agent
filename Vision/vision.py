@@ -5,8 +5,10 @@
 # Description:  agent vision
 
 """
-    目标检测-采用yolo11实现--->./ObjectDetection/yolo11.py
-    实例分割-采用实现
+    本文件负责汇总视觉大模型接口，提供视觉模型核心
+    目标检测-采用yolo11实现
+    实例分割-采用SAM2实现
+    关键点跟踪-采用Cotracker3实现
 """
 
 

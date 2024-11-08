@@ -67,7 +67,7 @@ whisper:
 CoTracker3:
     https://github.com/facebookresearch/co-tracker
 
-D-DINE:
+D-FINE:
     https://github.com/Peterande/D-FINE  
 
 Surya-OCR：
