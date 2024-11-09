@@ -73,5 +73,12 @@
         - [ ] LoRa
     3. AI视频生成模块
         - [ ] Sora
+    4. 语音克隆模块
+        - [ ] ~~So-Vits-SVC~~(已停更)
+        > https://github.com/svc-develop-team/so-vits-svc
+        - [ ] So-Vits-SVC-fork
+        > https://github.com/voicepaw/so-vits-svc-fork
+        - [ ] VoiceChanger(实时语音转换)
+        > https://github.com/w-okada/voice-changer
     
 # 3. 安装

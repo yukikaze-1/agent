@@ -75,3 +75,12 @@ Surya-OCR：
 
 Stable-audio-tools
     https://github.com/Stability-AI/stable-audio-tools
+
+So-Vits-SVC(已停更)
+    https://github.com/svc-develop-team/so-vits-svc
+
+So-Vits-SVC-fork
+    https://github.com/voicepaw/so-vits-svc-fork
+
+VoiceChanger
+    https://github.com/w-okada/voice-changer
