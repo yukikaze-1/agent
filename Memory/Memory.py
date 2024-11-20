@@ -16,7 +16,7 @@ import logging
 
 from dotenv import load_dotenv
 from abc import ABC, abstractmethod
-from prompt import summarize_keywords
+from ..Prompt.prompt import summarize_keywords
 from sortedcontainers import SortedDict
 
 load_dotenv()

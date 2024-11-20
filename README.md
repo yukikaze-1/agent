@@ -53,10 +53,12 @@
 
 - 语言模型
     - RAG
-    - [ ] LLam3.2-90B
+    - [ ] LLam3.2
         > https://github.com/meta-llama/llama3
-    - [ ] Qwen
-
+    - [ ] Qwen2.5
+        > https://github.com/QwenLM/Qwen2.5
+    - [ ] Gemma 2
+        > 
 
 - RAG模块
 - VSA模块
@@ -68,7 +70,17 @@
         - [ ] CLIP
             > https://github.com/openai/CLIP
     2. AI画图模块
-        - [ ] stable diffusion
+        - [ ] Stable-Diffusion
+            - [ ] Stable-Diffusion3.5
+            > https://github.com/Stability-AI/sd3.5
+            <details>
+            <summary>配置要求</summary>
+
+             - Stable-Diffusion3.5 large/large_turbo (FP8)==> 24GB(18GB)
+
+             - Stable-Diffusion3.5 medium (FP8) == > 18GB(14GB)
+            </details>
+
         - [ ] flux
         - [ ] LoRa
     3. AI视频生成模块
@@ -80,5 +92,28 @@
         > https://github.com/voicepaw/so-vits-svc-fork
         - [ ] VoiceChanger(实时语音转换)
         > https://github.com/w-okada/voice-changer
-    
+    5. Prompt模块
+        - [ ] LangGPT
+        > https://github.com/langgptai/LangGPT
+    6. Memory模块
+        - [ ] MemGPT
+            > https://github.com/letta-ai/letta
+        - [ ] OMNE框架
+            >  https://arxiv.org/abs/2410.15665
+    7. 端到端语音模型   
+        - [ ] GLM-4-voice
+            > https://github.com/THUDM/GLM-4-Voice
+    8. 端侧控制模块
+        - [ ] LiMAC框架
+            > https://arxiv.org/abs/2410.17883
+    9. 对接ollama的接口模块
+        - [ ] LangChain-Chatchat[参考]
+            > https://github.com/chatchat-space/Langchain-Chatchat
+        
+
+- 多agent合作模块
+    - [ ] Swarm
+        > https://github.com/openai/swarm
+    - [ ] Co-STORM
+        > https://github.com/stanford-oval/storm
 # 3. 安装

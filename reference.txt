@@ -84,3 +84,21 @@ So-Vits-SVC-fork
 
 VoiceChanger
     https://github.com/w-okada/voice-changer
+
+LangGPT
+    https://github.com/langgptai/LangGPT
+
+MemGPT
+    https://github.com/letta-ai/letta
+
+Stale-Diffusion
+    https://github.com/Stability-AI/sd3.5
+
+Swarm
+    https://github.com/openai/swarm
+
+Co-STORM
+    https://github.com/stanford-oval/storm
+
+LangChain-Chatchat
+    https://github.com/chatchat-space/Langchain-Chatchat
