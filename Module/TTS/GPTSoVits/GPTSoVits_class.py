@@ -4,6 +4,15 @@
 # Version:      0.1
 # Description:  GPTSoVits class
 
+"""
+    此文件只有GPTSoVits的客户端的代理
+    服务端需要再bash中手动启动！
+    
+"""
+
+# TODO 考虑将服务端作为agent的一部分
+# 考虑在agent启动自动启动 或者 在agent需要使用时一并启动，而非现在的要在外部bash手动启动
+
 import os
 import datetime
 import requests

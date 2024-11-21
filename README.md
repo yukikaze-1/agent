@@ -40,7 +40,7 @@
 
 - 语音模块
     1. 语音生成(TTS)
-        - [ ] GPTSoVits
+        - [x] GPTSoVits
             > https://github.com/RVC-Boss/GPT-SoVITS
         - [ ] CosyVoice
             > https://github.com/FunAudioLLM/CosyVoice
@@ -48,14 +48,15 @@
         - [ ] Stable-audio-tools
             > https://github.com/Stability-AI/stable-audio-tools
 - 记忆模块
+    - [ ] Langchain自带记忆模块
+    - [ ] 自己实现一个记忆模块
 
 - 联网模块
 
 - 语言模型
-    - RAG
-    - [ ] LLam3.2
+    - [x] LLam3.2
         > https://github.com/meta-llama/llama3
-    - [ ] Qwen2.5
+    - [x] Qwen2.5
         > https://github.com/QwenLM/Qwen2.5
     - [ ] Gemma 2
         > 

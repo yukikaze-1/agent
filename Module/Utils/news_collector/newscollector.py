@@ -25,13 +25,12 @@ from langchain_core.output_parsers import StrOutputParser
 # from Models.TTS.GPTSoVits.GPTSoVits_class import GPTSoVitsAgent
 
 # 新闻类别和来源配置
-NEWS_CATEGORIES = ['科技', '军事', '医药', '教育', '金融', '政治', '其他']
-SOURCES_SOUHU = [
-    'https://www.sohu.com/xchannel/tag?key=新闻-国际',
-]
-SOURCES_TENCENT = []
-MAX_NEWS_COUNT = 20
-WAIT_TIMEOUT = 10 
+# NEWS_CATEGORIES = ['科技', '军事', '医药', '教育', '金融', '政治', '其他']
+# SOURCES = [
+#     'https://www.sohu.com/xchannel/tag?key=新闻-国际',
+# ]
+# MAX_NEWS_COUNT = 20
+# WAIT_TIMEOUT = 10 
 
 """
     NewsCollector从SOURCES搜集新闻（暂时为搜狐）
@@ -43,7 +42,11 @@ class NewsCollector:
     def __init__(self, 
                  model: str = 'llama3.2', 
                  temperature: float = 0.0, 
-                 batch_size: int = 5
+                 batch_size: int = 5,
+                 max_news_count: int = 20,
+                 wait_timeout: int = 10,
+                 news_categories: List[str]=['科技', '军事', '医药', '教育', '金融', '政治', '其他',],
+                 news_sources: List[str]=['https://www.sohu.com/xchannel/tag?key=新闻-国际'],
                  ) -> None:
         # 初始化新闻收集器，设置模型、温度和批处理大小
         if batch_size < 1:
@@ -52,6 +55,13 @@ class NewsCollector:
             raise ValueError("temperature must be between 0 and 1")
         
         self.llm = ChatOllama(model=model, temperature=temperature)
+        
+        # 新闻类别和来源配置
+        self.NEWS_CATEGORIES = news_categories
+        self.NEWS_SOURCES = news_sources
+        self.MAX_NEWS_COUNT = max_news_count
+        self.WAIT_TIMEOUT = wait_timeout
+        
         self._setup_chrome_driver()  # 设置Chrome驱动
         self._setup_chains()  # 设置LLM链
         self.min_delay = 2  # 最小延迟秒数
@@ -59,6 +69,8 @@ class NewsCollector:
         self.cookies = self._load_cookies()  # 从文件或数据库加载Cookie
         self.batch_size = batch_size  # 每批处理的新闻数量
         # self.GPTSoVitsAgent = GPTSoVitsAgent()  # 初始化语音播报代理
+        
+        
 
     def _setup_chrome_driver(self):
         """设置Chrome驱动相关配置"""
@@ -82,7 +94,7 @@ class NewsCollector:
             template=f"请严格遵守以下规则对以下新闻内容进行分类，从提供的分类中选出最符合的一种，并仅回答该类别。\
                     \
                     注意：\
-                    1. 你只能输出一个类别词语，且必须从以下列表中选择：{NEWS_CATEGORIES}。\
+                    1. 你只能输出一个类别词语，且必须从以下列表中选择：{self.NEWS_CATEGORIES}。\
                     2. 不得输出任何其他内容，包括解释或评论。\
                     3. 如果内容无法明确归类，请选择最接近的类别。\
                     \
@@ -148,14 +160,14 @@ class NewsCollector:
             try:
                 self._random_delay()  # 每次请求前添加随机延迟
                 driver.get(source)  # 打开新闻源页面
-                WebDriverWait(driver, WAIT_TIMEOUT).until(
+                WebDriverWait(driver, self.WAIT_TIMEOUT).until(
                     EC.presence_of_element_located((By.CLASS_NAME, 'item-text-content-title'))
                 )
                 soup = BeautifulSoup(driver.page_source, 'html.parser')
 
                 count = 0
                 for item in soup.find_all('div', class_='item-text-content-title'):
-                    if count >= MAX_NEWS_COUNT:
+                    if count >= self.MAX_NEWS_COUNT:
                         break
                     title = item.get_text(strip=True)  # 获取新闻标题
                     link_element = item.find_parent('a', href=True)
@@ -217,7 +229,7 @@ class NewsCollector:
         try:
             self._random_delay()
             driver.get(news_url)
-            WebDriverWait(driver, WAIT_TIMEOUT).until(
+            WebDriverWait(driver, self.WAIT_TIMEOUT).until(
                 EC.presence_of_element_located((By.TAG_NAME, 'article'))
             )
             soup = BeautifulSoup(driver.page_source, 'html.parser')
@@ -309,7 +321,7 @@ class NewsCollector:
         """
         with self._get_driver() as driver:
             self._apply_cookies(driver)  # 应用Cookies
-            sources = SOURCES_SOUHU + SOURCES_TENCENT  # 新闻来源
+            sources = self.NEWS_SOURCES  # 新闻来源
             # 标题 + 链接
             news_list = self.find_news(sources, driver)  # 抓取新闻
             
@@ -362,13 +374,6 @@ class NewsCollector:
                 except Exception as e:
                     logging.warning(f"Failed to add cookie: {e}") 
 
-
-def main():
-    print("running")
-    n = NewsCollector()
-    n.run()
-    
-    
     
 if __name__ == "__main__":
-    main()
+    print("This is a module,should not run directly.Do nothing")
