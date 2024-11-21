@@ -6,4 +6,6 @@
 # ├── Utils
 # └── Vision
 
-# from .TTS.GPTSoVits.GPTSoVits_class import GPTSoVitsAgent
+
+from .TTS import GPTSoVits
+from .Utils import news_collector

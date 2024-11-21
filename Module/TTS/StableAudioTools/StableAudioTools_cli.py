@@ -10,6 +10,11 @@ from gradio_client import Client, handle_file
 
 client = Client("http://192.168.1.17:7860/")
 
+class test():
+    def __init__(self):
+        pass
+
+
 result = client.predict(
 		prompt="cat",
 		negative_prompt=None,

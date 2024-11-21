@@ -4,8 +4,15 @@
 # Version:      0.1
 # Description:  NewsReporter
 
+'''
+    测试：运行前要export PYTHONPATH=/home/yomu/agent:$PYTHONPATH
+
+'''
+
 # TODO 该文件实现newscollector+GPTSoVits的组合体NewsReporter
-from Models.Utils.news_collector.newscollector import NewsCollector
+
+from Module.Utils.news_collector.newscollector import NewsCollector
+from Module.TTS.GPTSoVits.GPTSoVits_class import GPTSoVitsAgent
 
 """
     运行前需要:
@@ -22,8 +29,17 @@ from Models.Utils.news_collector.newscollector import NewsCollector
 """
 
 
-# collector = NewsCollector()  # 创建新闻收集器实例
-
+def main():
+    collector = NewsCollector()     # 创建新闻收集器实例
+    reporter = GPTSoVitsAgent()     # 创建GPTSoVits客户代理实例
+    
+    news_list = collector.run()
+    for category, pubtime, content, link in news_list:
+        print(f"[{category}] {pubtime} {content} {link}")
+        reporter.infer_tts_get(content=content)
 
 if __name__ == "__main__":
     print("This is a part of agent,supposed not to run directly.Do nothing")
+    main()
+    
+

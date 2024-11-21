@@ -4,4 +4,4 @@
 # ├── __init__.py       *
 # ├── StableAudioTools
 # └── tts.py
-from .GPTSoVits.GPTSoVits_class import GPTSoVitsAgent
+from .GPTSoVits import GPTSoVits_class
