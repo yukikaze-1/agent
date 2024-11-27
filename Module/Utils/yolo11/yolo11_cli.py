@@ -175,15 +175,16 @@ class YOLO11Agent:
 # 配置日志记录
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def main():
-    agent = YOLO11Agent()
-    print("init end")
-    print("runiing for image")
-    # agent.predict_image("/home/yomu/data/picture/photo/test.jpg")
-    # agent.predict_video("/home/yomu/data/video/test.mp4")
-    agent.predict_from_webcam()
+# def main():
+#     agent = YOLO11Agent()
+#     print("init end")
+#     print("runiing for image")
+#     agent.predict_image("/home/yomu/data/picture/photo/test.jpg")
+#     agent.predict_video("/home/yomu/data/video/test.mp4")
+#     agent.predict_from_webcam()
 
 if __name__ == "__main__":
-    main()
+    print("This is a module,should not run directly.Do nothing")
+    # main()
     
     

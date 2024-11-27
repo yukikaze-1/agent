@@ -9,7 +9,6 @@
 
 '''
 
-# TODO 该文件实现newscollector+GPTSoVits的组合体NewsReporter
 
 from Module.Utils.news_collector.newscollector import NewsCollector
 from Module.TTS.GPTSoVits.GPTSoVits_class import GPTSoVitsAgent
