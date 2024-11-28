@@ -1,11 +1,22 @@
 # Project:      Agent
 # Author:       yomu
-# Time:         2024/11/08
+# Time:         2024/11/28
 # Version:      0.1
-# Description:  agent STT SenseVoice client
+# Description:  agent STT SenseVoice Liunx client class
 
-# TODO 环境变量和环境没配置，待修改
+# TODO 待实现，思考linux版应该提供什么功能
 
+"""
+    SenseVoice的Linux client agent
+    
+    Linux 版本：
+        1. 后台运行，无窗口
+        2. 支持音频文件推理
+        3. 支持麦克风实时语音流推理
+        
+"""
+
+"""
 import requests
 import os
 import tkinter as tk
@@ -19,6 +30,9 @@ from tkinter import ttk
 import threading
 import pyaudio
 import io
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # ASR API 的 URL
 API_URL = "http://192.168.1.17:50000/predict/sentences/"
@@ -284,3 +298,4 @@ def main():
 # 程序入口
 if __name__ == "__main__":
     main()
+"""

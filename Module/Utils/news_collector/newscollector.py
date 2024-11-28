@@ -19,7 +19,6 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 from langchain_core.output_parsers import StrOutputParser
 
 # TODO 这模块导入不知道有没有问题
-# TODO 该文件应该只提供newscollector，不应该提供语音播报，语音播报应该在Function中实现（newscollector+GPTSoVits）
 # 需要重构下
 # 单独测试模块没有问题
 # from Models.TTS.GPTSoVits.GPTSoVits_class import GPTSoVitsAgent
@@ -32,13 +31,14 @@ from langchain_core.output_parsers import StrOutputParser
 # MAX_NEWS_COUNT = 20
 # WAIT_TIMEOUT = 10 
 
-"""
-    NewsCollector从SOURCES搜集新闻（暂时为搜狐）
-    返回一个List[Tuple[str,str,str,str]]
-    即List[Tuple[新闻类型,发布时间,新闻正文,新闻链接]]
-"""
+
 
 class NewsCollector:
+    """
+        NewsCollector从SOURCES搜集新闻（暂时为搜狐）
+        返回一个List[Tuple[str,str,str,str]]
+        即List[Tuple[新闻类型,发布时间,新闻正文,新闻链接]]
+    """
     def __init__(self, 
                  model: str = 'llama3.2', 
                  temperature: float = 0.0, 
