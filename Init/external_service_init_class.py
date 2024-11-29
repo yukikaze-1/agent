@@ -8,6 +8,8 @@
     用于启动agent外部服务器模块
     在新进程环境中运行
     
+    运行前请 export PYTHONPATH=/home/yomu/agent:$PYTHONPATH
+    
     1. LLM
         1) ollama server *
         2) ollama LLM *
@@ -98,6 +100,7 @@ class ExternalServiceManager:
         optional =  self._init_optional_services()
         return base, optional    
     
+    # TODO 将这些配置提取到一个json配置文件中，函数应从该json文件中读取要初始化的外部服务
     def _add_base_service(self)-> List[Dict]:
         """
         添加最小启动的最基础的外部功能服务器
@@ -295,7 +298,7 @@ class ExternalServiceManager:
         
         禁止调用！！！
         """
-        self._stop_optional_services()
+        self.stop_optional_services()
         self._stop_base_services()
         print("ServiceManager cleaned up and all background services are stopped.") 
         
@@ -346,6 +349,16 @@ class ExternalServiceManager:
     
     def list_started_services(self)->List[Tuple[str,int]]:
         """返回 已启动的所有外部服务器的名字与pid"""
+        base = self.list_started_base_services()
+        opt = self.list_started_optional_services()
+        return base + opt
+    
+    def list_started_base_services(self)->List[Tuple[str,int]]:
+        """返回 已启动的base外部服务器的名字与pid"""
+        pass
+    
+    def list_started_optional_services(self)->List[Tuple[str,int]]:
+        """返回 已启动的optional外部服务器的名字与pid"""
         pass
     
     def stop_select_services(self)->bool:
@@ -361,10 +374,15 @@ class ExternalServiceManager:
         self._stop_all_services()
         
     def _show(self):
-        for _,p in self.base_processes:
-            print(f"base pid: {p.pid} {p}")
-        for _,p in self.optional_processes:
-            print(f"optional pid: {p.pid} {p}")
+        print("Here are the started services:")
+        base = self.list_started_base_services()
+        opt = self.list_started_optional_services()
+        print("Base services:")
+        for name,pid in base:
+            print(f"{name}-{pid}")
+        print("Optional services:")
+        for name,pid in opt:
+            print(f"{name}-{pid}")
  
  
  

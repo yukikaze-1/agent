@@ -5,4 +5,4 @@
 # ├── __init__.py       *
 # ├── output
 # └── test_GPTSoVits.py
-from .GPTSoVits_class import GPTSoVitsAgent
+from .GPTSoVitsAgent import GPTSoVitsAgent

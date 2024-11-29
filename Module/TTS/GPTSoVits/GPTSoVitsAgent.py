@@ -6,23 +6,22 @@
 
 """
     此文件只有GPTSoVits的客户端的代理
-    服务端需要再bash中手动启动！
-    
 """
-
-# TODO 考虑将服务端作为agent的一部分
-# 考虑在agent启动自动启动 或者 在agent需要使用时一并启动，而非现在的要在外部bash手动启动
 
 import os
 import datetime
 import requests
-import json
 import time
 from urllib.parse import urljoin
 from dotenv import load_dotenv
 
+# TODO 之后考虑将GPTSoVits的server集成到AI agent内部。现阶段还是采用分离式C/S
+# TODO 给该类添加注释
 class GPTSoVitsAgent:
-    def __init__(self, env_path=None):
+    """
+
+    """
+    def __init__(self, env_path:str=None):
         load_dotenv(env_path)
         self.default_gpt_path = os.path.join("./GPT_weights_v2", "alxy_all_modified_v1.0-e50.ckpt")
         self.default_sovits_path = os.path.join("./SoVITS_weights_v2", "alxy_all_modified_v1.0_e50_s4700.pth")
@@ -131,7 +130,6 @@ class GPTSoVitsAgent:
                     time.sleep(2 ** (attempt + 1))
                 else:
                     print("Failed after multiple attempts.")
-
 
 
 

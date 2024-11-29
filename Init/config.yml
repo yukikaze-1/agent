@@ -4,11 +4,41 @@
 model:
   name: llama3.2 # ollama运行的模型名称(必须在ollama中支持并且可以运行的，需要自行在ollama中下载)
 
-# 要启动的核心模块
-core_module: 
+# 要启动的基础模块
+base_module: 
   - GPTSoVits
   - SenseVoice
 
-# (可选)启动的功能模块
-functional_module:
+# (可选)启动的optional功能模块
+optional_module:
+  -
+
+# 要启动的基础外部服务
+base_services:
+  - ollama server
+  - ollama LLM
+  - GPTSoVits
+  - SenseVoice
+
+# (可选)启动的optional外部服务
+optional_services:
+  - 
+
+# 目前已支持的外部服务
+support_services:
+  - ollama
+  - GPTSoVits
+  - SenseVoice
+
+# 目前已支持的内部模块
+support_module:
+  - GPTSoVitsAgent
+  - SenseVoiceAgent
+
+# 待支持的外部服务
+_services:
+  - yolo11
+
+# 待支持的内部模块
+_module:
   - yolo11

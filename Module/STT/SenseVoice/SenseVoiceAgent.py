@@ -16,6 +16,10 @@
         
 """
 
+class SenseVoiceAgent:
+    def __init__(self):
+        pass
+
 """
 import requests
 import os

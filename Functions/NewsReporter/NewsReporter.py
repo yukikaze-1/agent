@@ -11,7 +11,7 @@
 
 
 from Module.Utils.news_collector.newscollector import NewsCollector
-from Module.TTS.GPTSoVits.GPTSoVits_class import GPTSoVitsAgent
+from Module.TTS.GPTSoVits.GPTSoVitsAgent import GPTSoVitsAgent
 
 """
     运行前需要:
