@@ -5,7 +5,7 @@
 # Description:  agent main
 
 """
-    启动agent的入口
+    启动AI agent的入口
 """
 
 import os
@@ -13,11 +13,12 @@ import time
 import argparse
 import subprocess
 import sys
-from dotenv import load_dotenv,find_dotenv
+from dotenv import load_dotenv
 
+from Init.init import InitAgent
 
 # 加载环境变量
-_ = load_dotenv(find_dotenv())
+_ = load_dotenv()
 
 # 初始化各个模块
 def init_service(params:None):

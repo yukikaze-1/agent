@@ -9,6 +9,8 @@
     用于启动agent内部模块
     在当前进程环境(即agent的进程环境)中运行
     
+    运行前请 export PYTHONPATH=/home/yomu/agent:$PYTHONPATH
+    
     1. LLM
         1) ollama agent [注：ollama agent直接使用Langchain的ChatOllama即可]
     2. TTS
@@ -28,6 +30,7 @@ from dotenv import load_dotenv,dotenv_values
 # from ..Module.TTS.GPTSoVits.GPTSoVitsAgent import GPTSoVitsAgent
 # from ..Module.STT.SenseVoice.SenseVoiceAgent import SenseVoiceAgent
 
+# TODO 24/11/30任务，写这个类的注释，完善这个类的所有类成员函数
 class InternalModuleManager:
     """
         负责管理启动和关闭 AI agent的各内部模块
@@ -38,9 +41,9 @@ class InternalModuleManager:
     #     load_dotenv()
     #     return super().__new__(cls)
         
-    def __init__(self, config_path: str = "./Init/config.yml"):
+    def __init__(self, config_path: str = "Init/config.yml"):
         # 加载 .env 文件
-        load_dotenv()
+        self.env_vars = dotenv_values("Init/.env")
 
         # 配置文件
         self.config: Dict = self._load_config(config_path)
@@ -54,12 +57,12 @@ class InternalModuleManager:
         # 存放已启动的optional内部服务模块名字和对象
         self.optional_module: List[Tuple[str, Any]] = []
 
-    def _create_agent(self, module_path: str, class_name: str, *args, **kwargs):
+    def _create_agent(self,module_name: str,module_path: str,  *args, **kwargs):
         """
         动态加载模块并实例化类
-
+        
+        :param module_name: 模块名字符串 (例如 "GPTSoVitsAgent")
         :param module_path: 模块路径字符串 (例如 "Module.TTS.GPTSoVits.GPTSoVitsAgent")
-        :param class_name: 类名字符串 (例如 "GPTSoVitsAgent")
         :param *args: 传递给类构造函数的位置参数
         :param **kwargs: 传递给类构造函数的关键字参数
         :return: 返回类实例
@@ -69,16 +72,22 @@ class InternalModuleManager:
             module = importlib.import_module(module_path)
 
             # 使用 getattr 获取类
-            cls = getattr(module, class_name, None)
+            cls = getattr(module, module_name, None)
             if cls is None:
-                raise ValueError(f"Class {class_name} not found in module {module_path}")
-
+                raise ValueError(f"Module {module_name} not found in module {module_path}")
             # 实例化并返回对象
             return cls(*args, **kwargs)
+        
         except ModuleNotFoundError as e:
             raise ImportError(f"Module {module_path} could not be found") from e
 
     def _load_config(self, config_path: str) -> Dict:
+        """
+            从config_path中读取配置(*.yml)
+            
+            返回：
+                yml文件中配置的字典表示
+        """
         try:
             with open(config_path, 'r', encoding='utf-8') as file:
                 config = yaml.safe_load(file)  # 使用 safe_load 安全地加载 YAML 数据
@@ -87,22 +96,21 @@ class InternalModuleManager:
             raise FileNotFoundError(f"Config file {config_path} not found.")
         except yaml.YAMLError as e:
             raise ValueError(f"Error parsing the YAML config file: {e}")
-    
-    
+       
     
     # TODO 以后考虑 将这些配置提取到一个json配置文件中，函数应从该json文件中读取要初始化的内部模块
-    def _add_base_module(self)->List[str]:
+    def _set_base_module(self)->List[str]:
         """
-        添加 最小启动的最基础的内部模块
+        设置 最小启动的最基础的内部模块
             1. 语音合成(GPTSoVitsAgent)
             2. 语音识别(SenseVoiceAgent)
         返回:
             一个包含内部服务模块的列表
         """
-        # TODO 目前 SenseVoiceAgent 还没实现！
+        # TODO 目前 SenseVoiceAgent 还没实现！现在是还没测试
         ret = []
         ret.append("GPTSoVitsAgent")
-        # ret.append("SenseVoiceAgent")
+        ret.append("SenseVoiceAgent")
         return  ret
     
     # TODO 以后考虑 将这些配置提取到一个json配置文件中，函数应从该json文件中读取要初始化的内部模块
@@ -128,7 +136,7 @@ class InternalModuleManager:
             是否全部启动成功,
             启动成功的内部base服务模块名字，启动失败的base内部服务模块名字    
         """
-        base_module = self._add_base_module()
+        base_module = self._set_base_module()
         return self._start_module_sequentially(base_module,True)
 
     
@@ -151,28 +159,27 @@ class InternalModuleManager:
                 是否启动成功
         """
         # 检查是否是受支持的模块
-        if module not in self.support_module:
-            print(f"module {module} is not supported")
+        module_config = next((item for item in self.config.get('support_module', []) if item[0] == module), None)
+        if not module_config:
+            print(f"Unknown module {module}")
             return False
+        
         try:
-            if module == "GPTSoVitsAgent":
-                agent = self._create_agent("Module.TTS.GPTSoVits", "GPTSoVitsAgent")
-            elif module == "SenseVoiceAgent":
-                agent = self._create_agent("Module.STT.SenseVoice", "SenseVoiceAgent")
-            else:
-                print(f"Unknown module {module}")
-                return False
-
+            # 获取模块路径和类名
+            class_name, module_path = module_config
+            # 使用 _create_agent 动态加载模块
+            agent = self._create_agent(class_name, module_path)
+            # 将模块添加到相应的列表
             if isBaseModule:
                 self.base_module.append((module, agent))
                 print(f"Started base module {module}")
             else:
                 self.optional_module.append((module, agent))
                 print(f"Started optional module {module}")
-            return True
+            return True  # 成功启动模块后返回 True
         except Exception as e:
             print(f"Failed to start module {module}: {e}")
-            return False
+            return False  # 如果发生异常，返回 False
         
     
     def _start_module_sequentially(self,

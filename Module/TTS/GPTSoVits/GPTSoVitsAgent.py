@@ -31,6 +31,7 @@ class GPTSoVitsAgent:
             "path": os.path.join(self.default_ref_root, "text", "1_301.txt"),
             "content": "我的话，呢哼，更多是靠少女的小心思吧。看看你现在的表情。好想去那里"
         }
+        self.infer_count = 0
         self.default_save_dir = os.getenv("GPTSOVITS_CLI_OUTPUT_DIR")
         if not self.default_save_dir:
             raise ValueError("GPTSOVITS_CLI_OUTPUT_DIR environment variable not set.")
@@ -67,6 +68,7 @@ class GPTSoVitsAgent:
             "media_type": "wav",
             "streaming_mode": True
         }
+        self.infer_count += 1
         self._send_request("GET", url, params=params)
 
     def infer_tts_post(self, content, config=None):

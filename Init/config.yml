@@ -6,8 +6,8 @@ model:
 
 # 要启动的基础模块
 base_module: 
-  - GPTSoVits
-  - SenseVoice
+  - [GPTSoVitsAgent,Module.TTS.GPTSoVits]
+  - [SenseVoiceAgent,Module.STT.SenseVoice]
 
 # (可选)启动的optional功能模块
 optional_module:
@@ -30,15 +30,19 @@ support_services:
   - GPTSoVits
   - SenseVoice
 
-# 目前已支持的内部模块
-support_module:
-  - GPTSoVitsAgent
-  - SenseVoiceAgent
-
 # 待支持的外部服务
 _services:
-  - yolo11
+  - yolo11 
+
+
+# 目前已支持的内部模块
+support_module:
+  - [GPTSoVitsAgent,Module.TTS.GPTSoVits]
+  - [SenseVoiceAgent,Module.STT.SenseVoice]
+
+
 
 # 待支持的内部模块
 _module:
-  - yolo11
+
+  - [yolo11,Module.Utils.yolo11]

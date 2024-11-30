@@ -7,10 +7,6 @@
 import os
 import json
 import time
-from prompt import *
-from Tools.tools import *
-from memory import *
-from TTS.tts import *
 
 
 # TODO 实现

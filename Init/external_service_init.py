@@ -72,7 +72,7 @@ class ExternalServiceManager:
         load_dotenv()
         
         # 日志相关
-        self.log_dir = os.path.join(os.getenv("LOG_PATH"), "External_service")
+        self.log_dir = os.path.join(os.getenv("LOG_PATH"), "ExternalService")
         os.makedirs(self.log_dir, exist_ok=True)  
         logging.basicConfig(level=logging.INFO,
                             format='%(asctime)s - %(levelname)s - %(message)s')        
@@ -355,11 +355,11 @@ class ExternalServiceManager:
     
     def list_started_base_services(self)->List[Tuple[str,int]]:
         """返回 已启动的base外部服务器的名字与pid"""
-        pass
+        return [(name,p.pid) for (name,p) in self.base_processes]
     
     def list_started_optional_services(self)->List[Tuple[str,int]]:
         """返回 已启动的optional外部服务器的名字与pid"""
-        pass
+        return [(name,p.pid) for (name,p) in self.optional_processes]
     
     def stop_select_services(self)->bool:
         """

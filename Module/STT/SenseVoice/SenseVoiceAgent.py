@@ -12,13 +12,132 @@
     Linux 版本：
         1. 后台运行，无窗口
         2. 支持音频文件推理
-        3. 支持麦克风实时语音流推理
+        3. 支持麦克风实时语音流推理(暂未实装)
         
 """
 
+import os
+import requests
+from datetime import datetime
+from pydub import AudioSegment
+from io import BytesIO
+from typing import Optional,List,Tuple,Dict
+from dotenv import load_dotenv,dotenv_values
+
+
 class SenseVoiceAgent:
+    """
+        SenseVoice的客户端Agent
+        
+        功能:
+            1. 接收(一段音频[AudioSegment对象]/一个音频文件)，发送给SenseVoice服务器进行识别
+            2. 实时语音识别(暂未实装)
+    """
     def __init__(self):
-        pass
+        self.env_vars = dotenv_values("Module/STT/SenseVoice/.env")
+        self.server_sentences_url = self.env_vars.get("SENSEVOICE_SENTENCES_API_URL")
+        self.server_streaming_url = self.env_vars.get("SENSEVOICE_STREAM_API_URL")
+        
+        self.infer_count = 0
+        
+    # 发送音频文件到 ASR API
+    def _send_audio_files(self,audio_files:List[str], keys:str, lang:str="auto")->Dict:
+        # files = [("files", open(file, "rb")) for file in audio_files]
+        files = []
+        for file in audio_files:
+            with open(file, "rb") as f:
+                files.append(("files", (os.path.basename(file), f, "audio/wav")))
+                
+        form_data = {
+            "keys": keys,
+            "lang": lang,
+        }
+        try:
+            response = requests.post(self.server_sentences_url, files=files, data=form_data, timeout=30)
+            response.raise_for_status()  # Raise HTTPError for bad responses
+            return response.json()
+        except requests.RequestException as e:
+            print(f"与服务器通信时出错: {e}")
+            return {}
+    
+    def _infer_audio(self,audio:AudioSegment, lang="auto")->Dict:
+        """
+
+        """
+        try:
+            # 将 AudioSegment 转换为字节流
+            audio_bytes =  BytesIO()
+            audio.export(audio_bytes, format="wav")  # 这里使用 mp3 格式，您可以根据需求更改格式
+            audio_bytes.seek(0)  # 将指针重置为流的开头
+        except Exception as e:
+            print(f"音频转换失败: {e}")
+            return {}
+        
+        # 生成文件字段（这里只处理一个文件）
+        files = [("files", ("audio.wav", audio_bytes, "audio/wav"))]
+        form_data = {
+            "keys": str(datetime.now()),  # 使用当前时间作为 keys，
+            "lang": lang,
+        }
+        try:
+            response = requests.post(self.server_sentences_url, files=files, data=form_data, timeout=10)
+            response.raise_for_status()  # Raise HTTPError for bad responses
+            return response.json()
+        except requests.RequestException as e:
+            print(f"与服务器通信时出错: {e}")
+            return {}
+
+    def _infer_sentences(self,
+                         audio_files:List[str],
+                         lang:str="auto"
+                         )->List[Tuple[str,str]]:
+        """
+        语音识别函数(非实时使用)
+        
+        :param audio_files: 音频文件[识别一堆，非实时]
+        :param lang: 语言，默认auto,可选zh,en,jp...
+        
+        返回:
+            音频文件名 以及 其识别的结果
+        """
+        # 处理音频文件，发送到 ASR API
+        keys = ",".join([os.path.basename(file) for file in audio_files])
+        ret:List[Tuple[str,str]] = [] 
+        try:
+            result = self._send_audio_files(audio_files, keys, lang)
+            for res in result.get("result", []):
+                ret.append((res['key'], res.get('clean_text', '')))   
+            # result_text = "ASR API 的响应：\n"
+            # for res in result.get("result", []):
+            #     result_text += f"音频键: {res['key']}\n"
+            #     result_text += f"清理后的文本: {res['clean_text']}\n"
+            #     result_text += "-\n"
+            return ret
+        except requests.RequestException as e:
+            print(f"与服务器通信时出错: {e}")
+            return ret
+    
+    def _infer(self,
+               audio:AudioSegment,
+               lang:str="auto"
+               )->str:
+        """
+        语音识别函数
+        
+        :param audio: 音频对象(AudioSegment)[识别一句话时使用，半实时]
+        :param lang: 语言，默认auto,可选zh,en,jp...    
+          
+        返回:
+            识别的结果
+        """
+        
+        result = self._infer_audio(audio,lang)
+        self.infer_count += 1
+        res = result.get("result", [])
+        if res:
+            return res[0].get('clean_text', '')
+        return ''
+    
 
 """
 import requests
