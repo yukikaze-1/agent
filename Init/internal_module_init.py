@@ -41,10 +41,10 @@ class InternalModuleManager:
     #     load_dotenv()
     #     return super().__new__(cls)
         
-    def __init__(self, config_path: str):
+    def __init__(self):
         self.env_vars = dotenv_values("Init/.env")
         self.config_path = self.env_vars.get("INIT_CONFIG_PATH","")
-        self.config: Dict = self._load_config(config_path)
+        self.config: Dict = self._load_config(self.config_path)
 
         self.support_module: List[str] = self.config.get('support_module', [])
 

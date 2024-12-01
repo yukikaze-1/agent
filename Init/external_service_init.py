@@ -24,14 +24,14 @@
 
 import os
 import subprocess
-from subprocess import Popen
+import yaml
 import signal
 import logging
+from subprocess import Popen
 from typing import List,Dict,Optional,Tuple
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 
-# TODO 需要在这放一个这个嘛？
-load_dotenv()
+# TODO 检查service和services的命名规范
 
 class ExternalServiceManager:
     """
@@ -44,50 +44,41 @@ class ExternalServiceManager:
             1. 初始化请只调用init_services()方法
             2. 要额外启动外部服务请调用start_select_services()方法
         
-        如需要添加自定义外部功能服务器模块，则需要按照下面的格式：    
-        {
-            "script": xxx.py 或者 ls -l,        # 外部服务器的启动文件 或者 bash命令
-            "service_name": xxx                 # 启动的服务的名字
-            "conda_env": xxx,                   # conda环境，默认base
-            "args": ["-a", "0.0.0.0"],          # 额外参数
-            "use_python": True,                 # 是否用python启动脚本
-            "run_in_background": True,          # 是否后台运行
-            "is_base": True,                    # 是否为基础功能服务器
-            "log_file": "xxx.log"               # log文件名
-        } 
-    """ 
-    def __init__(self,
-                 services: List[Dict] = None,
-                 conda_env_path: str = os.getenv("CONDA_ENV_PATH","/home/yomu/data/anaconda3/envs"),
-                 conda_base_env_path: str = os.getenv("CONDA_BASE_ENV_PATH","/home/yomu/data/anaconda3")):
-        """
-            初始化服务管理器，加载环境变量
-            
-            :param services:    要启动的服务
-            :param conda_env_path:  conda环境path
-            :param conda_base_env_path: conda base环境path
-        """
+        如需要添加自定义外部功能服务器模块，则在Init/config.yml中按照下面的格式添加：    
         
-        # TODO 这玩意放这需要额外参数来定位.env文件吗
-        load_dotenv()
+        GPTSovits:                              # 外部服务器的名字
+            script: "xxx.py or ls -l"           # 外部服务器的启动文件 或者 bash命令
+            service_name: "xxx"                 # 启动的服务的名字
+            conda_env: "xxx"                    # conda环境，默认base
+            args: ["-a", "0.0.0.0"]             # 额外参数
+            use_python: true                    # 是否用python启动脚本
+            run_in_background: true             # 是否后台运行
+            is_base: true                       # 是否为基础功能服务器
+            log_file: "xxx.log"                 # log文件名
+        
+    """ 
+    def __init__(self):
+        # 配置相关
+        self.env_vars = dotenv_values("Init/.env")
+        self.config_path = self.env_vars.get("INIT_CONFIG_PATH","")
+        self.config: Dict = self._load_config(self.config_path) 
+        #支持的外部服务
+        # TODO 有问题，类型不匹配
+        self.support_services: List[str] = self.config.get('support_services', [])
         
         # 日志相关
-        self.log_dir = os.path.join(os.getenv("LOG_PATH"), "ExternalService")
+        self.log_dir = os.path.join(self.env_vars.get("LOG_PATH"), "ExternalService")
         os.makedirs(self.log_dir, exist_ok=True)  
         logging.basicConfig(level=logging.INFO,
                             format='%(asctime)s - %(levelname)s - %(message)s')        
         
         # 进程相关
-        self.base_processes: List[Tuple[str,Popen]] = []    # 用于保存基础外部服务器后台进程对象以及名字
-        self.optional_processes: List[Tuple[str,Popen]] = []     # 用于保存可选外部服务器后台进程对象以及名字
-        
-        # conda 环境
-        self.conda_env_path = conda_env_path    # conda环境path
-        self.conda_base_env_path = conda_base_env_path  # conda base环境 path
+        self.base_processes: List[Tuple[str,Popen]] = []   # 保存base外部服务器后台进程对象以及名字
+        self.optional_processes: List[Tuple[str,Popen]] = []  # 保存optional外部服务器后台进程对象以及名字
         
         # 要启动的服务
-        self.base_services = self._add_base_service()     # 要启动的基本外部功能服务器
-        self.optional_services = services if services else []  # 要启动的可选外部功能服务器
+        self.base_services = self._set_services(True)       # 要启动的base外部功能服务器
+        self.optional_services = self._set_services(False)  # 要启动的optional外部功能服务器
         
         
     def init_services(self)->Tuple[ List[Tuple[str,int]], List[Tuple[str,int]] ]:
@@ -100,63 +91,58 @@ class ExternalServiceManager:
         optional =  self._init_optional_services()
         return base, optional    
     
-    # TODO 将这些配置提取到一个json配置文件中，函数应从该json文件中读取要初始化的外部服务
-    def _add_base_service(self)-> List[Dict]:
+    def _load_config(self, config_path: str) -> Dict:
         """
-        添加最小启动的最基础的外部功能服务器
-            1. ollama server
-            2. ollama llm
-            3. 语音合成(GPTSoVits)
-            4. 语音识别(SenseVoice)
+            从config_path中读取配置(*.yml)
+            
+            返回：
+                yml文件中配置的字典表示
         """
-        ret = []
-        ret.append( 
-            {"script": "ollama serve",
-             "service_name":"ollama_server",
-             "conda_env": self.conda_base_env_path,
-             "args": [],
-             "use_python": False,
-             "run_in_background": True,
-             "is_base": True,
-             "log_file": "ollama_server.log"
-             }  # ollama server
-        )
-        ret. append(            
-            {"script": "ollama run llama3.2", 
-             "service_name":"ollama_LLM",
-             "conda_env": self.conda_base_env_path, 
-             "args": [],
-             "use_python": False, 
-             "run_in_background": True, 
-             "is_base": True,
-             "log_file": ""
-             },  # ollama LLM
-        )
-        GPTSoVits_server = os.path.join(os.getenv("GPTSOVITS_ROOT"), "api_v2.py")
-        SenseVoice_server = os.path.join(os.getenv("SENSEVOICE_ROOT"), "SenseVoice_server.py")
-        ret.append(
-            {"script": GPTSoVits_server,
-             "service_name": "GPTSoVits_server",
-             "conda_env": os.path.join(self.conda_env_path, "GPTSoVits"),
-             "args": ["-a", "0.0.0.0","-p","9880"],
-             "use_python": True,
-             "run_in_background": True,
-             "is_base": True,
-             "log_file": "GPTSoVits_server.log"},  # GPTSoVits server
-        )
-        # TODO SenseVoice的服务端~/SenseVoice/SenseVoice_server.py还需要改进，添加命令行选项，如"--host","--port"
-        ret.append(
-            {"script": SenseVoice_server,
-             "service_name":"SenseVoice_server",
-             "conda_env": os.path.join(self.conda_env_path, "SenseVoice"),
-             "args": [],
-             "use_python": True,
-             "run_in_background": True,
-             "is_base": True,
-             "log_file": "SenseVoice_server.log"},  # SenseVoice server
-        )
-        return ret
+        if config_path is None:
+            raise ValueError(f"Config file {config_path} is empty.Please check the file 'Init/.env'.It should set the 'INIT_CONFIG_PATH'")
+        try:
+            with open(config_path, 'r', encoding='utf-8') as file:
+                config = yaml.safe_load(file)  # 使用 safe_load 安全地加载 YAML 数据
+            return config
+        except FileNotFoundError:
+            raise FileNotFoundError(f"Config file {config_path} not found.")
+        except yaml.YAMLError as e:
+            raise ValueError(f"Error parsing the YAML config file: {e}")
     
+    def _set_services(self,isBase:bool)-> List[Dict]:
+        """
+            设置要启动的services
+            
+            :param services_type: base_services 或者 optional_services
+            
+            返回：
+                服务器配置字典列表，形式如下:
+                
+                    [{
+                        "script": "xxx.py or bash cmd", # 外部服务器的启动文件或bash命令
+                        "service_name": "xxx",          # 启动的服务的名字
+                        "conda_env": "xxx",             # conda 环境，默认 base
+                        "args": ["-a", "0.0.0.0"],      # 额外参数
+                        "use_python": True,             # 是否用 Python 启动脚本
+                        "run_in_background": True,      # 是否后台运行
+                        "is_base": True,                # 是否为基础功能服务器
+                        "log_file": "xxx.log"           # log 文件名
+                    }]
+        """
+        services_key = "base_services" if isBase else "optional_services"
+        services = self.config.get(services_key, [])
+        
+        # 如果是基础服务，检查是否为空列表
+        if not services:
+            if isBase:
+                raise ValueError(f"base services is empty. Please check the {self.config_path}")
+            else:
+                return []
+            
+        # 提取所有服务的配置字典
+        ret = [next(iter(service.values())) for service in services]
+        return ret
+            
         
     def _run_service(self,
                     service_script: str,
@@ -259,7 +245,19 @@ class ExternalServiceManager:
         
         :returns: 启动的服务的名字和pid 的列表
 
-        :param services: 服务列表，每个服务是一个字典
+        :param services: 
+            服务列表，每个服务是一个字典,形式如下
+            
+                {
+                    "script": "xxx.py or bash cmd", # 外部服务器的启动文件或bash命令
+                    "service_name": "xxx",          # 启动的服务的名字
+                    "conda_env": "xxx",             # conda 环境，默认 base
+                    "args": ["-a", "0.0.0.0"],      # 额外参数
+                    "use_python": True,             # 是否用 Python 启动脚本
+                    "run_in_background": True,      # 是否后台运行
+                    "is_base": True,                # 是否为基础功能服务器
+                    "log_file": "xxx.log"           # log 文件名
+                }
         
         """
         ret = []
@@ -321,6 +319,10 @@ class ExternalServiceManager:
                 print(f"Terminating base process:{service_name}--{process.pid}")
                 os.killpg(os.getpgid(process.pid), signal.SIGTERM)  # 终止整个进程组
         print(f"ServiceManager stopped all the base services")
+    
+    # TODO 重启函数是否有必要？
+    def _restart_single_service(self)->bool:
+        pass
     
     def _restart_base_services(self)->bool:
         """

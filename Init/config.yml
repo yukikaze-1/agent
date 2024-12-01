@@ -39,8 +39,9 @@
 
       - SenseVoice:
           script: "/home/yomu/SenseVoice/SenseVoice_server.py"
+          service_name: "SenseVoice_server"
           conda_env: "/home/yomu/data/anaconda3/envs/SenseVoice"
-          args: ["-a", "0.0.0.0", "-p", "9890"]
+          args: ["--host", "0.0.0.0", "--port", "9890"]
           use_python: true
           run_in_background: true
           is_base: true
@@ -48,7 +49,7 @@
 
     # (可选)启动的optional外部服务
     optional_services:
-      - 
+      
 
     # 目前已支持的外部服务
     support_services:
@@ -62,9 +63,10 @@
 
     # TODO 后期修改0.0.0.0，让其只监听本地
     # 外部服务器ipaddress---port
-    ollama server: ["127.0.0.1","11434"]
-    GPTSoVits: ["0.0.0.0","9880"]
-    SenseVoice: ["0.0.0.0","9890"]
+    ip_port:
+      - ollama server: ["127.0.0.1","11434"]
+      - GPTSoVits: ["0.0.0.0","9880"]
+      - SenseVoice: ["0.0.0.0","9890"]
 
 # 内部模块
     # 要启动的基础模块
