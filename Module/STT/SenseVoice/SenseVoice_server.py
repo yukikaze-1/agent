@@ -11,6 +11,10 @@
 # 下面的代码可能不是最新的，仅供参考
 # 最新的代码见 ~/SenseVoice/SenseVoice_server.py
 
+"""
+    最后修改于2024/12/2/4:33
+"""
+
 '''
 from fastapi import FastAPI, UploadFile, File, Form
 import uvicorn

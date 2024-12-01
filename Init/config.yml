@@ -1,6 +1,6 @@
 # 核心LLM
     # 采用Ollama的方式默认使用llama3.2
-    model:
+    LLM_model:
       name: llama3.2 # ollama运行的模型名称(必须在ollama中支持并且可以运行的，需要自行在ollama中下载)
 
 
@@ -63,29 +63,28 @@
 
     # TODO 后期修改0.0.0.0，让其只监听本地
     # 外部服务器ipaddress---port
-    ip_port:
+    _ip_port:
       - ollama server: ["127.0.0.1","11434"]
       - GPTSoVits: ["0.0.0.0","9880"]
       - SenseVoice: ["0.0.0.0","9890"]
 
 # 内部模块
     # 要启动的基础模块
-    base_module: 
-      - [GPTSoVitsAgent,Module.TTS.GPTSoVits]
-      - [SenseVoiceAgent,Module.STT.SenseVoice]
+    base_modules: 
+      - GPTSoVitsAgent: Module.TTS.GPTSoVits
+      - SenseVoiceAgent: Module.STT.SenseVoice
 
     # (可选)启动的optional功能模块
-    optional_module:
-      - 
+    optional_modules:
+      
 
     # 目前已支持的内部模块
-    support_module:
-      - [GPTSoVitsAgent,Module.TTS.GPTSoVits]
-      - [SenseVoiceAgent,Module.STT.SenseVoice]
-
+    support_modules:
+      - GPTSoVitsAgent
+      - SenseVoiceAgent
 
     # 待支持的内部模块
     _module:
-      - [yolo11,Module.Utils.yolo11]
+      - yolo11: Module.Utils.yolo11
 
 

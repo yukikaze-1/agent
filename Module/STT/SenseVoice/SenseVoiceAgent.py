@@ -22,7 +22,7 @@ from datetime import datetime
 from pydub import AudioSegment
 from io import BytesIO
 from typing import Optional,List,Tuple,Dict
-from dotenv import load_dotenv,dotenv_values
+from dotenv import dotenv_values
 
 
 class SenseVoiceAgent:

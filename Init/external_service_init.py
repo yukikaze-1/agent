@@ -31,7 +31,6 @@ from subprocess import Popen
 from typing import List,Dict,Optional,Tuple
 from dotenv import dotenv_values
 
-# TODO 检查service和services的命名规范
 
 class ExternalServiceManager:
     """
@@ -42,7 +41,7 @@ class ExternalServiceManager:
         
         注意!!!:  
             1. 初始化请只调用init_services()方法
-            2. 要额外启动外部服务请调用start_select_services()方法
+            2. 要临时额外启动外部服务请调用start_select_services()方法
         
         如需要添加自定义外部功能服务器模块，则在Init/config.yml中按照下面的格式添加：    
         
@@ -113,7 +112,7 @@ class ExternalServiceManager:
         """
             设置要启动的services
             
-            :param services_type: base_services 或者 optional_services
+            :param isBase: True:base_services False: optional_services
             
             返回：
                 服务器配置字典列表，形式如下:
@@ -388,7 +387,8 @@ class ExternalServiceManager:
  
  
  
-def generate_service(script: str,
+def generate_service_config(script: str,
+                     service_name:str,
                      conda_env: str,
                      args: List[str],
                      use_python: bool,
@@ -400,6 +400,7 @@ def generate_service(script: str,
     生成service
     
     :param  script: 外部服务器的启动文件 或者 bash命令
+    :param  service_name: 启动的服务的名字
     :param  conda_env: conda环境，默认base
     :param  args: 额外参数
     :param  use_python: 是否用python启动脚本
@@ -409,6 +410,7 @@ def generate_service(script: str,
     """
     ret = {
             "script": script,
+            "service_name": service_name,
             "conda_env": conda_env,
             "args": args,
             "use_python": use_python,
