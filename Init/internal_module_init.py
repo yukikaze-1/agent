@@ -17,7 +17,7 @@
         1) GPTSoVits agent *
         2) CosyVoice agent
     3. STT
-        1) SenseVoice agent 
+        1) SenseVoice agent *
     4. 
 """
 
@@ -41,14 +41,11 @@ class InternalModuleManager:
     #     load_dotenv()
     #     return super().__new__(cls)
         
-    def __init__(self, config_path: str = "Init/config.yml"):
-        # 加载 .env 文件
+    def __init__(self, config_path: str):
         self.env_vars = dotenv_values("Init/.env")
-
-        # 配置文件
+        self.config_path = self.env_vars.get("INIT_CONFIG_PATH","")
         self.config: Dict = self._load_config(config_path)
 
-        # 支持的模块列表
         self.support_module: List[str] = self.config.get('support_module', [])
 
         # 存放已启动的base内部服务模块名字和对象
@@ -88,6 +85,10 @@ class InternalModuleManager:
             返回：
                 yml文件中配置的字典表示
         """
+        if config_path is None:
+            raise ValueError(f"Config file {config_path} is empty.
+                                Please check the file 'Init/.env'.
+                                It should set the 'INIT_CONFIG_PATH'")
         try:
             with open(config_path, 'r', encoding='utf-8') as file:
                 config = yaml.safe_load(file)  # 使用 safe_load 安全地加载 YAML 数据
@@ -97,7 +98,6 @@ class InternalModuleManager:
         except yaml.YAMLError as e:
             raise ValueError(f"Error parsing the YAML config file: {e}")
        
-    
     # TODO 以后考虑 将这些配置提取到一个json配置文件中，函数应从该json文件中读取要初始化的内部模块
     def _set_base_module(self)->List[str]:
         """
@@ -107,16 +107,16 @@ class InternalModuleManager:
         返回:
             一个包含内部服务模块的列表
         """
-        # TODO 目前 SenseVoiceAgent 还没实现！现在是还没测试
+        # TODO 目前 SenseVoiceAgent 还没测试
         ret = []
         ret.append("GPTSoVitsAgent")
         ret.append("SenseVoiceAgent")
         return  ret
     
     # TODO 以后考虑 将这些配置提取到一个json配置文件中，函数应从该json文件中读取要初始化的内部模块
-    def _add_optional_module(self)->List[str]:
+    def _set_optional_module(self)->List[str]:
         """
-        添加 可选的内部功能模块
+        设置 可选的内部功能模块
 
         返回:
             一个包含内部服务模块的列表 或者 空列表  
@@ -148,7 +148,7 @@ class InternalModuleManager:
             是否全部启动成功,
             启动成功的optional内部服务模块名字，启动失败的optional内部服务模块名字
         """
-        optional_module = self._add_optional_module()
+        optional_module = self._set_optional_module()
         return  self._start_module_sequentially(optional_module,False)
     
     def _start_single_module(self,module:str,isBaseModule: bool)->bool:
