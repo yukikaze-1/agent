@@ -25,14 +25,59 @@ import os
 import yaml
 import importlib
 from typing import List,Dict,Tuple,Any,Optional
-from dotenv import load_dotenv,dotenv_values
+from dotenv import dotenv_values
 
 
-# TODO 24/11/30任务，写这个类的注释，完善这个类的所有类成员函数
 class InternalModuleManager:
     """
         负责管理启动和关闭 AI agent的各内部模块
         (如各种功能的外部服务器的客户端agent)
+        
+        没有'_'前缀的方法可以调用
+        
+        有'_'前缀的方法请不要调用！！！
+        
+        start系列函数：负责启动module
+            - _start_single_module
+            - _start_modules_sequentially
+            
+        init系列函数：负责初始化module配置
+            - init_modules     *****(请务必在实例化后调用!!!)*****
+                                返回:   是否全部启动成功
+                                        启动成功的base内部服务模块名字，启动失败的base内部服务模块名字
+                                        启动成功的optional内部服务模块名字，启动失败的optional内部服务模块名字
+                                返回:   Tuple[bool, List[str], List[str] , List[str], List[str]]
+                                
+            - _init_base_modules
+            - _init_optional_modules
+            
+        stop系列函数： 负责停止已启动的module
+            - stop_single_module
+            - stop_optional_modules
+            - stop_select_modules
+            - _stop_single_module
+            - _stop_single_module_aux
+            - _stop_base_modules   
+            - _stop_select_modules
+            - _stop_all_modules
+        
+        restart系列函数： 负责重启已启动的module
+            - restart_select_modules
+            - restart_optional_modules
+            - restart_single_module
+            - _restart_single_module_aux
+            - _restart_single_module
+            - _restart_base_modules
+            - _restart_select_modules   
+            
+        list系列函数：负责得到服务的各种信息
+            - list_started_module
+            
+        其他函数:
+            - _load_config
+            - _create_agent
+            - _get_modules
+            - _get_module_config
     """
         
     def __init__(self):
@@ -45,25 +90,56 @@ class InternalModuleManager:
         # 进程相关 
         self.base_processes: List[Tuple[str, Any]] = []    # 存放已启动的base内部服务模块名字和对象
         self.optional_processes: List[Tuple[str, Any]] = [] # 存放已启动的optional内部服务模块名字和对象
-           
-        # 要启动的服务
-        self.base_modules = self._set_modules(True)         # 要启动的base内部模块
-        self.optional_modules = self._set_modules(False)    # 要启动的optional内部模块
-
-    def _set_modules(self,isBase:bool)->List[Tuple[str,str]]:
+    
+    
+    def init_modules(self)->Tuple[bool, List[str], List[str] , List[str], List[str]]:
         """
-            设置 要启动的modules
+        初始化启动 内部服务模块
+        
+        返回:
+            是否全部启动成功
+            启动成功的base内部服务模块名字，启动失败的base内部服务模块名字
+            启动成功的optional内部服务模块名字，启动失败的optional内部服务模块名字
+        """
+        ok1, _base_success, _base_fail = self._init_base_modules()
+        ok2, _opt_success, _opt_fail =  self._init_optional_modules()
+        
+        return (ok1 and ok2, _base_success, _base_fail, _opt_success, _opt_fail)     
+
+    def _get_module_config(self,module_name: str)->Tuple[bool, str, str]:
+        """通过模块名字获取模型信息
+        
+        返回：
+            是否是base module, module_name, module_path
+        """
+        base_modules = self._get_modules(isBaseModules=True)
+        if base_modules:
+            for name, path in base_modules:
+                if name == module_name:
+                    return True, name, path
+        
+        optional_modules = self._get_modules(isBaseModules=False)
+        if optional_modules:
+            for name, path in optional_modules:
+                if name == module_name:
+                    return True, name, path 
+        
+        return False, module_name, ""
+
+    def _get_modules(self,isBaseModules:bool)->List[Tuple[str,str]]:
+        """
+            返回 要启动的[modules+module_path]列表
             
             :param isBase: True:base_modules False: optional_modules
             
             返回： 
-                module name,module path
+                module_name,module_path
         """
-        modules_key = "base_modules" if isBase else "optional_modules"
+        modules_key = "base_modules" if isBaseModules else "optional_modules"
         modules = self.config.get(modules_key, [])
         
-        if not modules:
-            if isBase:
+        if modules is None:
+            if isBaseModules:
                 raise ValueError(f"base modules is empty. Please check the {self.config_path}")
             else:
                 return []
@@ -112,26 +188,28 @@ class InternalModuleManager:
             raise FileNotFoundError(f"Config file {config_path} not found.")
         except yaml.YAMLError as e:
             raise ValueError(f"Error parsing the YAML config file: {e}")
+  
        
-    def _init_base_modules(self)->Tuple[bool,List[str],List[str]]:
+    def _init_base_modules(self)->Tuple[bool, List[str], List[str]]:
         """
-        启动 最小启动的最基础的内部功能模块
+        启动 base内部功能模块
         
         返回:
             是否全部启动成功,
-            启动成功的内部base服务模块名字，启动失败的base内部服务模块名字    
+            启动成功的内部base服务模块名字，启动失败的base内部服务模块名字  
         """
-        return self._start_modules_sequentially(self.base_modules,True)
+        return self._start_modules_sequentially(self._get_modules(isBaseModules=True), isBaseModules=True)
  
     def _init_optional_modules(self)->Tuple[bool,List[str],List[str]]:
         """
-        启动 可选的内部功能模块
+        启动 optional内部功能模块
             
         返回:
             是否全部启动成功,
             启动成功的optional内部服务模块名字，启动失败的optional内部服务模块名字
         """
-        return  self._start_modules_sequentially(self.optional_modules,False)
+        return  self._start_modules_sequentially(self._get_modules(isBaseModules=False), isBaseModules=False)
+    
     
     def _start_single_module(self,module:Tuple[str,str],isBaseModule: bool)->bool:
         """
@@ -168,8 +246,8 @@ class InternalModuleManager:
         
     def _start_modules_sequentially(self,
                                    modules:List[Tuple[str,str]],
-                                   isBaseModule: bool
-                                   )->Tuple[bool,List[str],List[str]]:
+                                   isBaseModules: bool
+                                   )->Tuple[bool, List[str], List[str]]:
         """
         顺序启动 内部功能模块
         
@@ -180,146 +258,434 @@ class InternalModuleManager:
             是否全部启动成功,
             启动成功的any内部服务模块名字，启动失败的any内部服务模块名字
         """
-        success = []
-        fail = []
+        success:List[str] = []
+        fail:List[str] = []
+        
         for module in modules:
-            if self._start_single_module(module,isBaseModule):
-                success.append(module)
+            if self._start_single_module(module,isBaseModules):
+                success.append(module[0])
             else:
-                fail.append(module)
+                fail.append(module[0])
         
         return (len(fail) == 0, success, fail)
 
-    def init_module(self)->Tuple[bool,
-                                Tuple[List[str], List[str]],
-                                Tuple[List[str], List[str]]
-                                ]:
+    
+    def stop_single_module(self, module: str) -> bool:
         """
-        初始化启动 内部服务模块
+        终止单个 optional 内部服务模块（如果包含 base modules 则会忽略）。
+        """
+        return self._stop_single_module_aux(module, self.optional_processes, isBaseModule=False)
+    
+    def _stop_single_module(self, module: str, isBaseModule: bool) -> bool:
+        """
+        终止单个 Any 内部服务模块。
+        """
+        processes = self.base_processes if isBaseModule else self.optional_processes
+        return self._stop_single_module_aux(module, processes, isBaseModule=isBaseModule)
+    
+    def _stop_single_module_aux(self, module: str, processes: List[Tuple[str,Any]], isBaseModule: bool) -> bool:
+        """
+        通用函数：终止单个Any内部服务模块。
         
+        参数:
+            module (str): 要停止的模块名称。
+            processes (List[Tuple[str,Any]]): 对应模块的进程列表，如 self.base_processes 或 self.optional_processes。
+            module_type (str): 模块类型描述，例如 'base' 或 'optional'。
+            
         返回:
-            是否全部启动成功
-            启动成功的base内部服务模块名字，启动失败的base内部服务模块名字
-            启动成功的optional内部服务模块名字，启动失败的optional内部服务模块名字
+            bool: 是否成功停止模块。
         """
-        base = self._init_base_modules()
-        optional =  self._init_optional_modules()
-        return base, optional
+        module_type = "base" if isBaseModule else "optional"
+        started_modules = {module_name for module_name, _ in processes}
+        
+        # 检查该模块是否已启动
+        if module not in started_modules:
+            print(f"The {module_type} module {module} is not running. No need to stop it.")
+            return False
+
+        print(f"Start stopping the running {module_type} module {module}...")
+        # 从列表中移除对应的项（会导致模块被析构）
+        for item in processes:
+            module_name, _ = item
+            if module_name == module:
+                processes.remove(item)
+                break
+        print(f"Stopped the running {module_type} module {module}.")
+        return True
     
-    def _stop_base_modules(self):
+    def _stop_base_modules(self)->Tuple[bool,List[str],List[str]]:
         """终止 所有 base内部服务模块"""
+        print("Now starting to stop all the base modules...")
+        
+        success:List[str] = []
+        fail:List[str] = []
+        
         for module,_ in self.base_processes:
-            self._stop_single_module(module)
-    
-    def stop_optional_modules(self):
+            if self._stop_single_module(module, isBaseModule=True):
+                success.append(module)
+            else:
+                fail.append(module)
+                
+        if (len(fail) == 0):
+            print(f"Stopped the optioanl modules successfully:\n \t {success}")                     
+            print("Stopped all the optional modules...")
+        else:
+            print(f"Stopped the optioanl modules successfully:\n \t {success}")
+            print(f"Stopped the optioanl modules failed:\n \t {fail}")
+            print("Some modules stop failed,please check the info.")   
+            
+        return (len(fail) == 0, success, fail)
+        
+    def stop_optional_modules(self)->Tuple[bool,List[str],List[str]]:
         """终止 所有 optional内部服务模块"""
-        for module,_ in self.optional_processes:
-            self._stop_single_module(module)
+        print("Now stop all the optional modules...")
+        
+        if self.optional_processes is None:
+            print("No running optional modules.No need to stop them.Do nothing.")
+            return False, [], []
+        
+        success:List[str] = []
+        fail:List[str] = []
+        
+        for module, _ in self.optional_processes:
+            if self._stop_single_module(module,isBaseModule=False):
+                success.append(module)
+            else:
+                fail.append(module)
+                     
+        if (len(fail) == 0):
+            print(f"Stopped the optioanl modules successfully:\n \t {success}")                     
+            print("Stopped all the optional modules...")
+        else:
+            print(f"Stopped the optioanl modules successfully:\n \t {success}")
+            print(f"Stopped the optioanl modules failed:\n \t {fail}")
+            print("Some modules stop failed,please check the info.")
+            
+        return (len(fail) == 0, success, fail)
     
-    def stop_select_modules(self,modules:List[str]):
+    def stop_select_modules(self,modules:List[str])->Tuple[bool,List[str],List[str]]:
         """
         终止 所有选择的optional内部服务模块
         
         注意： 若包含base内部服务模块,则会忽略这些base
+        返回:
+            是否全部stop成功，stop成功的module name，stop失败的module name
         """
-        for module in modules:
-            self._stop_single_module(module)
+        # 获取 已启动的optional modules
+        optioanal_module_names = {module for module, _ in self.optional_processes}
+        # 过滤出 要stop的已启动的optional_module
+        modules_to_stop = [module for module in modules if module in optioanal_module_names]
+        
+        if modules_to_stop is None:
+            print("No optional modules need to stop.Please check the param:modules")
+            return False
+        
+        success:List[str] = []
+        fail:List[str] = []
+        
+        # 对所有要停止的optional模块进行操作       
+        for module in modules_to_stop:
+            if self.stop_single_module(module):
+                success.append(module)
+            else:
+                fail.append(module)
+                
+        print(f"Stopped the select modules successfully:\n \t {success}")
+        if (len(fail) == 0):        
+            print(f"Stopped the select modules successfully:\n \t {fail}")
+        
+        return (len(fail) == 0, success, fail)
     
-    def _stop_single_module(self,module:str):
-        """终止 单个 Any内部服务模块"""
-        # TODO 思考如何实现
-        pass
-    
-    def _stop_all_module(self):
+    def _stop_select_modules(self,modules:List[str])->Tuple[bool,List[str],List[str]]:
+        """终止 所有选择的Any内部服务模块"""
+        
+        # 获取 已启动的modules
+        started_optional_modules = {module for module, _ in self.optional_processes}
+        started_base_modules = {module for module, _ in self.base_processes}
+        
+        # 过滤出 要stop的且已启动的modules
+        optional_modules_to_stop = [module for module in modules if module in started_optional_modules]
+        base_modules_to_stop = [module for module in modules if module in started_base_modules]
+        
+        # 没有要stop的module
+        if optional_modules_to_stop is None and base_modules_to_stop is None:
+            print("No module in param:modules is running.No need to stop them.Please check the param:modules")
+            return False, [], []
+        
+        success:List[str] = []
+        fail:List[str] = []
+        
+        # stop optional modules
+        if optional_modules_to_stop:      
+            for module in optional_modules_to_stop:
+                if self._stop_single_module(module,isBaseModule=False):
+                    success.append(module)
+                else:
+                    fail.append(module)
+        
+        # stop base modules
+        if base_modules_to_stop:       
+            for module in base_modules_to_stop:
+                if self._stop_single_module(module,isBaseModule=True):
+                    success.append(module)
+                else:
+                    fail.append(module)
+            
+        print(f"Stopped the select modules successfully:\n \t {success}")
+        if (len(fail) == 0):        
+            print(f"Stopped the select modules successfully:\n \t {fail}")
+        
+        return (len(fail) == 0, success, fail)
+        
+    def _stop_all_modules(self):
         """终止 所有所有内部服务模块"""
         self.stop_optional_modules()
         self._stop_base_modules()
+        print("InternalModuleManager cleaned up and all modules are stopped.")
     
-    def _restart_single_module(self,module:str)->bool:
-        """重启单个模块"""
-        # TODO 要检测该模块是否已经启动，若本身没启动，则不应该重启
-        self._stop_single_module(module)
-        return self._start_single_module(module)
+    def _check_module_is_started(self,module:str)->bool:
+        """检测 单个模块是否已经启动"""
+        for name, _ in self.base_processes:
+            if name == module:
+                return True
+        for name, _ in self.optional_processes:
+            if name == module:
+                return True
+        return False
+  
+    def _restart_single_module_aux(self, module: str, isBaseModule: bool)->bool:
+        """
+        重启指定模块。如果模块未启动，则不会执行任何操作。
+        
+        参数:
+            module (str): 要重启的模块名称。
+            isBaseModule (bool): 模块是否为 base 模块.
+        
+        返回:
+            bool: 是否成功重启模块。
+        """
+        # 检测该模块是否已经启动，若本身没启动，则不应该重启
+        if not self._check_module_is_started(module):
+            print(f"The module {module} is not running. No need to restart it. Do nothing.")
+            return False
+
+        print(f"Starting to restart the module {module}...")
+        
+        # 尝试停止模块
+        if not self._stop_single_module(module, isBaseModule):
+            print(f"Restart module {module} failed. Stopping the module failed. Please check the info.")
+            return False
+        
+        # 尝试启动模块
+        _, _, module_path = self._get_module_config(module_name=module)
+        if not self._start_single_module((module, module_path), isBaseModule):
+            print(f"Restart module {module} failed. Starting the module failed. Please check the info.")
+            return False
+
+        print(f"Module {module} restarted successfully.")
+        return True
     
-    def _restart_base_module(self)->Tuple[bool,List[str],List[str]]:
+    def _restart_single_module(self, module:str, isBaseModule:bool)->bool:
+        """
+        重启指定模块。如果模块未启动，则不会执行任何操作。
+        
+        参数:
+            module (str): 要重启的模块名称。
+            isBaseModule (bool): 模块是否为 base 模块.
+        
+        返回:
+            bool: 是否成功重启模块。
+        """
+        return self._restart_single_module_aux(module, isBaseModule=isBaseModule)
+    
+    def restart_single_module(self,module:str)->bool:
+        """重启 单个optional模块
+         
+        注意： 若为base内部服务模块,则不会重启 
+        """
+        # 获取已启动的optioanl modules
+        started_optional_modules = {module for module, _ in self.optional_processes}
+        
+        if module not in started_optional_modules:
+            print(f"Optional module {module} is not running.No need to restart.Do nothing.")
+            return False
+
+        return self._restart_single_module_aux(module, isBaseModule=False)
+    
+    def _restart_base_modules(self)->Tuple[bool,List[str],List[str]]:
         """
         重启 所有的base内部服务模块    
         
         注意：禁止调用！！！
+        
+        返回:
+            全部重启成功还是失败,重新启动(成功/失败)的base内部服务模块名字
         """
-        success = []
-        fail = []
-        for module in self.base_modules:
-            if self._restart_single_module(module):
+        success: List[str] = []
+        fail: List[str] = []
+        
+        for module, _ in self.base_processes:
+            if self._restart_single_module(module, isBaseModule=True):
                 success.append(module)
             else:
                 fail.append(module)
+                
+        print(f"Restarted the base modules successfully:\n \
+                \t {success} \n \
+                Restarted the base modules failed:\n \
+                \t {fail} ")
         return (len(fail) == 0, success, fail)
-            
     
-    def restart_select_module(self,
-                              modules:Optional[List[str]],
-                              isAllOpionalModule:Optional[bool]
-                              )->Tuple[bool,List[str],List[str]]:
+    def restart_optional_modules(self)->Tuple[bool,List[str],List[str]]:
+        """ 重启 所有的optional内部服务模块 
         
+        返回:
+            全部重启成功还是失败, 重新启动(成功/失败)的optional内部服务模块名字
+        """
+        
+        success: List[str] = []
+        fail: List[str] = []
+        
+        for module, _ in self.optional_processes:
+            if self._restart_single_module(module, isBaseModule=False):
+                success.append(module)
+            else:
+                fail.append(module)
+                
+        print(f"Restarted the optional modules successfully:\n \
+                \t {success} \n \
+                Restarted the optional modules failed:\n \
+                \t {fail} ")
+        
+        return (len(fail) == 0, success, fail)
+    
+    def _restart_select_modules(self, modules:List[str])->Tuple[bool,List[str],List[str]]:
+        """
+        重启 选择的 Any 内部服务模块
+        
+        禁止调用！！！
+        
+        :param modules: 要重启的Any内部服务的名字
+        
+        返回:
+            全部重启成功还是失败,重新启动(成功/失败)的Any内部服务模块名字
+        """
+        # 获取 已启动的modules
+        started_optional_modules = {module for module, _ in self.optional_processes}
+        started_base_modules = {module for module, _ in self.base_processes}
+        
+        # 过滤出 要restart的且已启动的modules
+        optional_modules_to_restart = [module for module in modules if module in started_optional_modules]
+        base_modules_to_restart = [module for module in modules if module in started_base_modules]
+        
+        if optional_modules_to_restart is None and base_modules_to_restart is None:
+            print(f"No module in {modules} is running.No need to restart them.Please check the param:modules")
+            return False, [], []
+        
+        success:List[str] = []
+        fail:List[str] = []
+        
+        if optional_modules_to_restart:      
+            for module in optional_modules_to_restart:
+                if self._restart_single_module(module,isBaseModule=False):
+                    success.append(module)
+                else:
+                    fail.append(module)
+            print(f"Restarted the selected optional modules.")
+        
+        if base_modules_to_restart:       
+            for module in base_modules_to_restart:
+                if self._restart_single_module(module,isBaseModule=True):
+                    success.append(module)
+                else:
+                    fail.append(module)
+            print(f"Restarted the selected base modules.")
+            
+        print(f"Restarted the select modules successfully:\n \
+                \t {success} \n \
+                Restarted the select modules failed:\n \
+                \t {fail} ")
+        
+        return (len(fail) == 0, success, fail)
+        
+    def restart_select_modules(self, modules:List[str])->Tuple[bool,List[str],List[str]]:
         """
         重启 选择的 Optional 内部服务模块
         
         :param modules: 要重启的optional内部服务的名字
-        :param isAllOpionalModule: 是否要重启所有optional内部服务，如果此处为True，则modules参数失效
         
         返回:
             全部重启成功还是失败,重新启动(成功/失败)的optional内部服务模块名字
         """
+        # 提取已启动的optional modules
+        optional_modules = {module for module, _ in self.optional_processes}
+        # 过滤出要restart且已启动的optioanl modules
+        modules_to_restart = [module for module in modules if module in optional_modules]
         
-        if not modules and not isAllOpionalModule:
-            print("param:modules and param:isAllOpionalModule need at least one!Do nothing.")
+        if modules_to_restart is None:
+            print(f"No module in {modules} is running.No need to restart them.Please check the param:modules")
             return False, [], []
         
-        if  modules is None and isAllOpionalModule == False:
-            print("When modules is None,isAllOptionalModule shoudle be True!Do nothing")
-            return False, [], []
+        success: List[str] = []
+        fail: List[str] = []
         
-        modules_to_restart = self.optional_processes if isAllOpionalModule else modules
-        # TODO 如果选择的module没启动，则不会重启该module，还没实现
-        success = []
-        fail = []
         for module in modules_to_restart:
-            if self._restart_single_module(module):
+            if self._restart_single_module(module, isBaseModule=False):
                 success.append(module)
             else:
                 fail.append(module)
-
+                
+        print(f"Restarted the select modules successfully:\n \
+                \t {success} \n \
+                Restarted the select modules failed:\n \
+                \t {fail} ")
+        
         return (len(fail) == 0, success, fail)
-            
-    
-    def list_started_module(self) -> List[str]:
-        """返回已启动的所有内部模块的名字"""
-        return self.list_started_base_module() + self.list_started_optional_module()
-    
-    def list_started_base_module(self)->List[str]:
-        """返回已启动的base内部模块的名字"""
-        return [name for name, _ in self.base_processes]
-    
-    def list_started_optional_module(self)->List[str]:
-        """返回已启动的optional内部模块的名字"""
-        return [name for name, _ in self.optional_processes]
+ 
+           
+    def list_started_module(self, isBaseModule: bool = None) -> List[str]:
+        """
+        返回已启动的所有内部模块的名字。
+        
+        参数:
+            isBaseModule (bool): 
+                - 如果为 True，返回已启动的 base 模块名字。
+                - 如果为 False，返回已启动的 optional 模块名字。
+                - 如果为 None，返回所有已启动的模块名字。
+        
+        返回:
+            List[str]: 已启动的模块名称列表。
+        """
+        if isBaseModule == None:
+            return [name for name, _ in self.base_processes] + [name for name, _ in self.optional_processes]
+        
+        if isBaseModule == True:
+            return [name for name, _ in self.base_processes]
+        else:
+            return [name for name, _ in self.optional_processes]
     
     def __del__(self):
-        self._stop_all_module()
+        self._stop_all_modules()
+        print("InternalModuleManager deleted")
         
     def _show(self):
-        pass
+        base = self.list_started_module(isBaseModule=True)
+        optional = self.list_started_module(isBaseModule=False)
+        print(f"Startted base modules: {[module for module in base]}")
+        print(f"Startted optioanl modules: {[module for module in optional]}")
 
 
 if __name__ == "__main__":
     m = InternalModuleManager()
-    m.init_module()
+    m.init_modules()
+    print()
+    m._show()
     
+    input("enter1 GPTSoVits")
     name,gptsovits_agent = m.base_processes[0]
-    print(name)
     gptsovits_agent.infer_tts_get("你好")
     
+    input("enter2 SenseVoice")
     name,gptsovits_agent = m.base_processes[0]
-    print(name)
+
     

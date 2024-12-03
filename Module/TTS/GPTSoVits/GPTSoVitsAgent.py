@@ -16,7 +16,7 @@ from urllib.parse import urljoin
 from dotenv import load_dotenv
 
 # TODO 之后考虑将GPTSoVits的server集成到AI agent内部。现阶段还是采用分离式C/S
-# TODO 给该类添加注释
+# TODO 给该类添加注释，更改类成员函数名字，添加类型注解
 class GPTSoVitsAgent:
     """
 
@@ -40,6 +40,7 @@ class GPTSoVitsAgent:
         self.server = os.getenv("GPTSOVITS_SERVER")
         if not self.server:
             raise ValueError("GPTSOVITS_SERVER environment variable not set.")
+        print("GPTSoVitsAgent initialized")
 
     def generate_config(self, gpt=None, sovits=None, ref_audio=None, ref_audio_prompt=None, text_lang="zh", prompt_lang="zh", batch_size=20):
         config = {
@@ -132,6 +133,9 @@ class GPTSoVitsAgent:
                     time.sleep(2 ** (attempt + 1))
                 else:
                     print("Failed after multiple attempts.")
+                    
+    def __del__(self):
+        print("GPTSoVitsAgent deleted")
 
 
 

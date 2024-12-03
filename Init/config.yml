@@ -7,7 +7,7 @@
 # 外部服务
     # 要启动的基础外部服务
     base_services:
-      - ollama server:
+      - ollama_server:
           script: "ollama serve"
           service_name: "ollama_server"
           conda_env: "/home/yomu/data/anaconda3/envs"
@@ -17,7 +17,7 @@
           is_base: true
           log_file: "ollama_server.log"
 
-      - ollama LLM:
+      - ollama_LLM:
           script: "ollama run llama3.2"
           service_name: "ollama_LLM"
           conda_env: "/home/yomu/data/anaconda3/envs"
@@ -27,7 +27,7 @@
           is_base: true
           log_file: ""
 
-      - GPTSoVits:
+      - GPTSoVits_server:
           script: "/home/yomu/GPTSoVits/api_v2.py"
           service_name: "GPTSoVits_server"
           conda_env: "/home/yomu/data/anaconda3/envs/GPTSoVits"
@@ -37,7 +37,7 @@
           is_base: true
           log_file: "GPTSoVits_server.log"
 
-      - SenseVoice:
+      - SenseVoice_server:
           script: "/home/yomu/SenseVoice/SenseVoice_server.py"
           service_name: "SenseVoice_server"
           conda_env: "/home/yomu/data/anaconda3/envs/SenseVoice"
@@ -64,7 +64,7 @@
     # TODO 后期修改0.0.0.0，让其只监听本地
     # 外部服务器ipaddress---port
     _ip_port:
-      - ollama server: ["127.0.0.1","11434"]
+      - ollama_server: ["127.0.0.1","11434"]
       - GPTSoVits: ["0.0.0.0","9880"]
       - SenseVoice: ["0.0.0.0","9890"]
 
