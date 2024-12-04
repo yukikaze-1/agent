@@ -9,9 +9,15 @@
     agent运行时框架
 """
 
-class AgentFrameInit:
+class AgentFrameManager:
     """
 
     """
     def __init__(self):
+        pass
+    
+    def init_frame(self):
+        pass
+    
+    def __del__(self):
         pass

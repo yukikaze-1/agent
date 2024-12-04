@@ -21,13 +21,13 @@
     4. 
 """
 
-
 import os
 import subprocess
 import yaml
 import signal
 import logging
 from subprocess import Popen
+from threading import Lock
 from typing import List,Dict,Optional,Tuple
 from dotenv import dotenv_values
 
@@ -98,22 +98,20 @@ class ExternalServiceManager:
                         is_base: true                       # 是否为基础功能服务器
                         log_file: "xxx.log"                 # log文件名
         
-    """ 
-    
+    """  
     def __init__(self):
         # 配置相关
         self.env_vars = dotenv_values("Init/.env")
         self.config_path = self.env_vars.get("INIT_CONFIG_PATH","")
         self.config: Dict = self._load_config(self.config_path) 
-        #支持的外部服务
-        # TODO 有问题，类型不匹配
+        
+        self.lock = Lock()
         self.support_services: List[str] = self.config.get('support_services', [])
         
         # 日志相关
         self.log_dir = os.path.join(self.env_vars.get("LOG_PATH"), "ExternalService")
         os.makedirs(self.log_dir, exist_ok=True)  
-        logging.basicConfig(level=logging.INFO,
-                            format='%(asctime)s - %(levelname)s - %(message)s')        
+        logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')        
         
         # 进程相关
         self.base_processes: List[Tuple[str,Popen]] = []   # 保存base外部服务器后台进程对象以及名字
@@ -131,8 +129,7 @@ class ExternalServiceManager:
         return base, optional    
     
     def _load_config(self, config_path: str) -> Dict:
-        """
-            从config_path中读取配置(*.yml)
+        """从config_path中读取配置(*.yml)
             
             返回：
                 yml文件中配置的字典表示
@@ -184,25 +181,24 @@ class ExternalServiceManager:
     
     def _start_single_service(self,service:Dict)->Tuple[bool, Tuple[str,int]]:
         return self._start_single_service_aux(service_script = service["script"],
-                                 service_name=service["service_name"],
-                                 conda_env_path = service["conda_env"],
-                                 args= service["args"],
-                                 use_python = service.get("use_python", False),
-                                 run_in_background = service.get("run_in_background", False),
-                                 is_base = service.get("is_base", False),
-                                 log_file = service.get("log_file", None)
-                                 )
+                                              service_name=service["service_name"],
+                                              conda_env_path = service["conda_env"],
+                                              args= service["args"],
+                                              use_python = service.get("use_python", False),
+                                              run_in_background = service.get("run_in_background", False),
+                                              is_base = service.get("is_base", False),
+                                              log_file = service.get("log_file", None))
             
-    def _start_single_service_aux(self,
-                    service_script: str,
-                    service_name: str,
-                    conda_env_path: str,
-                    args: List[str] = [],
-                    use_python: bool = False, 
-                    run_in_background: bool = False,
-                    is_base: bool = False,
-                    log_file: str = ""
-                    )->Tuple[bool, Tuple[str,int]]:
+    def _start_single_service_aux(self,      
+                                  service_script: str,
+                                  service_name: str,
+                                  conda_env_path: str,
+                                  args: List[str] = [],
+                                  use_python: bool = False, 
+                                  run_in_background: bool = False,
+                                  is_base: bool = False,
+                                  log_file: str = ""
+                                  )->Tuple[bool, Tuple[str,int]]:
         """
         在独立进程中运行外部服务模块。
         
@@ -236,53 +232,54 @@ class ExternalServiceManager:
         
         ret = ()
 
-        if use_python:
-            # 获取 Conda 环境中的 Python 路径
-            python_path = os.path.join(conda_env_path, "bin", "python")
-            if not os.path.exists(python_path):
-                raise FileNotFoundError(f"Python executable not found in Conda environment: {python_path}")
+        with self.lock:
+            if use_python:
+                # 获取 Conda 环境中的 Python 路径
+                python_path = os.path.join(conda_env_path, "bin", "python")
+                if not os.path.exists(python_path):
+                    raise FileNotFoundError(f"Python executable not found in Conda environment: {python_path}")
 
-            # 启动服务模块，使用指定的 Python 解释器
-            print(f"Starting service {service_name} with Python {python_path}")
-            if run_in_background:
-                process = subprocess.Popen(
-                    args = [python_path, service_script] + args,
-                    stdin=stdin_option,
-                    stdout=stdout_option,
-                    stderr=stderr_option,
-                    preexec_fn=os.setsid,  # 使子进程在独立的进程组中运行
-                    close_fds=True,  # 确保子进程不继承父进程的文件描述符
-                    cwd=script_dir  # 设置工作目录为脚本所在目录
-                )
-                if is_base:
-                    self.base_processes.append((service_name,process))
+                # 启动服务模块，使用指定的 Python 解释器
+                print(f"Starting service {service_name} at {service_script} with Python {python_path}")
+                if run_in_background:
+                    process = subprocess.Popen(
+                        args = [python_path, service_script] + args,
+                        stdin=stdin_option,
+                        stdout=stdout_option,
+                        stderr=stderr_option,
+                        preexec_fn=os.setsid,  # 使子进程在独立的进程组中运行
+                        close_fds=True,  # 确保子进程不继承父进程的文件描述符
+                        cwd=script_dir  # 设置工作目录为脚本所在目录
+                    )
+                    if is_base:
+                        self.base_processes.append((service_name,process))
+                    else:
+                        self.optional_processes.append(process)
+                    ret = (service_name,process.pid)
                 else:
-                    self.optional_processes.append(process)
-                ret = (service_name,process.pid)
+                    # TODO 对于前台启动的程序还需额外处理
+                    subprocess.run([python_path, service_script], check=True, cwd=script_dir)
             else:
-                # TODO 对于前台启动的程序还需额外处理
-                subprocess.run([python_path, service_script], check=True, cwd=script_dir)
-        else:
-            # 启动服务模块，直接运行命令（例如 ollama serve）
-            print(f"Starting service {service_name} using system shell")
-            if run_in_background:
-                process = subprocess.Popen(
-                    service_script,
-                    shell=True,
-                    stdin=stdin_option,
-                    stdout=stdout_option,
-                    stderr=stderr_option,
-                    preexec_fn=os.setsid,  # 使子进程在独立的进程组中运行
-                    close_fds=True,  # 确保子进程不继承父进程的文件描述符
-                    cwd=script_dir  # 设置工作目录为脚本所在目录
-                )
-                if is_base:
-                    self.base_processes.append((service_name,process))
+                # 启动服务模块，直接运行命令（例如 ollama serve）
+                print(f"Starting service {service_name} using system shell")
+                if run_in_background:
+                    process = subprocess.Popen(
+                        service_script,
+                        shell=True,
+                        stdin=stdin_option,
+                        stdout=stdout_option,
+                        stderr=stderr_option,
+                        preexec_fn=os.setsid,  # 使子进程在独立的进程组中运行
+                        close_fds=True,  # 确保子进程不继承父进程的文件描述符
+                        cwd=script_dir  # 设置工作目录为脚本所在目录
+                    )
+                    if is_base:
+                        self.base_processes.append((service_name,process))
+                    else:
+                        self.optional_processes.append(process)
+                    ret = (service_name,process.pid)
                 else:
-                    self.optional_processes.append(process)
-                ret = (service_name,process.pid)
-            else:
-                subprocess.run(service_script, shell=True, check=True, cwd=script_dir)
+                    subprocess.run(service_script, shell=True, check=True, cwd=script_dir)
 
         if stdout_option not in [None, subprocess.DEVNULL]:
             stdout_option.close()
@@ -310,7 +307,7 @@ class ExternalServiceManager:
         
         if optional_services_to_start is None and base_services_to_start is None:
             print("No services need to start.Please check the param:services")
-            return False, [], []
+            return (False, [], [])
         
         ok1, _base_suceess, _base_fail = self._start_services_sequentially(services=base_services_to_start)
         ok2, _opt_sucess, _opt_fail = self._start_services_sequentially(services=optional_services_to_start)
@@ -334,7 +331,7 @@ class ExternalServiceManager:
         
         if services_to_start is None:
             print("No optional services need to start.Please check the param:services")
-            return False, [], []
+            return (False, [], [])
         
         # TODO 要修改此处的机制 ，暂时没考虑启动失败的情况
         return self._start_services_sequentially(services=services_to_start)
@@ -364,7 +361,7 @@ class ExternalServiceManager:
         fail: List[str] = []
         
         if services is None:
-            return False, [], []
+            return (False, [], [])
         
         for service in services:
             try:
@@ -390,7 +387,7 @@ class ExternalServiceManager:
             return self._start_services_sequentially(optional_services)
         else:
             print("No additional external services need to start")
-            return False, [], []
+            return (False, [], [])
 
     def _init_base_services(self)-> Tuple[bool,List[Tuple[str,int]],List[Tuple[str,int]]]:
         """启动 基础服务
@@ -405,24 +402,11 @@ class ExternalServiceManager:
 
 
     def stop_single_service(self,service:str)->bool:
-        """停止 单个外部服务(仅限optionl services)
-        
-        :param service: 要stop的service的名字
-        
-        返回：
-            stop成功与否
-        """
+        """停止 单个外部服务(仅限optionl services)"""
         return self._stop_single_service_aux(service, self.optional_processes, isBaseService=False)
         
     def _stop_single_service(self,service:str, isBaseService:bool)->bool:
-        """通用函数 停止 单个Any外部服务
-        
-        :param service: 要stop的service的名字
-        :param isBaseService: 是否是base service
-        
-        返回：
-            stop成功与否
-        """
+        """通用函数 停止 单个Any外部服务"""
         processes = self.base_processes if isBaseService else self.optional_processes
         return self._stop_single_service_aux(service,processes,isBaseService=isBaseService)
     
@@ -445,8 +429,7 @@ class ExternalServiceManager:
                     os.killpg(os.getpgid(process.pid), signal.SIGTERM)  # 终止整个进程组
                     print(f"Terminated {process_type} process:{service_name}--{process.pid}")
                 else:
-                    print(f"{process_type} process:{service_name}--{process.pid} is stopped early.\
-                              But not removed in the list.Now removed from the list: self.{process_type}_processes")
+                    print(f"{process_type} process:{service_name}--{process.pid} is stopped early.But not removed in the list.Now removed from the list: self.{process_type}_processes")
                 # 将终止的进程从列表中移除
                 processes.remove(item)
                 return True
@@ -454,6 +437,28 @@ class ExternalServiceManager:
         print(f"{process_type} service {service} is not running,dont need to stop.Do nothing.")
         return False  
 
+    def _stop_services(self, services: List[str], isBaseService: bool)->Tuple[bool, List[str], List[str]]:
+        """
+        停止 选择的已启动的Any外部服务器
+        
+        返回:
+            是否全部stop成功，stop成功的service name，stop失败的service name
+        """
+        success:List[str] = []
+        fail:List[str] = []
+        
+        for service in services:
+            if self._stop_single_service(service, isBaseService=isBaseService):
+                success.append(service)
+            else:
+                fail.append(service)
+    
+        print(f"Stopped the select services successfully:\n \t {success}")
+        if (len(fail) == 0):        
+            print(f"Stopped the select services successfully:\n \t {fail}")
+                
+        return (len(fail) == 0, success, fail)
+    
     def _stop_select_services(self,services:List[str])->Tuple[bool, List[str], List[str]]:
         """
         停止 选择的已启动的Any外部服务器
@@ -470,31 +475,13 @@ class ExternalServiceManager:
         base_services_to_stop = [service for service in services if service in started_base_services]
         
         if base_services_to_stop is None and optional_services_to_stop is None:
-            print("No  services need to stop.Please check the param:services")
-            return False, [], []
+            print("No services need to stop.Please check the param:services")
+            return (False, [], [])
         
-        success:List[str] = []
-        fail:List[str] = []
+        ok1, opt_success, opt_fail = self._stop_services(optional_services_to_stop, isBaseService=False)
+        ok2, base_success, base_fail = self._stop_services(base_services_to_stop, isBaseService=True)
         
-        if optional_services_to_stop:      
-            for service in optional_services_to_stop:
-                if self.stop_single_service(service):
-                    success.append(service)
-                else:
-                    fail.append(service)
-        
-        if base_services_to_stop:
-            for service in optional_services_to_stop:
-                if self.stop_single_service(service):
-                    success.append(service)
-                else:
-                    fail.append(service)
-        
-        print(f"Stopped the select services successfully:\n \t {success}")
-        if (len(fail) == 0):        
-            print(f"Stopped the select services successfully:\n \t {fail}")
-                
-        return (len(fail) == 0, success, fail)
+        return ok1 and ok2, base_success + opt_success, base_fail + opt_fail
     
     def stop_select_services(self,services:List[str])->Tuple[bool, List[str], List[str]]:
         """
@@ -505,61 +492,33 @@ class ExternalServiceManager:
         返回:
             是否全部stop成功，stop成功的service name，stop失败的service name
         """
-        
-        # 提取出已启动的optional service集合
         started_optional_services = {service for service, _ in self.optional_processes}
-        
-        # 过滤出 已启动的且要stop的 optional services
         services_to_stop = [service for service in services if service in started_optional_services]
         
         if services_to_stop is None:
             print("No optional services need to stop.Please check the param:services")
-            return False, [], []
+            return (False, [], [])
         
-        success:List[str] = []
-        fail:List[str] = []
-        
-        # 对所有要停止的services进行操作       
-        for service in services_to_stop:
-            if self.stop_single_service(service):
-                success.append(service)
-            else:
-                fail.append(service)
-        
-        print(f"Stopped the select services successfully:\n \t {success}")
-        if (len(fail) == 0):        
-            print(f"Stopped the select services successfully:\n \t {fail}")
-                
-        return (len(fail) == 0, success, fail)
-
+        return self._stop_services(services_to_stop, isBaseService=False)
+   
+    def stop_optional_services(self)->bool:
+        """终止 所有可选功能的外部服务器"""
+        print(f"ExternalServiceManager 停止了所有optional外部服务")
+        services_to_stop = [service for service, _ in self.optional_processes]
+        return self._stop_services(services_to_stop, isBaseService=False)
+    
+    def _stop_base_services(self)->bool:
+        """终止 所有基础功能的外部服务器"""
+        print(f"ServiceManager stopped all the base services")
+        services_to_stop = [service for service, _ in self.base_processes]
+        return self._stop_services(services_to_stop, isBaseService=True)
+    
     def _stop_all_services(self):
-        """
-        终止 所有Any外部服务器
-        
-        禁止调用！！！
-        """
+        """终止 所有Any外部服务器"""
         self.stop_optional_services()
         self._stop_base_services()
         print("ExternalServiceManager cleaned up and all background services are stopped.") 
-        
-    def stop_optional_services(self)->bool:
-        """终止 所有可选功能的外部服务器"""
-        for service, process in self.optional_processes:
-            self.stop_single_service(service)
-        print(f"ExternalServiceManager stopped all the base services")
-        return True
-    
-    def _stop_base_services(self)->bool:
-        """
-        终止 所有基础功能的外部服务器
-            
-        禁止调用！！！
-        """
-        for service, process in self.base_processes:
-            self._stop_single_service(service,isBaseService=True)
-        print(f"ServiceManager stopped all the base services")
-        return True
-    
+     
     def _check_service_is_started(self, service: str)->bool:
         """检测 单个service是否已经启动"""
         for name, _ in self.optional_processes:
@@ -571,10 +530,7 @@ class ExternalServiceManager:
         return False
         
     def restart_single_service(self,service:str)->bool:
-        """重启 单个 service(仅限optional services)
-        如果包含了base services ，则会忽略
-        """
-        # 获取已启动的optioanl services
+        """重启 单个 service(仅限optional services)如果包含了base services ，则会忽略"""
         started_optional_services = {service for service, _ in self.optional_processes}
         
         if service not in started_optional_services:
@@ -584,27 +540,11 @@ class ExternalServiceManager:
         return self._restart_single_service_aux(service, isBaseService=False)
         
     def _restart_single_service(self,service:str, isBaseService: bool)->bool:
-        """重启指定service。如果service未启动，则不会执行任何操作。
-        
-        参数:
-            service (str): 要重启的service名称。
-            isBaseService (bool): service是否为 base service.
-        
-        返回:
-            bool: 是否成功重启service。
-        """
+        """重启指定service。如果service未启动，则不会执行任何操作。"""
         return self._restart_single_service_aux(service, isBaseService=isBaseService)
     
     def _restart_single_service_aux(self, service:str, isBaseService: bool)->bool:
-        """重启指定service。如果service未启动，则不会执行任何操作。
-        
-        参数:
-            service (str): 要重启的service名称。
-            isBaseService (bool): service是否为 base service.
-        
-        返回:
-            bool: 是否成功重启service。
-        """
+        """重启指定service。如果service未启动，则不会执行任何操作。"""
         # 检测该service是否已经启动，若本身没启动，则不应该重启
         if not self._check_service_is_started(service):
             print(f"The service {service} is not running. No need to restart it. Do nothing.")
@@ -616,7 +556,6 @@ class ExternalServiceManager:
         if not self._stop_single_service(service, isBaseService=isBaseService):
             print(f"Restart service {service} failed. Stopping the service failed. Please check the info.")
             return False
-        
         
         # 获取要启动service的配置信息
         configs = self._get_services(isBaseServices=isBaseService)
@@ -630,12 +569,7 @@ class ExternalServiceManager:
         print(f"Module {service} restarted successfully.")
         return True
     
-    def _restart_base_services(self)-> Tuple[bool,List[Tuple[str,int]],List[Tuple[str,int]]]:
-        """
-        重启 所有基础功能的外部服务器
-        
-        禁止调用！！！
-        """
+    def _restart_services(self, services: List[str], isBaseService: bool)->Tuple[bool,List[Tuple[str,int]],List[Tuple[str,int]]]:
         success: List[str] = []
         fail: List[str] = []
         
@@ -651,33 +585,21 @@ class ExternalServiceManager:
                 \t {fail} ")
         
         return (len(fail) == 0, success, fail)
+    
+    def _restart_base_services(self)-> Tuple[bool,List[Tuple[str,int]],List[Tuple[str,int]]]:
+        """重启 所有基础功能的外部服务器"""
+        services_to_restart = [service for service, _ in self.base_processes]
+        return self._restart_services(services_to_restart, isBaseService=True)
+        
      
     def restart_optional_services(self)-> Tuple[bool,List[Tuple[str,int]],List[Tuple[str,int]]]:
-        """重启 所有optional外部服务器
-        
-        返回:
-            全部重启成功还是失败, 重新启动(成功/失败)的optional service name
-        """
-        
-        if self.optional_processes is None:
+        """重启 所有optional外部服务器"""
+        if not self.optional_processes:
             print("No optional service is running now.No need to restart them.Do nothing.")
-            return False, [], []
+            return (False, [], [])
         
-        success: List[str] = []
-        fail: List[str] = []
-        
-        for service, _ in self.optional_processes:
-            if self.restart_single_service(service):
-                success.append(service)
-            else:
-                fail.append(service)
-        
-        print(f"Restarted the optional services successfully:\n \
-                \t {success} \n \
-                Restarted the optional services failed:\n \
-                \t {fail} ")
-        
-        return (len(fail) == 0, success, fail)
+        services_to_restart = [service for service, _ in self.optional_processes]
+        return self._restart_services(services_to_restart, isBaseService=False)
     
     def restart_select_services(self, services:List[str])-> Tuple[bool,List[Tuple[str,int]],List[Tuple[str,int]]]:
         """重启 选择的optional外部服务器
@@ -685,38 +607,16 @@ class ExternalServiceManager:
         返回:
             全部重启成功还是失败, 重新启动(成功/失败)的optional service name
         """
-        # 获取已启动的services
         started_optional_services = {service for service, _ in self.optional_processes}
-        # 获取要restart的且已启动的services
-        optional_services_to_restart = [service for service in services if service in started_optional_services]
+        services_to_restart = [service for service in services if service in started_optional_services]
         
-        if optional_services_to_restart is None:
+        if not services_to_restart:
             print(f"No service in {services} is running.No need to restart them.Please start them before.")
-            return False, [], [] 
-        
-        success: List[str] = []
-        fail: List[str] = []
-        
-        if optional_services_to_restart:
-            for service in optional_services_to_restart:
-                if self.restart_single_service(service):
-                    success.append(service)
-                else:
-                    fail.append(service)
-                    
-        print(f"Restarted the optional services successfully:\n \
-                \t {success} \n \
-                Restarted the optional services failed:\n \
-                \t {fail} ")
-        
-        return (len(fail) == 0, success, fail)
+            return (False, [], []) 
+        return self._restart_services(services_to_restart, isBaseService=False)
     
     def _restart_select_services(self, services:List[str])-> Tuple[bool,List[Tuple[str,int]],List[Tuple[str,int]]]:
-        """重启 选择的Any外部服务器
-        
-        返回:
-            全部重启成功还是失败, 重新启动(成功/失败)的Any service name
-        """
+        """重启 选择的Any外部服务器"""
         # 获取已启动的services
         started_optional_services = {service for service, _ in self.optional_processes}
         started_base_services = {service for service, _ in self.base_processes}
@@ -725,33 +625,14 @@ class ExternalServiceManager:
         optional_services_to_restart = [service for service in services if service in started_optional_services]
         base_services_to_restart = [service for service in services if service in started_base_services]
         
-        if optional_services_to_restart is None and base_services_to_restart is None:
+        if not optional_services_to_restart and not base_services_to_restart:
             print(f"No service in {services} is running.No need to restart them.Please start them before.")
-            return False, [], []
+            return (False, [], [])
         
-        success: List[str] = []
-        fail: List[str] = []
+        ok1, opt_success, opt_fail = self._restart_services(optional_services_to_restart, isBaseService=False)
+        ok2, base_success, base_fail = self._restart_services(base_services_to_restart, isBaseService=False)
         
-        if optional_services_to_restart:
-            for service in optional_services_to_restart:
-                if self.restart_single_service(service):
-                    success.append(service)
-                else:
-                    fail.append(service)
-        
-        if base_services_to_restart:
-            for service in base_services_to_restart:
-                if self.restart_single_service(service):
-                    success.append(service)
-                else:
-                    fail.append(service)
-                    
-        print(f"Restarted the select services successfully:\n \
-                \t {success} \n \
-                Restarted the select services failed:\n \
-                \t {fail} ")
-        
-        return (len(fail) == 0, success, fail)
+        return ok1 and ok2, base_success + opt_success, base_fail + opt_fail
         
     def list_started_services(self, isBaseService: bool)->List[Tuple[str,int]]:
         """返回 已启动的所有外部服务器的名字与pid"""
@@ -764,11 +645,12 @@ class ExternalServiceManager:
                  
     def __del__(self):
         self._stop_all_services()
+        print("ExternalServiceManager deleted")
         
     def _show(self):
         print("Here are the started services:")
-        base = self.list_started_base_services()
-        opt = self.list_started_optional_services()
+        base = self.list_started_services(isBaseService=True)
+        opt = self.list_started_services(isBaseService=False)
         print("Base services:")
         for name,pid in base:
             print(f"{name}-{pid}")
@@ -776,18 +658,11 @@ class ExternalServiceManager:
         for name,pid in opt:
             print(f"{name}-{pid}")
  
-    def generate_service_config(self,
-                                script: str,
-                                service_name:str,
-                                conda_env: str,
-                                args: List[str],
-                                use_python: bool,
-                                run_in_background: bool,
-                                is_base: bool,
-                                log_file: str
-                                )->Dict:
+    def generate_service_config(self, script: str, service_name:str, conda_env: str,
+                                args: List[str], use_python: bool, run_in_background: bool,
+                                is_base: bool, log_file: str)->Dict:
         """
-        生成service
+        生成service config
         
         :param  script: 外部服务器的启动文件 或者 bash命令
         :param  service_name: 启动的服务的名字
