@@ -8,13 +8,19 @@
     负责AI agent 框架的初始化
     agent运行时框架
 """
+import os
+from concurrent.futures import ThreadPoolExecutor
+
 
 class AgentFrameManager:
     """
 
     """
-    def __init__(self):
-        pass
+    threadpool_number: int # 线程池大小
+    
+    def __init__(self, threadpool_number=10):
+        # 线程池
+        self.threadpool = ThreadPoolExecutor(threadpool_number)
     
     def init_frame(self):
         pass

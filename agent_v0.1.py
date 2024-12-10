@@ -15,7 +15,7 @@ import subprocess
 import sys
 from dotenv import load_dotenv
 
-from Init.init import InitAgent
+from Init.AgentInit import InitAgent
 
 # 加载环境变量
 _ = load_dotenv()
