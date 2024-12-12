@@ -113,6 +113,7 @@ class GPTSoVitsAgent:
         for attempt in range(max_retries):
             try:
                 response = requests.request(method, url, **kwargs, stream=True, timeout=100)
+                # 用于检查 HTTP 响应状态码。如果状态码不是 2xx（成功状态），则会抛出 HTTPError 异常。
                 response.raise_for_status()
                 if method in ["GET", "POST"] and kwargs.get("stream", True):
                     filename = os.path.join(self.default_save_dir, datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S%f") + '_output.wav')
