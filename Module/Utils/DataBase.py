@@ -28,9 +28,12 @@ class DataBase():
         # TODO 通过self.key_type和self.value_type来初始化一个数据库
         pass
     
-    def query(self, key)->Optional[str]:
+    def query(self, key)->Tuple[Optional[str], Optional[str]]:
         """查询数据"""
-        return self.db.get(key, None)
+        value = self.db.get(key, None)
+        if value:
+            return key, value
+        return None, None
     
     def insert(self, key, value)->bool:
         """插入数据"""

@@ -6,16 +6,22 @@
 
 """
     负责agent与用户客户端的通信
+    运行前请 export PYTHONPATH=/home/yomu/agent:$PYTHONPATH
 """
 
 import os
 import uvicorn
 import argparse
+import logging
 from fastapi import FastAPI, File, HTTPException, Form
 from datetime import datetime
 from dotenv import dotenv_values
 
 from UserAccountDataBaseInit import UserAccountDataBase
+
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
 
 class ServerClientHandler():
     """
@@ -45,12 +51,12 @@ class ServerClientHandler():
             return await self._usr_signup(username, password)
         
         # 用户更改密码
-        @self.app.post("/usr/changepwd/")
-        async def usr_change_pwd(username: str=Form(...), new_password: str=Form(...)):
-            return await self._usr_change_pwd(username, new_password)
+        @self.app.post("/usr/change_pwd/")
+        async def usr_change_pwd(username: str=Form(...), password: str=Form(...)):
+            return await self._usr_change_pwd(username, password)
         
         # 用户更改设置
-        @self.app.post("/agent/setting/")
+        @self.app.post("/agent/setting/change/")
         async def usr_change_setting():
             return await self._usr_change_setting()
         
@@ -88,34 +94,60 @@ class ServerClientHandler():
     async def _usr_login(self, username:str, password: str):
         """验证用户登录"""
         # 检查用户是否已注册
-        if not self.usr_account_database.query(username):
-            raise HTTPException(status_code=401, detail="Account does not exist!")  # 返回 401 未授权错误
+        name, stored_password = self.usr_account_database.query(username) 
+        operator = 'usr_login'
+        result=True
+        message='Login successfully!'
+        if not name:
+            result=False
+            message=f'Login failed! Username "{username}" is already exist!'
+            logging.info(f"Operator:{operator}, Result:{result}, Username:{username}, Message:{message}")
+            return {"result": result, "message": message, "username": username} 
         
         # 验证用户名和密码是否匹配
-        stored_password = self.usr_account_database.query(username)
         if stored_password != password:
-            raise HTTPException(status_code=401, detail="Invalid username or password!")  # 返回错误提示 
+            result=False
+            message="Login failed! Invalid username or password!"
+            logging.info(f"Operator:{operator}, Result:{result}, Username:{username}, Message:{message}")
+            return {"result": result, "message": message, "username": username} 
         
-        # 登录成功
-        return {"message": "Login successful!", "username": username}    
+        logging.info(f"Operator:{operator}, Result:{result}, Username:{username}, Password:{password}, Message:{message}")
+        return {"result": result ,"message": message, "username": username}    
     
     async def _usr_signup(self, username: str, password: str):
         """用户注册"""
         # 检查用户是否已注册
-        if not self.usr_account_database.query(username):
-            raise HTTPException(status_code=401, detail="Account is already exist!")  # 返回 401 未授权错误
-        
+        name, _ = self.usr_account_database.query(username)
+        operator = 'usr_signup'
+        result=True
+        message='Signup successfully!'
+        if name :
+            result=False
+            message=f"Signup failed! Username '{username}' is already exist!"
+            logging.info(f"Operator:{operator}, Result:{result}, Username:{username}, Message:{message}")
+            return {"result": result, "message": message, "username": username}  
+
         # 注册账户
         self.usr_account_database.insert(username, password)
-        return {"message": "Signup successfully!", "username": username}
+        
+        logging.info(f"Operator:{operator}, Result:{result}, Username:{username}, Password:{password}, Message:{message}")
+        return {"result": result, "message": message, "username": username} 
     
-    async def _usr_change_pwd(self, username: str, new_password: str):
+    async def _usr_change_pwd(self, username: str, password: str):
         """用户更改密码"""
+        operator = 'usr_change_pwd'
+        result=True
+        message='Change password successful!'
         try:
-            self.usr_account_database.modify(key=username, new_value=new_password)
-            return {"message": "Change password successful!", "username": username} 
+            self.usr_account_database.modify(key=username, new_value=password)
+            
+            logging.info(f"Operator:{operator}, Result:{result}, Username:{username}, Password:{password}, Message:{message}")
+            return {"result": result, "message": message, "username": username} 
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error changing password: {str(e)}")
+            result=False
+            message="Change password failed!"
+            logging.info(f"Operator:{operator}, Result:{result}, Username:{username}, Password:{password}, Message:{message}, Error:{str(e)}")
+            return {"result": result, "message": message, "username": username} 
              
     
     async def _usr_change_setting(self):
@@ -158,7 +190,7 @@ class ServerClientHandler():
     
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="SenseVoice FastAPI Server")
+    parser = argparse.ArgumentParser(description="AgentFastAPI Server")
     parser.add_argument("--host", type=str, default="0.0.0.0", help="服务器主机地址")
     parser.add_argument("--port", type=int, default=20000, help="服务器端口")
     args = parser.parse_args()

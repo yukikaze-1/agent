@@ -17,9 +17,9 @@ class UserAccountDataBase():
     def __init__(self):
         self.db = DataBase(key_type=str, value_type=str)
     
-    def query(self, key: str)->Optional[str]:
-        """查询数据"""
-        return key, self.db.query(key)
+    def query(self, key: str)->Tuple[Optional[str], Optional[str]]:
+        """查询数据,如果查到，返回key, value, 没查到返回None, None"""
+        return  self.db.query(key)
     
     def insert(self, key:str, value:str)->bool:
         """插入数据"""
