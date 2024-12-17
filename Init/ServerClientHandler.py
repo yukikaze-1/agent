@@ -56,6 +56,11 @@ class ServerClientHandler():
         async def usr_change_pwd(username: str=Form(...), password: str=Form(...)):
             return await self._usr_change_pwd(username, password)
         
+        # 用户测试服务器连通性
+        @self.app.post("/option/ping/")
+        async def usr_ping_server(time: str=Form(...), client_ip: str=Form(...)):
+            return await self._usr_ping_server(time, client_ip)
+        
         # 用户更改设置
         @self.app.post("/agent/setting/change/")
         async def usr_change_setting():
@@ -95,8 +100,8 @@ class ServerClientHandler():
         """验证用户登录"""
         res = self.usr_account_database.fetch_user_by_name(username)
         operator = 'usr_login'
-        result=True
-        message='Login successfully!'
+        result = True
+        message = 'Login successfully!'
         
         # 检查用户是否已注册
         if not res:
@@ -195,7 +200,13 @@ class ServerClientHandler():
             message=f"Change password failed! Username '{username}' Update to database failed!"
             logging.info(f"Operator:{operator}, Result:{result}, Username:{username}, Password:{password}, Message:{message}")
             return {"result": result, "message": message, "username": username}
-             
+     
+    async def _usr_ping_server(self, time: str, client_ip: str):
+        """接受用户端发来的ping，回送服务器信息"""         
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        message=f"Ping success."
+        logging.info(f"Operator: usr_ping_server. Result: True, Message: {message}")
+        return {"result": True, "message": message, "time": current_time}
     
     async def _usr_change_setting(self):
         """接受用户发来的选项配置信息"""

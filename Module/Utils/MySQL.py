@@ -4,13 +4,11 @@
     使用pymsql
 """
 
-
 import pymysql
 import logging
 from typing import List, Optional, Tuple, Dict
 
 import pymysql.cursors
-# import pymysql.connections
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
