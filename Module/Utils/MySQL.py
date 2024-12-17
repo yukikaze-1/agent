@@ -35,10 +35,10 @@ class MySQLDatabase:
                     result = cursor.fetchone()
                     return result
             except Exception as e:
-                logging.info(f"Query failed,Error:{str(e)}")
+                logging.info(f"Query failed! Error:{str(e)}")
                 return None
         else:
-            logging.info(f"id {id} not exist! Query failed")
+            logging.info(f"ID {id} not exist! Query failed")
             
     
     def insert(self, id: int, sql: str, sql_args: List[str])->bool:
@@ -55,18 +55,54 @@ class MySQLDatabase:
                 logging.info(f"Insert failed,Error:{str(e)}")
                 return False
         else:
-            logging.info(f"id {id} not exist! Insert failed")    
+            logging.info(f"ID {id} not exist! Insert failed")    
             return False
         
     def delete(self, id: int, sql: str, sql_args: List[str])->bool:
         """删除"""
-        # TODO 待实现
-        return False
+        connection=self.connections[id]
+        if connection:
+            try:
+                with connection.cursor(pymysql.cursors.DictCursor) as cursor:
+                    cursor.execute(sql, sql_args)
+                    connection.commit()
+                    
+                    # 检查是否删除了记录
+                    if cursor.rowcount > 0:
+                        logging.info(f"Delete success, {cursor.rowcount} rows affected")
+                        return True
+                    else:
+                        logging.warning(f"Delete success, but no rows were affected")
+                        return False
+            except Exception as e:
+                logging.info(f"Delete failed,Error:{str(e)}")
+                return False
+        else:
+            logging.info(f"ID {id} not exist! Delete failed")    
+            return False
     
     def modify(self, id: int, sql: str, sql_args: List[str])->bool:
         """修改"""
-        # TODO 待实现
-        return False
+        connection=self.connections[id]
+        if connection:
+            try:
+                with connection.cursor(pymysql.cursors.DictCursor) as cursor:
+                    cursor.execute(sql, sql_args)
+                    connection.commit()
+                    
+                    # 检查是否更新了记录
+                    if cursor.rowcount > 0:
+                        logging.info(f"Update success, {cursor.rowcount} rows affected")
+                        return True
+                    else:
+                        logging.warning(f"Update success, but no rows were affected")
+                        return False
+            except Exception as e:
+                logging.info(f"Update failed,Error:{str(e)}")
+                return False
+        else:
+            logging.info(f"ID {id} not exist! Update failed")    
+            return False
     
     def connect(self, host: str, user: str, password: str, database: str, port: int = 3306, charset: str = "utf8mb4") -> int:
         """

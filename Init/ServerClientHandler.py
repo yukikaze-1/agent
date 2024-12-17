@@ -184,18 +184,17 @@ class ServerClientHandler():
     async def _usr_change_pwd(self, username: str, password: str):
         """用户更改密码"""
         operator = 'usr_change_pwd'
-        result=True
-        message='Change password successful!'
-        try:
-            self.usr_account_database.modify(key=username, new_value=password)
-            
+        result = True
+        message = 'Change password successful!'
+        res = self.usr_account_database.update_user_password(username, new_password=password)
+        if res:
             logging.info(f"Operator:{operator}, Result:{result}, Username:{username}, Password:{password}, Message:{message}")
-            return {"result": result, "message": message, "username": username} 
-        except Exception as e:
+            return {"result": result, "message": message, "username": username}
+        else:
             result=False
-            message="Change password failed!"
-            logging.info(f"Operator:{operator}, Result:{result}, Username:{username}, Password:{password}, Message:{message}, Error:{str(e)}")
-            return {"result": result, "message": message, "username": username} 
+            message=f"Change password failed! Username '{username}' Update to database failed!"
+            logging.info(f"Operator:{operator}, Result:{result}, Username:{username}, Password:{password}, Message:{message}")
+            return {"result": result, "message": message, "username": username}
              
     
     async def _usr_change_setting(self):
