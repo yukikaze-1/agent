@@ -14,39 +14,11 @@ import logging
 from typing import Dict
 from typing import Tuple, Optional
 from dotenv import dotenv_values
-from Module.Utils.DataBase import DataBase
-from Module.Utils.MySQL import MySQLDatabase
+from Module.Utils.MySQLDataBase import MySQLDataBase
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class UserAccountDataBase():
-    def __init__(self):
-        self.db = DataBase(key_type=str, value_type=str)
-    
-    def query(self, key: str)->Tuple[Optional[str], Optional[str]]:
-        """查询数据,如果查到，返回key, value, 没查到返回None, None"""
-        return  self.db.query(key)
-    
-    def insert(self, key:str, value:str)->bool:
-        """插入数据"""
-        return self.db.insert(key, value)
-    
-    def modify(self, key:str, new_value:str)->bool:
-        """修改数据"""
-        return self.db.modify(key, new_value)
-    
-    def delete(self, key:str)->bool:
-        """删除数据"""
-        return self.db.delete(key)
-    
-    def clear(self):
-        """清空数据库"""
-        self.db.clear()
-    
-    def __del__(self):
-        pass
-
-class UserAccountDataBase_mysql():
     """
         数据库:userinfo
         表:account
@@ -80,7 +52,7 @@ class UserAccountDataBase_mysql():
         self.db_name = self.config["database"]
         self.table = self.config["table"]
         
-        self.db = MySQLDatabase()
+        self.db = MySQLDataBase()
         self.connect_id = -1
         
         self.connect_to_db()

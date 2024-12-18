@@ -17,7 +17,7 @@ from fastapi import FastAPI, File, HTTPException, Form
 from datetime import datetime
 from dotenv import dotenv_values
 
-from UserAccountDataBaseInit import UserAccountDataBase, UserAccountDataBase_mysql
+from UserAccountDataBaseInit import  UserAccountDataBase
 
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -32,8 +32,7 @@ class ServerClientHandler():
         self.host = host
         self.port = port
         self.app = FastAPI()
-        # self.usr_account_database = UserAccountDataBase()
-        self.usr_account_database = UserAccountDataBase_mysql()
+        self.usr_account_database = UserAccountDataBase()
         
         # 设置路由
         self.setup_routes()
@@ -119,28 +118,6 @@ class ServerClientHandler():
         logging.info(f"Operator:{operator}, Result:{result}, Username:{username}, Password:{password}, Message:{message}")
         return {"result": result ,"message": message, "username": username}    
             
-    # async def _usr_login(self, username:str, password: str):
-    #     """验证用户登录"""
-    #     # 检查用户是否已注册
-    #     name, stored_password = self.usr_account_database.query(username) 
-    #     operator = 'usr_login'
-    #     result=True
-    #     message='Login successfully!'
-    #     if not name:
-    #         result=False
-    #         message=f'Login failed! Username "{username}" is already exist!'
-    #         logging.info(f"Operator:{operator}, Result:{result}, Username:{username}, Message:{message}")
-    #         return {"result": result, "message": message, "username": username} 
-        
-    #     # 验证用户名和密码是否匹配
-    #     if stored_password != password:
-    #         result=False
-    #         message="Login failed! Invalid username or password!"
-    #         logging.info(f"Operator:{operator}, Result:{result}, Username:{username}, Message:{message}")
-    #         return {"result": result, "message": message, "username": username} 
-        
-    #     logging.info(f"Operator:{operator}, Result:{result}, Username:{username}, Password:{password}, Message:{message}")
-    #     return {"result": result ,"message": message, "username": username}    
     
     async def _usr_signup(self, username: str, password: str):
         """用户注册"""
@@ -167,24 +144,6 @@ class ServerClientHandler():
             logging.info(f"Operator:{operator}, Result:{result}, Username:{username}, Password:{password}, Message:{message}")
             return {"result": result, "message": message, "username": username}
     
-    # async def _usr_signup(self, username: str, password: str):
-    #     """用户注册"""
-    #     # 检查用户是否已注册
-    #     name, _ = self.usr_account_database.query(username)
-    #     operator = 'usr_signup'
-    #     result=True
-    #     message='Signup successfully!'
-    #     if name :
-    #         result=False
-    #         message=f"Signup failed! Username '{username}' is already exist!"
-    #         logging.info(f"Operator:{operator}, Result:{result}, Username:{username}, Message:{message}")
-    #         return {"result": result, "message": message, "username": username}  
-
-    #     # 注册账户
-    #     self.usr_account_database.insert(username, password)
-        
-    #     logging.info(f"Operator:{operator}, Result:{result}, Username:{username}, Password:{password}, Message:{message}")
-    #     return {"result": result, "message": message, "username": username} 
     
     async def _usr_change_pwd(self, username: str, password: str):
         """用户更改密码"""

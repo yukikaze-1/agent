@@ -23,9 +23,12 @@
 import os
 import yaml
 import importlib
+import logging
 from threading import Lock
 from typing import List,Dict,Tuple,Any,Optional
 from dotenv import dotenv_values
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 class InternalModuleManager:
@@ -79,7 +82,7 @@ class InternalModuleManager:
             - _load_config
             - _create_agent
             - _get_modules
-            - _get_module_config
+            - _get_module_config_by_name
             - _check_module_is_started
             - _show
     """
@@ -109,7 +112,7 @@ class InternalModuleManager:
         
         return (ok1 and ok2, _base_success, _base_fail, _opt_success, _opt_fail)     
 
-    def _get_module_config(self,module_name: str)->Tuple[bool, str, str]:
+    def _get_module_config_by_name(self,module_name: str)->Tuple[bool, str, str]:
         """通过模块名字获取模型信息
         
         返回：
@@ -157,7 +160,7 @@ class InternalModuleManager:
         
         return ret
     
-    def _create_agent(self, module_name: str, module_path: str, *args, **kwargs):
+    def _create_agent(self, module_name: str, module_path: str, *args, **kwargs)->Any:
         """
         动态加载模块并实例化类
         
@@ -184,7 +187,7 @@ class InternalModuleManager:
         except AttributeError as e:
             raise ValueError(f"Module {module_path} does not contain class {module_name}") from e
         except Exception as e:
-            print(f"Error in _create_agent: {str(e)}")
+            logging.info(f"Error in _create_agent: {str(e)}")
             raise
 
     def _load_config(self, config_path: str) -> Dict:
@@ -435,7 +438,7 @@ class InternalModuleManager:
             return False
         
         # 尝试启动模块
-        _, _, module_path = self._get_module_config(module_name=module)
+        _, _, module_path = self._get_module_config_by_name(module_name=module)
         if not self._start_single_module((module, module_path), isBaseModule):
             print(f"重启模块: {module} 失败.原因:启动该模块失败")
             return False

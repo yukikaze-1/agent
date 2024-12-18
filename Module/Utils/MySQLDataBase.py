@@ -13,7 +13,7 @@ import pymysql.cursors
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
-class MySQLDatabase:
+class MySQLDataBase:
     """
     MySQL封装类
     用于管理 MySQL 数据库连接池。
