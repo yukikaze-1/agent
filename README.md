@@ -42,7 +42,7 @@
     1. 语音生成(TTS)
         - [x] GPTSoVits
             > https://github.com/RVC-Boss/GPT-SoVITS
-        - [ ] CosyVoice
+        - [ ] CosyVoice2
             > https://github.com/FunAudioLLM/CosyVoice
     2. 其他声音生成
         - [ ] Stable-audio-tools
