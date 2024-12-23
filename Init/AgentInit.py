@@ -11,6 +11,7 @@
         agent框架初始化:    Init/agent_frame_init.py
         
 """
+from Module.Utils.Logger import setup_logger
 
 from Init.ExternalServiceInit import ExternalServiceManager
 from Init.InternalModuleInit import InternalModuleManager

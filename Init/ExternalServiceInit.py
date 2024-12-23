@@ -31,6 +31,8 @@ from threading import Lock
 from typing import List,Dict,Optional,Tuple
 from dotenv import dotenv_values
 
+from Module.Utils.Logger import setup_logger
+
 # TODO 要支持stop系列函数，则每个模块应添加支持stop的方法
 # TODO ollama run llama3.2好像有点问题，没跑起来？
 
@@ -111,7 +113,8 @@ class ExternalServiceManager:
         # 日志相关
         self.log_dir = os.path.join(self.env_vars.get("LOG_PATH"), "ExternalService")
         os.makedirs(self.log_dir, exist_ok=True)  
-        logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')        
+        self.logger = setup_logger(name="ExternalService",log_path="ExternalService")
+        # logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')        
         
         # 进程相关
         self.base_processes: List[Tuple[str,Popen]] = []   # 保存base外部服务器后台进程对象以及名字

@@ -10,13 +10,13 @@
 
 # TODO Moudle中应该实现一个database 模块
 import yaml
-import logging
 from typing import Dict
 from typing import Tuple, Optional
 from dotenv import dotenv_values
+
+from Module.Utils.Logger import setup_logger
 from Module.Utils.MySQLDataBase import MySQLDataBase
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class UserAccountDataBase():
     """
@@ -52,6 +52,8 @@ class UserAccountDataBase():
         self.db_name = self.config["database"]
         self.table = self.config["table"]
         
+        self.logger = setup_logger(name="UserAccountDataBase", log_path="InternalModule")
+        
         self.db = MySQLDataBase()
         self.connect_id = -1
         
@@ -63,9 +65,9 @@ class UserAccountDataBase():
         query_sql = f"SELECT * FROM {self.table} WHERE username = %s;"
         result = self.db.query(self.connect_id, sql=query_sql, sql_args=[username,])
         if not result:
-            logging.info(f"No such a account named {username}")
+            self.logger.info(f"No such a account named {username}")
             return None
-        logging.info(f"Query success. Username:{username}")
+        self.logger.info(f"Query success. Username:{username}")
         return result
     
     
@@ -75,10 +77,10 @@ class UserAccountDataBase():
         result = self.db.insert(self.connect_id, sql=insert_sql, sql_args=[username, password])
         if result:
             # TODO 待修改，正式上线时删掉password
-            logging.info(f"Insert userinfo success. Username:{username}, Password:{password}")
+            self.logger.info(f"Insert userinfo success. Username:{username}, Password:{password}")
             return True
         else:
-            logging.info(f"Insert userinfo failed. Username:{username}")
+            self.logger.info(f"Insert userinfo failed. Username:{username}")
             return False
         
         
@@ -88,10 +90,10 @@ class UserAccountDataBase():
         result = self.db.modify(self.connect_id, update_sql, [new_password, username])
         if result:
             # TODO 待修改，正式上线时删掉NewPassword
-            logging.info(f"Insert userinfo success. Username:{username}, NewPassword:{new_password}")
+            self.logger.info(f"Insert userinfo success. Username:{username}, NewPassword:{new_password}")
             return True
         else:
-            logging.info(f"Update password failed. Username:{username}")
+            self.logger.info(f"Update password failed. Username:{username}")
             return False
         
     
@@ -102,11 +104,11 @@ class UserAccountDataBase():
                         database=self.config["database"],
                         )
         if res == -1:
-            logging.info(f"Connect to database {self.db_name} failed!")
+            self.logger.info(f"Connect to database {self.db_name} failed!")
             raise ConnectionError(f"Connect to database {self.db_name} failed!")
         else:    
             self.connect_id = res
-            logging.info(f"Connect to database {self.db_name} success!")
+            self.logger.info(f"Connect to database {self.db_name} success!")
             
         
     def _load_config(self, config_path: str) -> Dict:

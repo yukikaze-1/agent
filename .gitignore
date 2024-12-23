@@ -4,3 +4,4 @@ output/
 study/
 Log/ExternalService/*.log
 Log/InternalModule/*.log
+Log/Other/*.log

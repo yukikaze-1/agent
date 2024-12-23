@@ -12,15 +12,12 @@
 import os
 import uvicorn
 import argparse
-import logging
 from fastapi import FastAPI, File, HTTPException, Form
 from datetime import datetime
 from dotenv import dotenv_values
 
+from Module.Utils.Logger import setup_logger
 from UserAccountDataBaseInit import  UserAccountDataBase
-
-
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 class ServerClientHandler():
@@ -33,6 +30,7 @@ class ServerClientHandler():
         self.port = port
         self.app = FastAPI()
         self.usr_account_database = UserAccountDataBase()
+        self.logger = setup_logger(name="ServerClientHandler", log_path="InternalModule")
         
         # 设置路由
         self.setup_routes()
@@ -106,16 +104,16 @@ class ServerClientHandler():
         if not res:
             result=False
             message=f'Login failed! Username "{username}" not exist!'
-            logging.info(f"Operator:{operator}, Result:{result}, Username:{username}, Message:{message}")
+            self.logger.info(f"Operator:{operator}, Result:{result}, Username:{username}, Message:{message}")
             return {"result": result, "message": message, "username": username}
         
         # 验证用户名和密码是否匹配
         if password != res["password"] :
             result=False
             message="Login failed! Invalid username or password!"
-            logging.info(f"Operator:{operator}, Result:{result}, Username:{username}, Message:{message}")
+            self.logger.info(f"Operator:{operator}, Result:{result}, Username:{username}, Message:{message}")
         
-        logging.info(f"Operator:{operator}, Result:{result}, Username:{username}, Password:{password}, Message:{message}")
+        self.logger.info(f"Operator:{operator}, Result:{result}, Username:{username}, Password:{password}, Message:{message}")
         return {"result": result ,"message": message, "username": username}    
             
     
@@ -130,18 +128,18 @@ class ServerClientHandler():
         if res:
             result=False
             message=f"Signup failed! Username '{username}' is already exist!"
-            logging.info(f"Operator:{operator}, Result:{result}, Username:{username}, Message:{message}")
+            self.logger.info(f"Operator:{operator}, Result:{result}, Username:{username}, Message:{message}")
             return {"result": result, "message": message, "username": username}  
         
         # 注册
         res = self.usr_account_database.insert_user_info(username, password)
         if res:
-            logging.info(f"Operator:{operator}, Result:{result}, Username:{username}, Password:{password}, Message:{message}")
+            self.logger.info(f"Operator:{operator}, Result:{result}, Username:{username}, Password:{password}, Message:{message}")
             return {"result": result, "message": message, "username": username}
         else:
             result=False
             message=f"Signup failed! Username '{username}' insert to database failed!"
-            logging.info(f"Operator:{operator}, Result:{result}, Username:{username}, Password:{password}, Message:{message}")
+            self.logger.info(f"Operator:{operator}, Result:{result}, Username:{username}, Password:{password}, Message:{message}")
             return {"result": result, "message": message, "username": username}
     
     
@@ -152,19 +150,19 @@ class ServerClientHandler():
         message = 'Change password successful!'
         res = self.usr_account_database.update_user_password(username, new_password=password)
         if res:
-            logging.info(f"Operator:{operator}, Result:{result}, Username:{username}, Password:{password}, Message:{message}")
+            self.logger.info(f"Operator:{operator}, Result:{result}, Username:{username}, Password:{password}, Message:{message}")
             return {"result": result, "message": message, "username": username}
         else:
             result=False
             message=f"Change password failed! Username '{username}' Update to database failed!"
-            logging.info(f"Operator:{operator}, Result:{result}, Username:{username}, Password:{password}, Message:{message}")
+            self.logger.info(f"Operator:{operator}, Result:{result}, Username:{username}, Password:{password}, Message:{message}")
             return {"result": result, "message": message, "username": username}
      
     async def _usr_ping_server(self, time: str, client_ip: str):
         """接受用户端发来的ping，回送服务器信息"""         
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         message=f"Ping success."
-        logging.info(f"Operator: usr_ping_server. Result: True, Message: {message}")
+        self.logger.info(f"Operator: usr_ping_server. Result: True, Message: {message}")
         return {"result": True, "message": message, "time": current_time}
     
     async def _usr_change_setting(self):

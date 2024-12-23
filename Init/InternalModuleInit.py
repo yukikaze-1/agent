@@ -28,7 +28,8 @@ from threading import Lock
 from typing import List,Dict,Tuple,Any,Optional
 from dotenv import dotenv_values
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+from Module.Utils.Logger import setup_logger
+# logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 class InternalModuleManager:
@@ -96,7 +97,8 @@ class InternalModuleManager:
         # 模块对象相关 
         self.base_processes: List[Tuple[str, Any]] = []    # 存放已启动的base内部服务模块名字和对象
         self.optional_processes: List[Tuple[str, Any]] = [] # 存放已启动的optional内部服务模块名字和对象
-    
+
+        self.logger = setup_logger(name="InternalModule", log_path="InternalModule")
     
     def init_modules(self)->Tuple[bool, List[str], List[str] , List[str], List[str]]:
         """
@@ -187,7 +189,7 @@ class InternalModuleManager:
         except AttributeError as e:
             raise ValueError(f"Module {module_path} does not contain class {module_name}") from e
         except Exception as e:
-            logging.info(f"Error in _create_agent: {str(e)}")
+            self.logger.info(f"Error in _create_agent: {str(e)}")
             raise
 
     def _load_config(self, config_path: str) -> Dict:
