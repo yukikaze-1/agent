@@ -29,7 +29,6 @@ from typing import List,Dict,Tuple,Any,Optional
 from dotenv import dotenv_values
 
 from Module.Utils.Logger import setup_logger
-# logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 class InternalModuleManager:
@@ -247,7 +246,7 @@ class InternalModuleManager:
         module_name, module_path = module
         # 检查是否是受支持的模块
         if module_name not in self.support_modules:
-            print(f"Unknown module {module}")
+            self.logger.info(f"Unknown module {module}")
             return False
         
         try:
@@ -256,13 +255,13 @@ class InternalModuleManager:
             # 将模块添加到相应的列表
             if isBaseModule:
                 self.base_processes.append((module, agent))
-                print(f"Started base module {module}")
+                self.logger.info(f"Started base module {module}")
             else:
                 self.optional_processes.append((module, agent))
-                print(f"Started optional module {module}")
+                self.logger.info(f"Started optional module {module}")
             return True  # 成功启动模块后返回 True
         except Exception as e:
-            print(f"Failed to start module {module}: {e}")
+            self.logger.info(f"Failed to start module {module}: {e}")
             return False  # 如果发生异常，返回 False
         
     def _start_modules_sequentially(self,
@@ -319,10 +318,10 @@ class InternalModuleManager:
         
         # 检查该模块是否已启动
         if module not in started_modules:
-            print(f"The {module_type} module {module} is not running. No need to stop it.")
+            self.logger.info(f"The {module_type} module {module} is not running. No need to stop it.")
             return False
 
-        print(f"Start stopping the running {module_type} module {module}...")
+        self.logger.info(f"Start stopping the running {module_type} module {module}...")
         
         # 从列表中移除对应的项（会导致模块被析构）
         # 锁住代码块，确保在多线程时不会有其他线程同时修改 processes 列表
@@ -332,7 +331,7 @@ class InternalModuleManager:
                 if module_name == module:
                     processes.remove(item)
                     break
-        print(f"Stopped the running {module_type} module {module}.")
+        self.logger.info(f"Stopped the running {module_type} module {module}.")
         return True
     
     def _stop_modules(self, modules: List[str], isBaseModule: bool) -> Tuple[bool, List[str], List[str]]:
@@ -344,26 +343,24 @@ class InternalModuleManager:
                 success.append(module)
             else:
                 fail.append(module)
-
-        if len(fail) == 0:
-            print(f"成功停止了所有{'基础' if isBaseModule else '可选'}模块：\n\t{success}")
-        else:
-            print(f"成功停止了以下{'基础' if isBaseModule else '可选'}模块：\n\t{success}")
-            print(f"以下{'基础' if isBaseModule else '可选'}模块停止失败：\n\t{fail}")
+                
+        self.logger.info(f"Stopped the {'base' if isBaseModule else 'optioanl'} modules successfully：\t{success}")
+        if len(fail) > 0:
+            self.logger.info(f"Stopped the {'base' if isBaseModule else 'optional'} modules failed：\t{fail}")
 
         return len(fail) == 0, success, fail
     
     def _stop_base_modules(self)->Tuple[bool,List[str],List[str]]:
         """终止 所有 base内部服务模块"""
-        print("现在开始停止所有基础模块...")
+        self.logger.info("Now starting to stop all the base modules...")
         modules_to_stop = [module for module, _ in self.base_processes]
         return self._stop_modules(modules_to_stop, isBaseModule=True)
         
     def stop_optional_modules(self)->Tuple[bool,List[str],List[str]]:
         """终止 所有 optional内部服务模块"""
-        print("现在开始停止所有可选模块...")
+        self.logger.info("InternalModuleManager is now stopping all the optional modules...")
         if not self.optional_processes:
-            print("没有正在运行的可选模块.不需要停止.")
+            self.logger.info("No running optional modules. Do nothing.")
             return (False, [], [])
         modules_to_stop = [module for module, _ in self.optional_processes]
         return self._stop_modules(modules_to_stop, isBaseModule=False)
@@ -380,7 +377,7 @@ class InternalModuleManager:
         modules_to_stop = [module for module in modules if module in started_optioanal_modules]
         
         if not modules_to_stop:
-            print("No optional modules need to stop.Please check the param:modules")
+            self.logger.info("No optional modules need to stop.Please check the param:modules")
             return (False, [], [])
         
         return self._stop_modules(modules_to_stop, isBaseModule=False)
@@ -398,7 +395,7 @@ class InternalModuleManager:
         
         # 没有要stop的module
         if not optional_modules_to_stop and not base_modules_to_stop :
-            print("No module in param:modules is running.No need to stop them.Please check the param:modules")
+            self.logger.info("No module in param:modules is running.No need to stop them.Please check the param:modules")
             return (False, [], [])
         
         ok1, opt_success, opt_fail = self._stop_modules(optional_modules_to_stop, isBaseModule=False)
@@ -411,9 +408,9 @@ class InternalModuleManager:
         ok1, _, opt_fail = self.stop_optional_modules()
         ok2, _, _ =self._stop_base_modules()
         if (ok1 and ok2) or (ok2 and not opt_fail):
-            print("InternalModuleManager cleaned up and all modules are stopped.")
+            self.logger.info("InternalModuleManager cleaned up and all modules are stopped.")
         else:
-            print("Some modules failed to stop.")
+            self.logger.info("Some modules failed to stop.")
      
     def _check_module_is_started(self,module:str)->bool:
         """检测 单个模块是否已经启动"""
@@ -429,23 +426,23 @@ class InternalModuleManager:
         """重启指定模块。如果模块未启动，则不会执行任何操作。"""
         # 检测该模块是否已经启动，若本身没启动，则不应该重启
         if not self._check_module_is_started(module):
-            print(f"模块: {module} 并未运行，无需重启。")
+            self.logger.info(f"模块: {module} 并未运行，无需重启。")
             return False
 
-        print(f"开始重启模块: {module}...")
+        self.logger.info(f"开始重启模块: {module}...")
         
         # 尝试停止模块
         if not self._stop_single_module(module, isBaseModule):
-            print(f"重启模块: {module} 失败.原因:停止该模块失败")
+            self.logger.info(f"重启模块: {module} 失败.原因:停止该模块失败")
             return False
         
         # 尝试启动模块
         _, _, module_path = self._get_module_config_by_name(module_name=module)
         if not self._start_single_module((module, module_path), isBaseModule):
-            print(f"重启模块: {module} 失败.原因:启动该模块失败")
+            self.logger.info(f"重启模块: {module} 失败.原因:启动该模块失败")
             return False
 
-        print(f"重启模块: {module} 成功")
+        self.logger.info(f"重启模块: {module} 成功")
         return True
     
     def _restart_single_module(self, module:str, isBaseModule:bool)->bool:
@@ -461,7 +458,7 @@ class InternalModuleManager:
         started_optional_modules = {module for module, _ in self.optional_processes}
         
         if module not in started_optional_modules:
-            print(f"模块: {module} 并未运行或是基础模块，无需重启。")
+            self.logger.info(f"模块: {module} 并未运行或是基础模块，无需重启。")
             return False
 
         return self._restart_single_module_aux(module, isBaseModule=False)
@@ -482,9 +479,9 @@ class InternalModuleManager:
             else:
                 fail.append(module)
                 
-        print(f"成功重启了基础模块：\n\t{success}")
+        self.logger.info(f"成功重启了基础模块：\n\t{success}")
         if fail:
-            print(f"基础模块重启失败：\n\t{fail}")
+            self.logger.info(f"基础模块重启失败：\n\t{fail}")
         return (len(fail) == 0, success, fail)
     
     def _restart_base_modules(self)->Tuple[bool,List[str],List[str]]:
@@ -522,7 +519,7 @@ class InternalModuleManager:
         base_modules_to_restart = [module for module in modules if module in started_base_modules]
         
         if optional_modules_to_restart is None and base_modules_to_restart is None:
-            print(f"没有已选中的模型正在运行：{modules}无需重启他们")
+            self.logger.info(f"没有已选中的模型正在运行：{modules}无需重启他们")
             return (False, [], [])
         
         ok1, opt_sucess, opt_fail = self._stop_modules(optional_modules_to_restart, isBaseModule=False)
@@ -542,7 +539,7 @@ class InternalModuleManager:
         modules_to_restart = [module for module in modules if module in optional_modules]
         
         if modules_to_restart is None:
-            print(f"没有已选中的模型正在运行：{modules}无需重启他们")
+            self.logger.info(f"没有已选中的模型正在运行：{modules}无需重启他们")
             return (False, [], [])
         
         return self._stop_modules(modules_to_restart, isBaseModule=False)
@@ -573,14 +570,13 @@ class InternalModuleManager:
         print("InternalModuleManager deleted")
         
     def _show(self):
-        print(f"Startted base modules: {[module for module in self.list_started_modules(isBaseModule=True)]}")
-        print(f"Startted optional modules: {[module for module in self.list_started_modules(isBaseModule=False)]}")
+        self.logger.info(f"Startted base modules: {[module for module in self.list_started_modules(isBaseModule=True)]}")
+        self.logger.info(f"Startted optional modules: {[module for module in self.list_started_modules(isBaseModule=False)]}")
 
 
 if __name__ == "__main__":
     m = InternalModuleManager()
     m.init_modules()
-    print()
     m._show()
     
     input("enter1 GPTSoVits")

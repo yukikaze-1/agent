@@ -2,6 +2,6 @@
 __pycache__/
 output/
 study/
-Log/ExternalService/*.log
-Log/InternalModule/*.log
-Log/Other/*.log
+Log/ExternalService/*
+Log/InternalModule/*
+Log/Other/*
