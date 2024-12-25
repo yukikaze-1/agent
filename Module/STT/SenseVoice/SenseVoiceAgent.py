@@ -18,6 +18,7 @@
 
 import os
 import requests
+from logging import Logger
 from datetime import datetime
 from pydub import AudioSegment
 from io import BytesIO
@@ -33,11 +34,12 @@ class SenseVoiceAgent:
             1. 接收(一段音频[AudioSegment对象]/一个音频文件)，发送给SenseVoice服务器进行识别
             2. 实时语音识别(暂未实装)
     """
-    def __init__(self):
+    def __init__(self, logger: Logger):
         self.env_vars = dotenv_values("Module/STT/SenseVoice/.env")
         self.server_sentences_url = self.env_vars.get("SENSEVOICE_SENTENCES_API_URL")
         self.server_streaming_url = self.env_vars.get("SENSEVOICE_STREAM_API_URL")
         
+        self.logger = logger
         self.infer_count = 0
         
     # 发送音频文件到 ASR API
@@ -57,7 +59,7 @@ class SenseVoiceAgent:
             response.raise_for_status()  # Raise HTTPError for bad responses
             return response.json()
         except requests.RequestException as e:
-            print(f"与服务器通信时出错: {e}")
+            self.logger.error(f"与服务器通信时出错: {e}")
             return {}
     
     def _infer_audio(self,audio:AudioSegment, lang="auto")->Dict:
@@ -70,7 +72,7 @@ class SenseVoiceAgent:
             audio.export(audio_bytes, format="wav")  # 这里使用 mp3 格式，您可以根据需求更改格式
             audio_bytes.seek(0)  # 将指针重置为流的开头
         except Exception as e:
-            print(f"音频转换失败: {e}")
+            self.logger.error(f"音频转换失败: {e}")
             return {}
         
         # 生成文件字段（这里只处理一个文件）
@@ -84,7 +86,7 @@ class SenseVoiceAgent:
             response.raise_for_status()  # Raise HTTPError for bad responses
             return response.json()
         except requests.RequestException as e:
-            print(f"与服务器通信时出错: {e}")
+            self.logger.error(f"与服务器通信时出错: {e}")
             return {}
 
     def _infer_sentences(self,
@@ -114,7 +116,7 @@ class SenseVoiceAgent:
             #     result_text += "-\n"
             return ret
         except requests.RequestException as e:
-            print(f"与服务器通信时出错: {e}")
+            self.logger.error(f"与服务器通信时出错: {e}")
             return ret
     
     def _infer(self,

@@ -251,7 +251,7 @@ class InternalModuleManager:
         
         try:
             # 使用 _create_agent 动态加载模块
-            agent = self._create_agent(module_name, module_path)
+            agent = self._create_agent(module_name, module_path, logger=self.logger)
             # 将模块添加到相应的列表
             if isBaseModule:
                 self.base_processes.append((module, agent))

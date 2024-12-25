@@ -12,8 +12,9 @@ import os
 import datetime
 import requests
 import time
+from logging import Logger
 from urllib.parse import urljoin
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 
 # TODO 之后考虑将GPTSoVits的server集成到AI agent内部。现阶段还是采用分离式C/S
 # TODO 给该类添加注释，更改类成员函数名字，添加类型注解
@@ -21,8 +22,12 @@ class GPTSoVitsAgent:
     """
 
     """
-    def __init__(self, env_path:str=None):
-        load_dotenv(env_path)
+    def __init__(self, logger: Logger):
+        # TODO 修改此处，这绝对路径太丑陋了。为什么不加绝对路径也能正确解析？
+        self.envs = dotenv_values()
+        #self.envs = dotenv_values("/home/yomu/agent/Module/TTS/GPTSoVits/.env")
+        self.logger = logger
+        
         self.default_gpt_path = os.path.join("./GPT_weights_v2", "alxy_all_modified_v1.0-e50.ckpt")
         self.default_sovits_path = os.path.join("./SoVITS_weights_v2", "alxy_all_modified_v1.0_e50_s4700.pth")
         self.default_ref_root = "/home/yomu/data/audio/reference"
@@ -32,15 +37,17 @@ class GPTSoVitsAgent:
             "content": "我的话，呢哼，更多是靠少女的小心思吧。看看你现在的表情。好想去那里"
         }
         self.infer_count = 0
-        self.default_save_dir = os.getenv("GPTSOVITS_CLI_OUTPUT_DIR")
+        self.default_save_dir = self.envs.get("GPTSOVITS_CLI_OUTPUT_DIR")
         if not self.default_save_dir:
+            self.logger.error("GPTSOVITS_CLI_OUTPUT_DIR environment variable not set.")
             raise ValueError("GPTSOVITS_CLI_OUTPUT_DIR environment variable not set.")
         if not os.path.exists(self.default_save_dir):
             os.makedirs(self.default_save_dir)
-        self.server = os.getenv("GPTSOVITS_SERVER")
+        self.server = self.envs.get("GPTSOVITS_SERVER")
         if not self.server:
+            self.logger.error("GPTSOVITS_SERVER environment variable not set.")
             raise ValueError("GPTSOVITS_SERVER environment variable not set.")
-        print("GPTSoVitsAgent initialized")
+        self.logger.debug("GPTSoVitsAgent initialized")
 
     def generate_config(self, gpt=None, sovits=None, ref_audio=None, ref_audio_prompt=None, text_lang="zh", prompt_lang="zh", batch_size=20):
         config = {
@@ -121,19 +128,19 @@ class GPTSoVitsAgent:
                         for chunk in response.iter_content(chunk_size=8192):
                             if chunk:
                                 f.write(chunk)
-                    print(f"Audio synthesis successful, saved as {filename}")
+                    self.logger.info(f"GPTSoVitsAgent: Audio synthesis successful, saved as {filename}")
                 else:
-                    print("Request successful.")
+                    self.logger.info("Request successful.")
                 break
             except requests.exceptions.RequestException as e:
-                print(f"Error: {e}")
+                self.logger.error(f"Error: {e}")
                 if hasattr(e, 'response') and e.response is not None:
-                    print(f"Response content: {e.response.content}")
+                    self.logger.warning(f"Response content: {e.response.content}")
                 if attempt < max_retries - 1:
-                    print("Retrying...")
+                    self.logger.info("Retrying...")
                     time.sleep(2 ** (attempt + 1))
                 else:
-                    print("Failed after multiple attempts.")
+                    self.logger.error("Failed after multiple attempts.")
                     
     def __del__(self):
         print("GPTSoVitsAgent deleted")
