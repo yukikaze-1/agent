@@ -14,7 +14,7 @@ from logging.handlers import TimedRotatingFileHandler
 from typing import Literal
 from dotenv import dotenv_values
 
-def setup_logger(name, log_path: Literal['ExternalService', 'InternalModule', 'Other'])->logging.Logger:
+def setup_logger(name: str, log_path: Literal['ExternalService', 'InternalModule', 'Other'])->logging.Logger:
     """
     配置并返回一个日志记录器
     """

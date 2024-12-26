@@ -5,12 +5,10 @@
 """
 
 import pymysql
-import logging
+from logging import Logger
 from typing import List, Optional, Tuple, Dict
 
 import pymysql.cursors
-
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 class MySQLDataBase:
@@ -18,7 +16,8 @@ class MySQLDataBase:
     MySQL封装类
     用于管理 MySQL 数据库连接池。
     """
-    def __init__(self):
+    def __init__(self, logger: Logger):
+        self.logger = logger
         self.ids = 0
         # 存储 (id, connection) 的列表
         self.connections: Dict[int, pymysql.connections.Connection] = {}
@@ -33,10 +32,10 @@ class MySQLDataBase:
                     result = cursor.fetchone()
                     return result
             except Exception as e:
-                logging.info(f"Query failed! Error:{str(e)}")
+                self.logger.error(f"MySQLDataBase: Query failed! Error:{str(e)}")
                 return None
         else:
-            logging.info(f"ID {id} not exist! Query failed")
+            self.logger.error(f"MySQLDataBase: ID {id} not exist! Query failed")
             
     
     def insert(self, id: int, sql: str, sql_args: List[str])->bool:
@@ -47,13 +46,13 @@ class MySQLDataBase:
                 with connection.cursor(pymysql.cursors.DictCursor) as cursor:
                     cursor.execute(sql, sql_args)
                     connection.commit()
-                    logging.info(f"Insert success")
+                    self.logger.info(f"MySQLDataBase: Insert success")
                     return True
             except Exception as e:
-                logging.info(f"Insert failed,Error:{str(e)}")
+                self.logger.error(f"MySQLDataBase: Insert failed,Error:{str(e)}")
                 return False
         else:
-            logging.info(f"ID {id} not exist! Insert failed")    
+            self.logger.error(f"MySQLDataBase: ID {id} not exist! Insert failed")    
             return False
         
     def delete(self, id: int, sql: str, sql_args: List[str])->bool:
@@ -67,16 +66,16 @@ class MySQLDataBase:
                     
                     # 检查是否删除了记录
                     if cursor.rowcount > 0:
-                        logging.info(f"Delete success, {cursor.rowcount} rows affected")
+                        self.logger.info(f"MySQLDataBase: Delete success, {cursor.rowcount} rows affected")
                         return True
                     else:
-                        logging.warning(f"Delete success, but no rows were affected")
+                        self.logger.info(f"MySQLDataBase: Delete success, but no rows were affected")
                         return False
             except Exception as e:
-                logging.info(f"Delete failed,Error:{str(e)}")
+                self.logger.error(f"MySQLDataBase: Delete failed,Error:{str(e)}")
                 return False
         else:
-            logging.info(f"ID {id} not exist! Delete failed")    
+            self.logger.error(f"MySQLDataBase: ID {id} not exist! Delete failed")    
             return False
     
     def modify(self, id: int, sql: str, sql_args: List[str])->bool:
@@ -90,16 +89,16 @@ class MySQLDataBase:
                     
                     # 检查是否更新了记录
                     if cursor.rowcount > 0:
-                        logging.info(f"Update success, {cursor.rowcount} rows affected")
+                        self.logger.info(f"MySQLDataBase: Update success, {cursor.rowcount} rows affected")
                         return True
                     else:
-                        logging.warning(f"Update success, but no rows were affected")
+                        self.logger.warning(f"MySQLDataBase: Update success, but no rows were affected")
                         return False
             except Exception as e:
-                logging.info(f"Update failed,Error:{str(e)}")
+                self.logger.error(f"MySQLDataBase: Update failed,Error:{str(e)}")
                 return False
         else:
-            logging.info(f"ID {id} not exist! Update failed")    
+            self.logger.error(f"MySQLDataBase: ID {id} not exist! Update failed")    
             return False
     
     def connect(self, host: str, user: str, password: str, database: str, port: int = 3306, charset: str = "utf8mb4") -> int:
@@ -128,7 +127,7 @@ class MySQLDataBase:
             self.connections[connection_id] = connection
             return connection_id
         except pymysql.MySQLError as e:
-            print(f"连接数据库失败: {e}")
+            self.logger.error(f"MySQLDataBase: Failed to connect with mysql databse : {e}")
             return -1
 
     def close(self, id: int) -> bool:
@@ -143,7 +142,7 @@ class MySQLDataBase:
             connection.close()
             return True
         except pymysql.MySQLError as e:
-            print(f"关闭连接失败: {e}")
+            self.logger.error(f"MySQLDataBase: Failed to close the connection with mysql databse : {e}")
             return False
 
 
@@ -158,7 +157,8 @@ class MySQLDataBase:
                 connect.close()
                 del self.connections[id]
             except pymysql.MySQLError as e:
-                print(f"关闭连接失败: {e}")
+                self.logger.error(f"MySQLDataBase: Failed to close the connection with mysql databse : {e}")
+
         self.connections.clear()
 
     def __del__(self):
@@ -166,5 +166,5 @@ class MySQLDataBase:
         析构函数，关闭所有连接。
         """
         self.close_all()
-        print("MySQL 所有连接已关闭")
+        self.logger.info("MySQLDataBase: ALL MySQL connections are closed.")
 

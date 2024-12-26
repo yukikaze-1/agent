@@ -8,11 +8,11 @@
     初始化用户账户数据库
 """
 
-# TODO Moudle中应该实现一个database 模块
 import yaml
 from typing import Dict
 from typing import Tuple, Optional
 from dotenv import dotenv_values
+from logging import Logger
 
 from Module.Utils.Logger import setup_logger
 from Module.Utils.MySQLDataBase import MySQLDataBase
@@ -45,14 +45,14 @@ class UserAccountDataBase():
                 UNIQUE KEY (id)             -- 保证 id 唯一，但不是主键
             );
     """
-    def __init__(self):
+    def __init__(self, logger: Logger=None):
         self.env_vars = dotenv_values("Init/.env")
         self.config_path = self.env_vars.get("INIT_CONFIG_PATH","")
         self.config = self._load_config(self.config_path)
         self.db_name = self.config["database"]
         self.table = self.config["table"]
         
-        self.logger = setup_logger(name="UserAccountDataBase", log_path="InternalModule")
+        self.logger = logger or setup_logger(name="UserAccountDataBase", log_path="InternalModule")
         
         self.db = MySQLDataBase()
         self.connect_id = -1
@@ -65,9 +65,9 @@ class UserAccountDataBase():
         query_sql = f"SELECT * FROM {self.table} WHERE username = %s;"
         result = self.db.query(self.connect_id, sql=query_sql, sql_args=[username,])
         if not result:
-            self.logger.info(f"No such a account named {username}")
+            self.logger.info(f"UserAccountDataBase: No such a account named {username}")
             return None
-        self.logger.info(f"Query success. Username:{username}")
+        self.logger.info(f"UserAccountDataBase: Query success. Username:{username}")
         return result
     
     
@@ -77,10 +77,10 @@ class UserAccountDataBase():
         result = self.db.insert(self.connect_id, sql=insert_sql, sql_args=[username, password])
         if result:
             # TODO 待修改，正式上线时删掉password
-            self.logger.info(f"Insert userinfo success. Username:{username}, Password:{password}")
+            self.logger.info(f"UserAccountDataBase: Insert userinfo success. Username:{username}, Password:{password}")
             return True
         else:
-            self.logger.info(f"Insert userinfo failed. Username:{username}")
+            self.logger.warning(f"UserAccountDataBase: Insert userinfo failed. Username:{username}")
             return False
         
         
@@ -90,10 +90,10 @@ class UserAccountDataBase():
         result = self.db.modify(self.connect_id, update_sql, [new_password, username])
         if result:
             # TODO 待修改，正式上线时删掉NewPassword
-            self.logger.info(f"Insert userinfo success. Username:{username}, NewPassword:{new_password}")
+            self.logger.info(f"UserAccountDataBase: Insert userinfo success. Username:{username}, NewPassword:{new_password}")
             return True
         else:
-            self.logger.info(f"Update password failed. Username:{username}")
+            self.logger.warning(f"UserAccountDataBase: Update password failed. Username:{username}")
             return False
         
     
@@ -104,11 +104,11 @@ class UserAccountDataBase():
                         database=self.config["database"],
                         )
         if res == -1:
-            self.logger.info(f"Connect to database {self.db_name} failed!")
+            self.logger.error(f"UserAccountDataBase: Connect to database {self.db_name} failed!")
             raise ConnectionError(f"Connect to database {self.db_name} failed!")
         else:    
             self.connect_id = res
-            self.logger.info(f"Connect to database {self.db_name} success!")
+            self.logger.info(f"UserAccountDataBase: Connect to database {self.db_name} success!")
             
         
     def _load_config(self, config_path: str) -> Dict:
@@ -125,8 +125,10 @@ class UserAccountDataBase():
                 res = config["user_account_database_config"]
             return res
         except FileNotFoundError:
+            self.logger.error(f"UserAccountDataBase: Config file {config_path} not found.")
             raise FileNotFoundError(f"Config file {config_path} not found.")
         except yaml.YAMLError as e:
+            self.logger.error(f"UserAccountDataBase: Error parsing the YAML config file: {e}")
             raise ValueError(f"Error parsing the YAML config file: {e}")
         
     

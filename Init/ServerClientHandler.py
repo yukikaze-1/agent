@@ -14,6 +14,7 @@ import uvicorn
 import argparse
 from fastapi import FastAPI, File, HTTPException, Form
 from datetime import datetime
+from logging import Logger
 from dotenv import dotenv_values
 
 from Module.Utils.Logger import setup_logger
@@ -25,12 +26,12 @@ class ServerClientHandler():
         负责agent与用户客户端的通信的类
     """
     # TODO 修改host和port，让其在config.yml中配置
-    def __init__(self, host: str = "0.0.0.0", port: int = 20000):
+    def __init__(self, logger: Logger=None, host: str = "0.0.0.0", port: int = 20000):
         self.host = host
         self.port = port
         self.app = FastAPI()
         self.usr_account_database = UserAccountDataBase()
-        self.logger = setup_logger(name="ServerClientHandler", log_path="InternalModule")
+        self.logger = logger or setup_logger(name="ServerClientHandler", log_path="InternalModule") 
         
         # 设置路由
         self.setup_routes()
@@ -133,6 +134,7 @@ class ServerClientHandler():
         
         # 注册
         res = self.usr_account_database.insert_user_info(username, password)
+        
         if res:
             self.logger.info(f"Operator:{operator}, Result:{result}, Username:{username}, Password:{password}, Message:{message}")
             return {"result": result, "message": message, "username": username}
@@ -148,7 +150,9 @@ class ServerClientHandler():
         operator = 'usr_change_pwd'
         result = True
         message = 'Change password successful!'
+        
         res = self.usr_account_database.update_user_password(username, new_password=password)
+        
         if res:
             self.logger.info(f"Operator:{operator}, Result:{result}, Username:{username}, Password:{password}, Message:{message}")
             return {"result": result, "message": message, "username": username}
@@ -158,10 +162,11 @@ class ServerClientHandler():
             self.logger.info(f"Operator:{operator}, Result:{result}, Username:{username}, Password:{password}, Message:{message}")
             return {"result": result, "message": message, "username": username}
      
+     
     async def _usr_ping_server(self, time: str, client_ip: str):
         """接受用户端发来的ping，回送服务器信息"""         
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        message=f"Ping success."
+        message = f"Ping success."
         self.logger.info(f"Operator: usr_ping_server. Result: True, Message: {message}")
         return {"result": True, "message": message, "time": current_time}
     

@@ -5,3 +5,5 @@ study/
 Log/ExternalService/*
 Log/InternalModule/*
 Log/Other/*
+Log/*.Log
+Log/*.pos
