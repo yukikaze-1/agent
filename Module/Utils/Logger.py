@@ -18,8 +18,8 @@ def setup_logger(name: str, log_path: Literal['ExternalService', 'InternalModule
     """
     配置并返回一个日志记录器
     """
-    envs = dotenv_values("Module/Utils/.env")
-    log_dir = envs.get("LOG_DIR","") 
+    env_vars = dotenv_values("Module/Utils/.env")
+    log_dir = env_vars.get("LOG_DIR","") 
     log_path = os.path.join(log_dir, log_path)
     os.makedirs(log_path, exist_ok=True) 
     # 创建日志处理器

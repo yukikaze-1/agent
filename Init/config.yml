@@ -96,3 +96,9 @@
       database: "userinfo"
       table: "account"
       charset: "utf8mb4"
+
+
+# ServerClientHandler配置
+    ServerClientHandler:
+      server_host: "0.0.0.0"
+      server_port: "20000"

@@ -46,13 +46,16 @@ class UserAccountDataBase():
             );
     """
     def __init__(self, logger: Logger=None):
+        self.logger = logger or setup_logger(name="UserAccountDataBase", log_path="InternalModule")
+        
         self.env_vars = dotenv_values("Init/.env")
         self.config_path = self.env_vars.get("INIT_CONFIG_PATH","")
+        if not self.config_path :
+            self.logger.error(f"UserAccountDataBase: INIT_CONFIG_PATH environment variable not set.")
+            raise ValueError(f"INIT_CONFIG_PATH environment variable not set.")
         self.config = self._load_config(self.config_path)
         self.db_name = self.config["database"]
         self.table = self.config["table"]
-        
-        self.logger = logger or setup_logger(name="UserAccountDataBase", log_path="InternalModule")
         
         self.db = MySQLDataBase()
         self.connect_id = -1
@@ -118,6 +121,7 @@ class UserAccountDataBase():
                 yml文件中配置的字典表示
         """
         if config_path is None:
+            self.logger.error(f"UserAccountDataBase: Config file {config_path} is empty.Please check the file 'Init/.env'.It should set the 'INIT_CONFIG_PATH'")
             raise ValueError(f"Config file {config_path} is empty.Please check the file 'Init/.env'.It should set the 'INIT_CONFIG_PATH'")
         try:
             with open(config_path, 'r', encoding='utf-8') as file:

@@ -12,9 +12,11 @@
 import os
 import uvicorn
 import argparse
+import yaml
 from fastapi import FastAPI, File, HTTPException, Form
 from datetime import datetime
 from logging import Logger
+from typing import Dict
 from dotenv import dotenv_values
 
 from Module.Utils.Logger import setup_logger
@@ -25,16 +27,48 @@ class ServerClientHandler():
     """
         负责agent与用户客户端的通信的类
     """
-    # TODO 修改host和port，让其在config.yml中配置
-    def __init__(self, logger: Logger=None, host: str = "0.0.0.0", port: int = 20000):
-        self.host = host
-        self.port = port
+    def __init__(self, logger: Logger=None):
+        
+        self.logger = logger or setup_logger(name="ServerClientHandler", log_path="InternalModule") 
+        
+        self.env_vars = dotenv_values("Init/.env")
+        self.config_path = self.env_vars.get("INIT_CONFIG_PATH","")
+        if not self.config_path :
+            self.logger.error(f"ServerClientHandler: INIT_CONFIG_PATH environment variable not set.")
+            raise ValueError(f"INIT_CONFIG_PATH environment variable not set.")
+        
+        self.config = self._load_config(config_path=self.config_path)
+        
+        self.host = self.config["server_host"]
+        self.port = self.config["server_port"]
         self.app = FastAPI()
         self.usr_account_database = UserAccountDataBase()
-        self.logger = logger or setup_logger(name="ServerClientHandler", log_path="InternalModule") 
         
         # 设置路由
         self.setup_routes()
+        
+        
+    def _load_config(self, config_path: str) -> Dict:
+        """从config_path中读取配置(*.yml)
+            
+            返回：
+                yml文件中配置的字典表示
+        """
+        if config_path is None:
+            self.logger.error(f"ServerClientHandler: Config file {config_path} is empty.Please check the file 'Init/.env'.It should set the 'INIT_CONFIG_PATH'")
+            raise ValueError(f"Config file {config_path} is empty.Please check the file 'Init/.env'.It should set the 'INIT_CONFIG_PATH'")
+        try:
+            with open(config_path, 'r', encoding='utf-8') as file:
+                config = yaml.safe_load(file)  # 使用 safe_load 安全地加载 YAML 数据
+                res = config["ServerClientHandler"]
+            return res
+        except FileNotFoundError:
+            self.logger.error(f"ServerClientHandler: Config file {config_path} not found.")
+            raise FileNotFoundError(f"Config file {config_path} not found.")
+        except yaml.YAMLError as e:
+            self.logger.error(f"ServerClientHandler: Error parsing the YAML config file: {e}")
+            raise ValueError(f"Error parsing the YAML config file: {e}")
+        
         
     def setup_routes(self):
         """设置 API 路由"""
@@ -105,22 +139,24 @@ class ServerClientHandler():
         if not res:
             result=False
             message=f'Login failed! Username "{username}" not exist!'
-            self.logger.info(f"Operator:{operator}, Result:{result}, Username:{username}, Message:{message}")
+            self.logger.info(f"ServerClientHandler: Operator:{operator}, Result:{result}, Username:{username}, Message:{message}")
             return {"result": result, "message": message, "username": username}
         
         # 验证用户名和密码是否匹配
         if password != res["password"] :
             result=False
             message="Login failed! Invalid username or password!"
-            self.logger.info(f"Operator:{operator}, Result:{result}, Username:{username}, Message:{message}")
-        
-        self.logger.info(f"Operator:{operator}, Result:{result}, Username:{username}, Password:{password}, Message:{message}")
+            self.logger.info(f"ServerClientHandler: Operator:{operator}, Result:{result}, Username:{username}, Message:{message}")
+            return {"result": result ,"message": message, "username": username}  
+            
+        self.logger.info(f"ServerClientHandler: Operator:{operator}, Result:{result}, Username:{username}, Password:{password}, Message:{message}")
         return {"result": result ,"message": message, "username": username}    
             
     
     async def _usr_signup(self, username: str, password: str):
         """用户注册"""
         res = self.usr_account_database.fetch_user_by_name(username)
+        
         operator = 'usr_signup'
         result=True
         message='Signup successfully!'
@@ -129,19 +165,20 @@ class ServerClientHandler():
         if res:
             result=False
             message=f"Signup failed! Username '{username}' is already exist!"
-            self.logger.info(f"Operator:{operator}, Result:{result}, Username:{username}, Message:{message}")
+            self.logger.info(f"ServerClientHandler: Operator:{operator}, Result:{result}, Username:{username}, Message:{message}")
             return {"result": result, "message": message, "username": username}  
         
         # 注册
         res = self.usr_account_database.insert_user_info(username, password)
         
+        # 注册成功
         if res:
-            self.logger.info(f"Operator:{operator}, Result:{result}, Username:{username}, Password:{password}, Message:{message}")
+            self.logger.info(f"ServerClientHandler: Operator:{operator}, Result:{result}, Username:{username}, Password:{password}, Message:{message}")
             return {"result": result, "message": message, "username": username}
         else:
             result=False
             message=f"Signup failed! Username '{username}' insert to database failed!"
-            self.logger.info(f"Operator:{operator}, Result:{result}, Username:{username}, Password:{password}, Message:{message}")
+            self.logger.info(f"ServerClientHandler: Operator:{operator}, Result:{result}, Username:{username}, Password:{password}, Message:{message}")
             return {"result": result, "message": message, "username": username}
     
     
@@ -151,15 +188,17 @@ class ServerClientHandler():
         result = True
         message = 'Change password successful!'
         
+        #更新密码
         res = self.usr_account_database.update_user_password(username, new_password=password)
         
+        # 成功更新密码
         if res:
-            self.logger.info(f"Operator:{operator}, Result:{result}, Username:{username}, Password:{password}, Message:{message}")
+            self.logger.info(f"ServerClientHandler: Operator:{operator}, Result:{result}, Username:{username}, Password:{password}, Message:{message}")
             return {"result": result, "message": message, "username": username}
         else:
             result=False
             message=f"Change password failed! Username '{username}' Update to database failed!"
-            self.logger.info(f"Operator:{operator}, Result:{result}, Username:{username}, Password:{password}, Message:{message}")
+            self.logger.info(f"ServerClientHandler: Operator:{operator}, Result:{result}, Username:{username}, Password:{password}, Message:{message}")
             return {"result": result, "message": message, "username": username}
      
      
@@ -167,7 +206,7 @@ class ServerClientHandler():
         """接受用户端发来的ping，回送服务器信息"""         
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         message = f"Ping success."
-        self.logger.info(f"Operator: usr_ping_server. Result: True, Message: {message}")
+        self.logger.info(f"ServerClientHandler: Operator: usr_ping_server. Result: True, Message: {message}")
         return {"result": True, "message": message, "time": current_time}
     
     async def _usr_change_setting(self):

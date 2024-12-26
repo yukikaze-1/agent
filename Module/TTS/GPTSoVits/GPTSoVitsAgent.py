@@ -23,9 +23,7 @@ class GPTSoVitsAgent:
 
     """
     def __init__(self, logger: Logger):
-        # TODO 修改此处，这绝对路径太丑陋了。为什么不加绝对路径也能正确解析？
-        self.envs = dotenv_values()
-        #self.envs = dotenv_values("/home/yomu/agent/Module/TTS/GPTSoVits/.env")
+        self.env_vars = dotenv_values()
         self.logger = logger
         
         self.default_gpt_path = os.path.join("./GPT_weights_v2", "alxy_all_modified_v1.0-e50.ckpt")
@@ -37,13 +35,13 @@ class GPTSoVitsAgent:
             "content": "我的话，呢哼，更多是靠少女的小心思吧。看看你现在的表情。好想去那里"
         }
         self.infer_count = 0
-        self.default_save_dir = self.envs.get("GPTSOVITS_CLI_OUTPUT_DIR")
+        self.default_save_dir = self.env_vars.get("GPTSOVITS_CLI_OUTPUT_DIR")
         if not self.default_save_dir:
             self.logger.error("GPTSOVITS_CLI_OUTPUT_DIR environment variable not set.")
             raise ValueError("GPTSOVITS_CLI_OUTPUT_DIR environment variable not set.")
         if not os.path.exists(self.default_save_dir):
             os.makedirs(self.default_save_dir)
-        self.server = self.envs.get("GPTSOVITS_SERVER")
+        self.server = self.env_vars.get("GPTSOVITS_SERVER")
         if not self.server:
             self.logger.error("GPTSOVITS_SERVER environment variable not set.")
             raise ValueError("GPTSOVITS_SERVER environment variable not set.")
