@@ -35,11 +35,19 @@ class SenseVoiceAgent:
             2. 实时语音识别(暂未实装)
     """
     def __init__(self, logger: Logger):
-        self.env_vars = dotenv_values("Module/STT/SenseVoice/.env")
-        self.server_sentences_url = self.env_vars.get("SENSEVOICE_SENTENCES_API_URL")
-        self.server_streaming_url = self.env_vars.get("SENSEVOICE_STREAM_API_URL")
-        
         self.logger = logger
+        self.env_vars = dotenv_values("Module/STT/SenseVoice/.env")
+        
+        self.server_sentences_url = self.env_vars.get("SENSEVOICE_SENTENCES_API_URL","")
+        if not self.server_sentences_url:
+            self.logger.error(f"SENSEVOICE_SENTENCES_API_URL environment variable not set.")
+            raise ValueError(f"SENSEVOICE_SENTENCES_API_URL environment variable not set.")
+        
+        self.server_streaming_url = self.env_vars.get("SENSEVOICE_STREAM_API_URL","")
+        if not self.server_streaming_url:
+            self.logger.error(f"SENSEVOICE_STREAM_API_URL environment variable not set.")
+            raise ValueError(f"SENSEVOICE_STREAM_API_URL environment variable not set.")
+            
         self.infer_count = 0
         
     # 发送音频文件到 ASR API
@@ -59,7 +67,7 @@ class SenseVoiceAgent:
             response.raise_for_status()  # Raise HTTPError for bad responses
             return response.json()
         except requests.RequestException as e:
-            self.logger.error(f"与服务器通信时出错: {e}")
+            self.logger.error(f"Failed to connect to server with error: {e}")
             return {}
     
     def _infer_audio(self,audio:AudioSegment, lang="auto")->Dict:
@@ -86,7 +94,7 @@ class SenseVoiceAgent:
             response.raise_for_status()  # Raise HTTPError for bad responses
             return response.json()
         except requests.RequestException as e:
-            self.logger.error(f"与服务器通信时出错: {e}")
+            self.logger.error(f"Failed to connect to server with error: {e}")
             return {}
 
     def _infer_sentences(self,
@@ -116,7 +124,7 @@ class SenseVoiceAgent:
             #     result_text += "-\n"
             return ret
         except requests.RequestException as e:
-            self.logger.error(f"与服务器通信时出错: {e}")
+            self.logger.error(f"Failed to connect to server with error: {e}")
             return ret
     
     def _infer(self,

@@ -126,7 +126,7 @@ class GPTSoVitsAgent:
                         for chunk in response.iter_content(chunk_size=8192):
                             if chunk:
                                 f.write(chunk)
-                    self.logger.info(f"GPTSoVitsAgent: Audio synthesis successful, saved as '{filename}'")
+                    self.logger.info(f"Audio synthesis successful, saved as '{filename}'")
                 else:
                     self.logger.info("Request successful.")
                 break

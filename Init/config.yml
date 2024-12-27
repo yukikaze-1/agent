@@ -1,104 +1,137 @@
 # 核心LLM
     # 采用Ollama的方式默认使用llama3.2
-    LLM_model:
-      name: llama3.2 # ollama运行的模型名称(必须在ollama中支持并且可以运行的，需要自行在ollama中下载)
+LLM_model:
+      name: llama3.2 # ollama运行的模型名称(必须在ollama中支持并且可以运行的)
 
-
+############################################################################################
 # 外部服务
-    # 要启动的基础外部服务
-    base_services:
-      - ollama_server:
-          script: "ollama serve"
-          service_name: "ollama_server"
-          conda_env: "/home/yomu/data/anaconda3/envs"
-          args: []
-          use_python: false
-          run_in_background: true
-          is_base: true
-          log_file: "ollama_server.log"
 
-      - ollama_LLM:
-          script: "ollama run llama3.2"
-          service_name: "ollama_LLM"
-          conda_env: "/home/yomu/data/anaconda3/envs"
-          args: []
-          use_python: false
-          run_in_background: true
-          is_base: true
-          log_file: ""
+# 要启动的基础外部服务
+external_services:
+  base_services:
+    - ollama_server:
+        script: "ollama serve"
+        service_name: "ollama_server"
+        conda_env: "/home/yomu/data/anaconda3/envs"
+        args: []
+        use_python: false
+        run_in_background: true
+        is_base: true
+        log_file: "ollama_server.log"
+    - ollama_LLM:
+        script: "ollama run llama3.2"
+        service_name: "ollama_LLM"
+        conda_env: "/home/yomu/data/anaconda3/envs"
+        args: []
+        use_python: false
+        run_in_background: true
+        is_base: true
+        log_file: ""
+    - GPTSoVits_server:
+        script: "/home/yomu/GPTSoVits/api_v2.py"
+        service_name: "GPTSoVits_server"
+        conda_env: "/home/yomu/data/anaconda3/envs/GPTSoVits"
+        args: ["-a", "0.0.0.0","-p","9880"]
+        use_python: true
+        run_in_background: true
+        is_base: true
+        log_file: "GPTSoVits_server.log"
+    - SenseVoice_server:
+        script: "/home/yomu/SenseVoice/SenseVoice_server.py"
+        service_name: "SenseVoice_server"
+        conda_env: "/home/yomu/data/anaconda3/envs/SenseVoice"
+        args: ["--host", "0.0.0.0", "--port", "9890"]
+        use_python: true
+        run_in_background: true
+        is_base: true
+        log_file: "SenseVoice_server.log"
+  # (可选)启动的optional外部服务
+  optional_services:
+    
+  # 目前已支持的外部服务
+  support_services:
+    - ollama
+    - GPTSoVits
+    - SenseVoice
+  # 待支持的外部服务
+  #_services:
+  #  - yolo11 
+  # TODO 后期修改0.0.0.0，让其只监听本地
+  # 外部服务器ipaddress---port
+  ip_port:
+    - ollama_server: ["127.0.0.1","11434"]
+    - GPTSoVits: ["0.0.0.0","9880"]
+    - SenseVoice: ["0.0.0.0","9890"]
 
-      - GPTSoVits_server:
-          script: "/home/yomu/GPTSoVits/api_v2.py"
-          service_name: "GPTSoVits_server"
-          conda_env: "/home/yomu/data/anaconda3/envs/GPTSoVits"
-          args: ["-a", "0.0.0.0","-p","9880"]
-          use_python: true
-          run_in_background: true
-          is_base: true
-          log_file: "GPTSoVits_server.log"
+############################################################################################
 
-      - SenseVoice_server:
-          script: "/home/yomu/SenseVoice/SenseVoice_server.py"
-          service_name: "SenseVoice_server"
-          conda_env: "/home/yomu/data/anaconda3/envs/SenseVoice"
-          args: ["--host", "0.0.0.0", "--port", "9890"]
-          use_python: true
-          run_in_background: true
-          is_base: true
-          log_file: "SenseVoice_server.log"
+### 内部模块
 
-    # (可选)启动的optional外部服务
-    optional_services:
-      
+# 要启动的基础模块
+internal_modules:
+  base_modules: 
+    - GPTSoVitsAgent: Module.TTS.GPTSoVits
+    - SenseVoiceAgent: Module.STT.SenseVoice
+  # (可选)启动的optional功能模块
+  optional_modules:
+    
+  # 目前已支持的内部模块
+  support_modules:
+    - GPTSoVitsAgent
+    - SenseVoiceAgent
+  # 待支持的内部模块
+  #_module:
+  #  - yolo11: Module.Utils.yolo11
 
-    # 目前已支持的外部服务
-    support_services:
-      - ollama
-      - GPTSoVits
-      - SenseVoice
+############################################################################################
 
-    # 待支持的外部服务
-    _services:
-      - yolo11 
+# 用户账户数据库配置
+UserAccountDataBaseAgent:
+  host: localhost
+  port: 3306
+  user: "root"
+  password: "scgy19971205wq"
+  database: "userinfo"
+  table: "account"
+  charset: "utf8mb4"
 
-    # TODO 后期修改0.0.0.0，让其只监听本地
-    # 外部服务器ipaddress---port
-    _ip_port:
-      - ollama_server: ["127.0.0.1","11434"]
-      - GPTSoVits: ["0.0.0.0","9880"]
-      - SenseVoice: ["0.0.0.0","9890"]
+############################################################################################
 
-# 内部模块
-    # 要启动的基础模块
-    base_modules: 
-      - GPTSoVitsAgent: Module.TTS.GPTSoVits
-      - SenseVoiceAgent: Module.STT.SenseVoice
+# 微服务网关配置
+MicroserviceGateway:
+  host: 0.0.0.0
+  port: 20000
+  internal_routes:
+    TTSAgent: "http://tts_agent/"
+    STTAgent: "http://stt_agent/"
+    LLMAgent: "http://llm_agent/"
+    UserService: "http://user_service/"
 
-    # (可选)启动的optional功能模块
-    optional_modules:
-      
+############################################################################################
 
-    # 目前已支持的内部模块
-    support_modules:
-      - GPTSoVitsAgent
-      - SenseVoiceAgent
-
-    # 待支持的内部模块
-    _module:
-      - yolo11: Module.Utils.yolo11
-
-# MySQL配置
-    user_account_database_config:
-      host: localhost
-      port: 3306
-      user: "root"
-      password: "scgy19971205wq"
-      database: "userinfo"
-      table: "account"
-      charset: "utf8mb4"
+# API网关配置
+APIGateway:
+  host: 0.0.0.0
+  port: 20001
+  routes:
+    UserService: "http://127.0.0.1:20010"
+    MicroserviceGateway: "http://127.0.0.1:20000"
+    
+# "/agent/chat/input/text": "http://chat_service/input/text"
+# "/agent/chat/input/audio": "http://chat_service/input/audio"
+# "/agent/chat/input/streaming_audio": "http://chat_service/input/streaming_audio"
+# "/agent/chat/input/video": "http://chat_service/input/video"
+# "/agent/chat/input/streaming_video": "http://chat_service/input/streaming_video"
 
 
-# ServerClientHandler配置
-    ServerClientHandler:
-      server_host: "0.0.0.0"
-      server_port: "20000"
+############################################################################################
+
+# 用户服务配置
+UserService:
+  host: 0.0.0.0
+  port: 20010
+
+############################################################################################
+
+
+

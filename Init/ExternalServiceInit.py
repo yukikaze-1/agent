@@ -24,15 +24,15 @@
 import os
 import json
 import subprocess
-import yaml
 import signal
 import logging
 from subprocess import Popen
 from threading import Lock
-from typing import List,Dict,Optional,Tuple
+from typing import List, Dict, Optional, Tuple
 from dotenv import dotenv_values
 
 from Module.Utils.Logger import setup_logger
+from Module.Utils.LoadConfig import load_config
 
 # TODO 要支持stop系列函数，则每个模块应添加支持stop的方法
 # TODO ollama run llama3.2好像有点问题，没跑起来？
@@ -80,7 +80,6 @@ class ExternalServiceManager:
             - list_started_services
         
         其他函数：
-            - _load_config      负责从config.yml中读取配置信息
             - _get_services     负责读取要启动的services的配置信息
             - generate_service_config       负责生成服务配置信息(添加或临时启动service时使用)
         
@@ -103,18 +102,20 @@ class ExternalServiceManager:
         
     """  
     def __init__(self):
+        # 自身的logger
+        self.logger = setup_logger(name="ExternalService",log_path="ExternalService")
+        
         # 配置相关
         self.env_vars = dotenv_values("Init/.env")
         self.config_path = self.env_vars.get("INIT_CONFIG_PATH","")
-        self.config: Dict = self._load_config(self.config_path) 
+        self.config: Dict = load_config(config_path=self.config_path, config_name='external_services', logger=self.logger) 
         
         self.lock = Lock()
         self.support_services: List[str] = self.config.get('support_services', [])
         
-        # 日志相关
+        # 要启动的service的日志路径
         self.log_dir = os.path.join(self.env_vars.get("LOG_PATH"), "ExternalService")
-        os.makedirs(self.log_dir, exist_ok=True)  
-        self.logger = setup_logger(name="ExternalService",log_path="ExternalService")
+        os.makedirs(self.log_dir, exist_ok=True)
         
         # 进程相关
         self.base_processes: List[Tuple[str,Popen]] = []   # 保存base外部服务器后台进程对象以及名字
@@ -131,28 +132,12 @@ class ExternalServiceManager:
         optional =  self._init_optional_services()
         return base, optional    
     
-    def _load_config(self, config_path: str) -> Dict:
-        """从config_path中读取配置(*.yml)
-            
-            返回：
-                yml文件中配置的字典表示
-        """
-        if config_path is None:
-            raise ValueError(f"Config file {config_path} is empty.Please check the file 'Init/.env'.It should set the 'INIT_CONFIG_PATH'")
-        try:
-            with open(config_path, 'r', encoding='utf-8') as file:
-                config = yaml.safe_load(file)  # 使用 safe_load 安全地加载 YAML 数据
-            return config
-        except FileNotFoundError:
-            raise FileNotFoundError(f"Config file {config_path} not found.")
-        except yaml.YAMLError as e:
-            raise ValueError(f"Error parsing the YAML config file: {e}")
     
-    def _get_services(self,isBaseServices:bool)-> List[Dict]:
+    def _get_services(self, isBaseServices:bool)-> List[Dict]:
         """
             从self.config中获取要启动的services
             
-            :param isBaseServices: True:base_services False: optional_services
+            :param isBaseServices: True: base_services ; False: optional_services
             
             返回：
                 服务器配置字典列表，形式如下:
@@ -169,11 +154,13 @@ class ExternalServiceManager:
                     }]
         """
         services_key = "base_services" if isBaseServices else "optional_services"
-        services = self.config.get(services_key, [])
+        services: List[Dict] = self.config.get(services_key, [])
         
         # 如果是基础服务，检查是否为空列表
         if not services:
+            # 基础服务为空
             if isBaseServices:
+                self.logger.warning(f"base services is empty. Please check the {self.config_path}")
                 raise ValueError(f"base services is empty. Please check the {self.config_path}")
             else:
                 return []
@@ -235,6 +222,7 @@ class ExternalServiceManager:
         
         ret = ()
 
+        # TODO 这里为什么需要锁？搞清楚
         with self.lock:
             if use_python:
                 # 获取 Conda 环境中的 Python 路径
@@ -245,6 +233,8 @@ class ExternalServiceManager:
 
                 # 启动服务模块，使用指定的 Python 解释器
                 self.logger.info(f"Starting service '{service_name}' at '{service_script}' with Python '{python_path}'")
+                
+                # 后台运行的程序
                 if run_in_background:
                     process = subprocess.Popen(
                         args = [python_path, service_script] + args,
@@ -260,6 +250,8 @@ class ExternalServiceManager:
                     else:
                         self.optional_processes.append(process)
                     ret = (service_name,process.pid)
+                    
+                # 前台运行的程序
                 else:
                     # TODO 对于前台启动的程序还需额外处理
                     subprocess.run([python_path, service_script], check=True, cwd=script_dir)

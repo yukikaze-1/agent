@@ -25,10 +25,11 @@ import yaml
 import importlib
 import logging
 from threading import Lock
-from typing import List,Dict,Tuple,Any,Optional
+from typing import List, Dict, Tuple, Any, Optional
 from dotenv import dotenv_values
 
 from Module.Utils.Logger import setup_logger
+from Module.Utils.LoadConfig import load_config
 
 
 class InternalModuleManager:
@@ -79,7 +80,6 @@ class InternalModuleManager:
             - list_started_modules
             
         其他函数:
-            - _load_config
             - _create_agent
             - _get_modules
             - _get_module_config_by_name
@@ -87,17 +87,20 @@ class InternalModuleManager:
             - _show
     """
     def __init__(self):
+        self.logger = setup_logger(name="InternalModule", log_path="InternalModule")
+        
         self.env_vars = dotenv_values("Init/.env")
         self.config_path = self.env_vars.get("INIT_CONFIG_PATH","")
-        self.config: Dict = self._load_config(self.config_path)
+        self.config: Dict = load_config(config_path=self.config_path, config_name='internal_modules', logger=self.logger)
         self.support_modules: List[str] = self.config.get('support_modules', [])
+        
         # 用于锁修改已启动module对象列表的代码块
         self.lock = Lock()
+        
         # 模块对象相关 
         self.base_processes: List[Tuple[str, Any]] = []    # 存放已启动的base内部服务模块名字和对象
         self.optional_processes: List[Tuple[str, Any]] = [] # 存放已启动的optional内部服务模块名字和对象
 
-        self.logger = setup_logger(name="InternalModule", log_path="InternalModule")
     
     def init_modules(self)->Tuple[bool, List[str], List[str] , List[str], List[str]]:
         """
@@ -184,33 +187,16 @@ class InternalModuleManager:
             return cls(*args, **kwargs)
         
         except ModuleNotFoundError as e:
+            self.logger.error(f"Module {module_path} could not be found")
             raise ImportError(f"Module {module_path} could not be found") from e
         except AttributeError as e:
+            self.logger.error(f"Module {module_path} does not contain class {module_name}")
             raise ValueError(f"Module {module_path} does not contain class {module_name}") from e
         except Exception as e:
-            self.logger.info(f"Error in _create_agent: {str(e)}")
+            self.logger.error(f"Error in _create_agent: {str(e)}")
             raise
 
-    def _load_config(self, config_path: str) -> Dict:
-        """
-            从config_path中读取配置(*.yml)
             
-            返回：
-                yml文件中配置的字典表示
-        """
-        if config_path is None:
-            raise ValueError(f"Config file {config_path} is empty.Please check the file 'Init/.env'.It should set the 'INIT_CONFIG_PATH'")
-        try:
-            with open(config_path, 'r', encoding='utf-8') as file:
-                config = yaml.safe_load(file)  # 使用 safe_load 安全地加载 YAML 数据
-            if not isinstance(config, dict):
-                raise ValueError(f"Invalid config file format. Expected a dictionary, but got {type(config)}.")
-            return config
-        except yaml.YAMLError as e:
-            raise ValueError(f"Error parsing the YAML config file: {e}")
-        except Exception as e:
-            raise RuntimeError(f"Unexpected error while loading config from {config_path}: {e}") from e
-        
     def _init_base_modules(self)->Tuple[bool, List[str], List[str]]:
         """
         启动 base内部功能模块
@@ -244,9 +230,10 @@ class InternalModuleManager:
         
         # 获取模块路径和类名
         module_name, module_path = module
+        
         # 检查是否是受支持的模块
         if module_name not in self.support_modules:
-            self.logger.info(f"Unknown module {module}")
+            self.logger.error(f"Unknown module {module}")
             return False
         
         try:
@@ -261,7 +248,7 @@ class InternalModuleManager:
                 self.logger.info(f"Started optional module {module}")
             return True  # 成功启动模块后返回 True
         except Exception as e:
-            self.logger.info(f"Failed to start module {module}: {e}")
+            self.logger.error(f"Failed to start module {module}: {e}")
             return False  # 如果发生异常，返回 False
         
     def _start_modules_sequentially(self,
