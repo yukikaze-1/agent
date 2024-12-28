@@ -21,10 +21,11 @@ from dotenv import dotenv_values
 from Init.ExternalServiceInit import ExternalServiceManager
 from Init.InternalModuleInit import InternalModuleManager
 from Init.AgentFrameInit import AgentFrameManager
+from Init.EnvironmentManager import EnvironmentManager
+
 from Service.Gateway.MicroserviceGateway import MicroserviceGateway
 from Service.Gateway.APIGateway import APIGateway
 from Service.Other.UserService import UserService
-from Init.EnvironmentManager import EnvironmentManager
 
 from Module.Utils.Logger import setup_logger
 from Module.Utils.LoadConfig import load_config
@@ -47,8 +48,8 @@ class InitAgent:
         self.logger = setup_logger(name="AgentInit", log_path="Other")
         
         self.env_vars = dotenv_values("Init/.env")
-        self.config_path = self.env_vars.get("INIT_CONFIG_PATH", "")
-        self.config = load_config(config_path=self.config_path, config_name="", logger=self.logger)
+        #self.config_path = self.env_vars.get("INIT_CONFIG_PATH", "")
+        #self.config = load_config(config_path=self.config_path, config_name="", logger=self.logger)
         
         # 外部服务
         self.external_service_manager = ExternalServiceManager()
@@ -152,6 +153,7 @@ class InitAgent:
 
 def main():
     agent = InitAgent()
+    print("Starting initialize the agent...")
     agent.init_agent()
     r = input("enter1")
     l = input("enter2")

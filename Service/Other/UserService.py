@@ -7,6 +7,7 @@
 """
     负责用户服务，如登录、注册、修改密码、注销账号等
 """
+
 import json
 import httpx
 import uvicorn
@@ -17,6 +18,7 @@ from dotenv import dotenv_values
 from Module.Utils.Database.UserAccountDataBaseAgent import  UserAccountDataBaseAgent
 from Module.Utils.Logger import setup_logger
 from Module.Utils.LoadConfig import load_config
+
 
 class UserService:
     """
@@ -31,7 +33,7 @@ class UserService:
     def __init__(self):
         self.logger = setup_logger(name="UserService", log_path="InternalModule")
         
-        self.env_vars = dotenv_values("Service/Other/.env")
+        self.env_vars = dotenv_values("/home/yomu/agent/Service/Other/.env")
         self.config_path = self.env_vars.get("USER_SERVICE_CONFIG_PATH","")
         self.config = load_config(config_path=self.config_path, config_name='UserService', logger=self.logger)
         
@@ -164,6 +166,13 @@ class UserService:
     def run(self):
         uvicorn.run(self.app, host=self.host, port=self.port)
         
+        
+def main():
+    service = UserService()
+    service.run()
+    
+    
 if __name__ == "__main__":
-    s = UserService()
-    s.run()
+    main()
+    
+    

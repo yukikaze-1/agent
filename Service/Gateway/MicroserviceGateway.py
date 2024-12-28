@@ -11,7 +11,6 @@
 
 import os
 import uvicorn
-import argparse
 import httpx  # 用于服务间通信
 from fastapi import FastAPI, File, HTTPException, Form, Request, Response
 from datetime import datetime
@@ -29,7 +28,7 @@ class MicroserviceGateway():
     def __init__(self):
         self.logger = setup_logger(name="MicroserviceGateway", log_path="Other") 
         
-        self.env_vars = dotenv_values("Service/Gateway/.env")
+        self.env_vars = dotenv_values("/home/yomu/agent/Service/Gateway/.env")
         self.config_path = self.env_vars.get("MICRO_SERVICE_GATEWAY_CONFIG_PATH","")
         self.config = load_config(config_path=self.config_path, config_name='MicroserviceGateway', logger=self.logger)
         
@@ -133,21 +132,19 @@ class MicroserviceGateway():
     async def _usr_file_input(self):
         """接受用户的文件输入"""
         pass
-    
-    def run(self):
-        uvicorn.run(self.app, host=self.host, port=self.port)
         
-            
-
     def __del__(self):
         pass
     
+    def run(self):
+        uvicorn.run(self.app, host=self.host, port=self.port)
+    
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="AgentFastAPI Server")
-    parser.add_argument("--host", type=str, default="0.0.0.0", help="服务器主机地址")
-    parser.add_argument("--port", type=int, default=20000, help="服务器端口")
-    args = parser.parse_args()
-
+def main():
     server = MicroserviceGateway()
     server.run()
+    
+    
+if __name__ == "__main__":
+    main()
+    

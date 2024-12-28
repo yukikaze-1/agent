@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Dict, Any
 from logging import Logger
 
-def load_config(logger: Logger, config_path: str, config_name: str) -> Dict[str, Any]:
+def load_config(config_path: str, config_name: str, logger: Logger) -> Dict[str, Any]:
         """
         从 config_path 中读取指定的配置 (YAML 文件).
 

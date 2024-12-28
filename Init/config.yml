@@ -1,7 +1,7 @@
 # 核心LLM
     # 采用Ollama的方式默认使用llama3.2
 LLM_model:
-      name: llama3.2 # ollama运行的模型名称(必须在ollama中支持并且可以运行的)
+  name: llama3.2 # ollama运行的模型名称(必须在ollama中支持并且可以运行的)
 
 ############################################################################################
 # 外部服务
@@ -18,6 +18,7 @@ external_services:
         run_in_background: true
         is_base: true
         log_file: "ollama_server.log"
+
     - ollama_LLM:
         script: "ollama run llama3.2"
         service_name: "ollama_LLM"
@@ -27,6 +28,7 @@ external_services:
         run_in_background: true
         is_base: true
         log_file: ""
+
     - GPTSoVits_server:
         script: "/home/yomu/GPTSoVits/api_v2.py"
         service_name: "GPTSoVits_server"
@@ -36,6 +38,7 @@ external_services:
         run_in_background: true
         is_base: true
         log_file: "GPTSoVits_server.log"
+
     - SenseVoice_server:
         script: "/home/yomu/SenseVoice/SenseVoice_server.py"
         service_name: "SenseVoice_server"
@@ -45,6 +48,37 @@ external_services:
         run_in_background: true
         is_base: true
         log_file: "SenseVoice_server.log"
+
+    - MicroserviceGateway:
+        script: "/home/yomu/agent/Service/Gateway/MicroserviceGateway.py"
+        service_name: "MicroserviceGateway"
+        conda_env: "/home/yomu/data/anaconda3/envs/agent"
+        args: []
+        use_python: true
+        run_in_background: true
+        is_base: true
+        log_file: "MicroserviceGateway.log"
+
+    - APIGateway:
+        script: "/home/yomu/agent/Service/Gateway/APIGateway.py"
+        service_name: "APIGateway"
+        conda_env: "/home/yomu/data/anaconda3/envs/agent"
+        args: []
+        use_python: true
+        run_in_background: true
+        is_base: true
+        log_file: "APIGateway.log"
+
+    - UserService:
+        script: "/home/yomu/agent/Service/Other/UserService.py"
+        service_name: "UserService"
+        conda_env: "/home/yomu/data/anaconda3/envs/agent"
+        args: []
+        use_python: true
+        run_in_background: true
+        is_base: true
+        log_file: "UserService.log"
+    
   # (可选)启动的optional外部服务
   optional_services:
     

@@ -7,7 +7,7 @@
 """
     API网关, 目前只负责路由转发 
 """
-
+import sys, os
 import httpx
 import uvicorn
 from dotenv import dotenv_values
@@ -17,6 +17,8 @@ from typing import Dict
 
 from Module.Utils.Logger import setup_logger
 from Module.Utils.LoadConfig import load_config
+
+
 
 class APIGateway:
     """
@@ -30,7 +32,7 @@ class APIGateway:
     def __init__(self):
         self.logger = setup_logger(name="APIGateway", log_path='Other')
         
-        self.env_vars = dotenv_values("Service/Gateway/.env")
+        self.env_vars = dotenv_values("/home/yomu/agent/Service/Gateway/.env") 
         self.config_path = self.env_vars.get("API_GATEWAY_CONFIG_PATH","") 
         self.config: Dict = load_config(config_path=self.config_path, config_name='APIGateway', logger=self.logger)
         
@@ -187,6 +189,10 @@ class APIGateway:
         uvicorn.run(self.app, host=self.host, port=self.port)
         
         
-if __name__ =="__main__":
-    x = APIGateway()
-    x.run()
+def main():
+    server = APIGateway()
+    server.run()
+
+
+if __name__ == "__main__":
+    main()

@@ -48,7 +48,7 @@ class UserAccountDataBaseAgent():
     def __init__(self, logger: Logger=None):
         self.logger = logger or setup_logger(name="UserAccountDataBaseAgent", log_path="InternalModule")
         
-        self.env_vars = dotenv_values("Module/Utils/Database/.env")
+        self.env_vars = dotenv_values("/home/yomu/agent/Module/Utils/Database/.env")
         self.config_path = self.env_vars.get("USER_ACCOUNT_DATABASE_AGENT_CONFIG_PATH","")
         self.config = load_config(config_path=self.config_path, config_name='UserAccountDataBaseAgent', logger=self.logger)
         
