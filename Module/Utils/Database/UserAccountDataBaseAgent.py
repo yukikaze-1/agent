@@ -8,7 +8,6 @@
     初始化用户账户数据库
 """
 
-import yaml
 from typing import Dict
 from typing import Tuple, Optional
 from dotenv import dotenv_values
@@ -16,7 +15,7 @@ from logging import Logger
 
 from Module.Utils.Logger import setup_logger
 from Module.Utils.LoadConfig import load_config
-from Module.Utils.MySQLAgent import MySQLAgent
+from Module.Utils.Database.MySQLAgent import MySQLAgent
 
 
 class UserAccountDataBaseAgent():
@@ -49,8 +48,8 @@ class UserAccountDataBaseAgent():
     def __init__(self, logger: Logger=None):
         self.logger = logger or setup_logger(name="UserAccountDataBaseAgent", log_path="InternalModule")
         
-        self.env_vars = dotenv_values("Init/.env")
-        self.config_path = self.env_vars.get("INIT_CONFIG_PATH","")
+        self.env_vars = dotenv_values("Module/Utils/Database/.env")
+        self.config_path = self.env_vars.get("USER_ACCOUNT_DATABASE_AGENT_CONFIG_PATH","")
         self.config = load_config(config_path=self.config_path, config_name='UserAccountDataBaseAgent', logger=self.logger)
         
         self.db_name = self.config.get("database","")

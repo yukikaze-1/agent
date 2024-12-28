@@ -14,7 +14,7 @@ from fastapi import FastAPI, File, Form
 from dotenv import dotenv_values
 
 
-from Init.UserAccountDataBaseAgent import  UserAccountDataBaseAgent
+from Module.Utils.Database.UserAccountDataBaseAgent import  UserAccountDataBaseAgent
 from Module.Utils.Logger import setup_logger
 from Module.Utils.LoadConfig import load_config
 
@@ -31,8 +31,8 @@ class UserService:
     def __init__(self):
         self.logger = setup_logger(name="UserService", log_path="InternalModule")
         
-        self.env_vars = dotenv_values("Init/.env")
-        self.config_path = self.env_vars.get("INIT_CONFIG_PATH","")
+        self.env_vars = dotenv_values("Service/Other/.env")
+        self.config_path = self.env_vars.get("USER_SERVICE_CONFIG_PATH","")
         self.config = load_config(config_path=self.config_path, config_name='UserService', logger=self.logger)
         
         self.usr_account_database = UserAccountDataBaseAgent(logger=self.logger)
@@ -164,6 +164,6 @@ class UserService:
     def run(self):
         uvicorn.run(self.app, host=self.host, port=self.port)
         
-if __name__ =="__main__":
-    x = UserService()
-    x.run()
+if __name__ == "__main__":
+    s = UserService()
+    s.run()

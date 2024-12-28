@@ -30,8 +30,8 @@ class APIGateway:
     def __init__(self):
         self.logger = setup_logger(name="APIGateway", log_path='Other')
         
-        self.env_vars = dotenv_values("Init/.env")
-        self.config_path = self.env_vars.get("INIT_CONFIG_PATH","") 
+        self.env_vars = dotenv_values("Service/Gateway/.env")
+        self.config_path = self.env_vars.get("API_GATEWAY_CONFIG_PATH","") 
         self.config: Dict = load_config(config_path=self.config_path, config_name='APIGateway', logger=self.logger)
         
         self.routes: Dict = self.config.get("routes", {})

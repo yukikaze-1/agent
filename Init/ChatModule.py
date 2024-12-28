@@ -8,6 +8,10 @@
     负责处理与用户对话的chatbot
 """
 
+from Module.LLM.OllamaAgent import OllamaAgent
+from Module.Utils.LoadConfig import load_config
+from Module.Utils.Logger import setup_logger
+
 class ChatModule:
     """
         

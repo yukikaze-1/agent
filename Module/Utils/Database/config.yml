@@ -1,0 +1,10 @@
+# 用户账户数据库配置
+---
+UserAccountDataBaseAgent:
+  host: localhost
+  port: 3306
+  user: "root"
+  password: "scgy19971205wq"
+  database: "userinfo"
+  table: "account"
+  charset: "utf8mb4"

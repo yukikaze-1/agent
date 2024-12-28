@@ -12,11 +12,9 @@
 import os
 import uvicorn
 import argparse
-import yaml
 import httpx  # 用于服务间通信
 from fastapi import FastAPI, File, HTTPException, Form, Request, Response
 from datetime import datetime
-from logging import Logger
 from typing import Dict
 from dotenv import dotenv_values
 
@@ -31,8 +29,8 @@ class MicroserviceGateway():
     def __init__(self):
         self.logger = setup_logger(name="MicroserviceGateway", log_path="Other") 
         
-        self.env_vars = dotenv_values("Init/.env")
-        self.config_path = self.env_vars.get("INIT_CONFIG_PATH","")
+        self.env_vars = dotenv_values("Service/Gateway/.env")
+        self.config_path = self.env_vars.get("MICRO_SERVICE_GATEWAY_CONFIG_PATH","")
         self.config = load_config(config_path=self.config_path, config_name='MicroserviceGateway', logger=self.logger)
         
         # 微服务的路由表（内部服务间通信）
@@ -138,6 +136,8 @@ class MicroserviceGateway():
     
     def run(self):
         uvicorn.run(self.app, host=self.host, port=self.port)
+        
+            
 
     def __del__(self):
         pass
