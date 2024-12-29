@@ -30,7 +30,7 @@ class UserTextInputProcessModule:
         self.config_path = self.env_vars.get("USER_TEXT_INPUT_PROCESS_MODULE_CONFIG_PATH","") 
         self.config: Dict = load_config(config_path=self.config_path, config_name='UserTextInputProcessModule', logger=self.logger)
         
-        self.host = self.config.get("host", "0.0.0.0")
+        self.host = self.config.get("host", "127.0.0.1")
         self.port = self.config.get("port", 20020)
         self.app = FastAPI()
         

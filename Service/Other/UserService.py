@@ -39,7 +39,7 @@ class UserService:
         
         self.usr_account_database = UserAccountDataBaseAgent(logger=self.logger)
         
-        self.host = self.config.get("host", "0.0.0.0")
+        self.host = self.config.get("host", "127.0.0.1")
         self.port = self.config.get("port", 20010)
         self.app = FastAPI()
         

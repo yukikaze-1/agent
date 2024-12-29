@@ -124,7 +124,7 @@ async def predict_mask(file: UploadFile = File(...), points: str = Form(...)):
 
 if __name__ == "__main__":
     # 启动FastAPI服务器
-    uvicorn.run(app, host="0.0.0.0", port=8100)
+    uvicorn.run(app, host="127.0.0.1", port=8100)
 
 
 # TODO 刚一直过来，还没进行测试与环境配置

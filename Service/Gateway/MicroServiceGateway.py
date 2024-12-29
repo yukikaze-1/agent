@@ -35,7 +35,7 @@ class MicroServiceGateway():
         
         # 微服务的路由表（内部服务间通信）
         self.internal_routes = self.config["internal_routes"]
-        self.host = self.config.get("host", "0.0.0.0")
+        self.host = self.config.get("host", "127.0.0.1")
         self.port = self.config.get("port", 20000)
         self.app = FastAPI()
         

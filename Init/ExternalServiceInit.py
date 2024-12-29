@@ -94,7 +94,7 @@ class ExternalServiceManager:
                         script: "xxx.py or ls -l"           # 外部服务器的启动文件 或者 bash命令
                         service_name: "xxx"                 # 启动的服务的名字
                         conda_env: "xxx"                    # conda环境，默认base
-                        args: ["-a", "0.0.0.0"]             # 额外参数
+                        args: ["-a", "127.0.0.1"]             # 额外参数
                         use_python: true                    # 是否用python启动脚本
                         run_in_background: true             # 是否后台运行
                         is_base: true                       # 是否为基础功能服务器
@@ -146,7 +146,7 @@ class ExternalServiceManager:
                         "script": "xxx.py or bash cmd", # 外部服务器的启动文件或bash命令
                         "service_name": "xxx",          # 启动的服务的名字
                         "conda_env": "xxx",             # conda 环境，默认 base
-                        "args": ["-a", "0.0.0.0"],      # 额外参数
+                        "args": ["-a", "127.0.0.1"],      # 额外参数
                         "use_python": True,             # 是否用 Python 启动脚本
                         "run_in_background": True,      # 是否后台运行
                         "is_base": True,                # 是否为基础功能服务器
@@ -345,7 +345,7 @@ class ExternalServiceManager:
                     "script": "xxx.py or bash cmd", # 外部服务器的启动文件或bash命令
                     "service_name": "xxx",          # 启动的服务的名字
                     "conda_env": "xxx",             # conda 环境，默认 base
-                    "args": ["-a", "0.0.0.0"],      # 额外参数
+                    "args": ["-a", "127.0.0.1"],      # 额外参数
                     "use_python": True,             # 是否用 Python 启动脚本
                     "run_in_background": True,      # 是否后台运行
                     "is_base": True,                # 是否为基础功能服务器

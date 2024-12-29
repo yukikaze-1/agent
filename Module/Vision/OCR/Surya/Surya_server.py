@@ -53,4 +53,4 @@ async def perform_ocr(file: UploadFile = File(...), language: str = Query("en", 
     return JSONResponse(content=serialized_predictions)
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=args.port)
+    uvicorn.run(app, host="127.0.0.1", port=args.port)

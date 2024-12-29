@@ -37,7 +37,7 @@ class APIGateway:
         self.config: Dict = load_config(config_path=self.config_path, config_name='APIGateway', logger=self.logger)
         
         self.routes: Dict = self.config.get("routes", {})
-        self.host = self.config.get("host", "0.0.0.0")
+        self.host = self.config.get("host", "127.0.0.1")
         self.port = self.config.get("port", 20001)
         self.app = FastAPI()
         
@@ -129,8 +129,7 @@ class APIGateway:
     async def forward(self, request: Request, prefix: str, path: str, server: str):
         """实际转发函数"""
         # 路径编码，防止路径遍历攻击
-        # sanitized_path = quote(path, safe='')
-        sanitized_path = path
+        sanitized_path = quote(path, safe='')
         
         # url拼接
         user_service_base_url = self.routes.get(server,'')
@@ -141,9 +140,6 @@ class APIGateway:
         user_service_url = urljoin(user_service_base_url, f"{prefix}/{sanitized_path}")
         # 打印调试信息
         self.logger.info(f"Forwarding {request.method} request for {prefix}/{path} to {user_service_url}")
-        # self.logger.info(f"Request headers: {dict(request.headers)}")
-        # self.logger.info(f"Request body: {await request.body()}")
-        # self.logger.info(f"Forwarding {request.method} request for {prefix}/{path} to {user_service_url}")
         
         # 过滤请求头，移除不必要的头
         excluded_headers = ["host", "content-length", "transfer-encoding", "connection"]

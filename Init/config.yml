@@ -33,7 +33,7 @@ external_services:
         script: "/home/yomu/GPTSoVits/api_v2.py"
         service_name: "GPTSoVits_server"
         conda_env: "/home/yomu/data/anaconda3/envs/GPTSoVits"
-        args: ["-a", "0.0.0.0","-p","9880"]
+        args: ["-a", "127.0.0.1","-p","9880"]
         use_python: true
         run_in_background: true
         is_base: true
@@ -43,7 +43,7 @@ external_services:
         script: "/home/yomu/SenseVoice/SenseVoice_server.py"
         service_name: "SenseVoice_server"
         conda_env: "/home/yomu/data/anaconda3/envs/SenseVoice"
-        args: ["--host", "0.0.0.0", "--port", "9890"]
+        args: ["--host", "127.0.0.1", "--port", "9890"]
         use_python: true
         run_in_background: true
         is_base: true
@@ -104,8 +104,8 @@ external_services:
   # 外部服务器ipaddress---port
   ip_port:
     - ollama_server: ["127.0.0.1","11434"]
-    - GPTSoVits: ["0.0.0.0","9880"]
-    - SenseVoice: ["0.0.0.0","9890"]
+    - GPTSoVits: ["127.0.0.1","9880"]
+    - SenseVoice: ["127.0.0.1","9890"]
 
 ############################################################################################
 

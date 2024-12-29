@@ -24,7 +24,7 @@ import argparse
 class YOLOServer:
     def __init__(self, 
                  model_path: str = "home/yomu/agent/Module/Utils/yolo11/models/yolo11n.pt",
-                 host: str = "0.0.0.0",
+                 host: str = "127.0.0.1",
                  port: int = 8300):
         """
         初始化 YOLO 服务器。
@@ -140,7 +140,7 @@ class YOLOServer:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="YOLO FastAPI Server")
     parser.add_argument("--port","-p", type=int, default=8300, help="运行服务器的端口")
-    parser.add_argument("--host","-h",type=str,default="0.0.0.0",help="host")
+    parser.add_argument("--host","-h",type=str,default="127.0.0.1",help="host")
     parser.add_argument("--model","-m", type=str, default="./models/yolo11n.pt", help="YOLO 模型路径")
     args = parser.parse_args()
 
