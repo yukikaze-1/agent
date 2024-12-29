@@ -7,3 +7,5 @@ Log/InternalModule/*
 Log/Other/*
 Log/*.Log
 Log/*.pos
+Service/Gateway/Other
+Service/Other/InternalModule

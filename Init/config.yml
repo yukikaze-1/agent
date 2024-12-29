@@ -49,15 +49,15 @@ external_services:
         is_base: true
         log_file: "SenseVoice_server.log"
 
-    - MicroserviceGateway:
-        script: "/home/yomu/agent/Service/Gateway/MicroserviceGateway.py"
-        service_name: "MicroserviceGateway"
+    - MicroServiceGateway:
+        script: "/home/yomu/agent/Service/Gateway/MicroServiceGateway.py"
+        service_name: "MicroServiceGateway"
         conda_env: "/home/yomu/data/anaconda3/envs/agent"
         args: []
         use_python: true
         run_in_background: true
         is_base: true
-        log_file: "MicroserviceGateway.log"
+        log_file: "MicroServiceGateway.log"
 
     - APIGateway:
         script: "/home/yomu/agent/Service/Gateway/APIGateway.py"
@@ -78,6 +78,16 @@ external_services:
         run_in_background: true
         is_base: true
         log_file: "UserService.log"
+
+    - OllamaAgent:
+        script: "/home/yomu/agent/Module/LLM/OllamaAgent.py"
+        service_name: "OllamaAgent"
+        conda_env: "/home/yomu/data/anaconda3/envs/agent"
+        args: []
+        use_python: true
+        run_in_background: true
+        is_base: true
+        log_file: "OllamaAgent.log"
     
   # (可选)启动的optional外部服务
   optional_services:

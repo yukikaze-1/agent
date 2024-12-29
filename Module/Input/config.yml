@@ -1,0 +1,4 @@
+# UserTextInputProcessModule 配置
+UserTextInputProcessModule:
+  host: 127.0.0.1
+  port: 20020

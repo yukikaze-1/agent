@@ -1,5 +1,5 @@
 # 微服务网关配置
-MicroserviceGateway:
+MicroServiceGateway:
   host: 0.0.0.0
   port: 20000
   internal_routes:
@@ -7,6 +7,7 @@ MicroserviceGateway:
     STTAgent: "http://stt_agent/"
     LLMAgent: "http://llm_agent/"
     UserService: "http://user_service/"
+    OllamaAgent: "http://127.0.0.1:20030"
 
 ############################################################################################
 
@@ -16,7 +17,10 @@ APIGateway:
   port: 20001
   routes:
     UserService: "http://127.0.0.1:20010"
-    MicroserviceGateway: "http://127.0.0.1:20000"
+    MicroServiceGateway: "http://127.0.0.1:20000"
+    UserTextInputProcessModule: "http://127.0.0.1:20020"
+    OllamaAgent: "http://127.0.0.1:20030"
+    
     
 # "/agent/chat/input/text": "http://chat_service/input/text"
 # "/agent/chat/input/audio": "http://chat_service/input/audio"
