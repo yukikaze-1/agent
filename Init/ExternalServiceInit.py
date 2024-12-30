@@ -26,6 +26,7 @@ import json
 import subprocess
 import signal
 import logging
+import shlex
 from subprocess import Popen
 from threading import Lock
 from typing import List, Dict, Optional, Tuple
@@ -237,7 +238,7 @@ class ExternalServiceManager:
                 # 后台运行的程序
                 if run_in_background:
                     process = subprocess.Popen(
-                        args = [python_path, service_script] + args,
+                        args= [python_path, service_script] + args,
                         stdin=stdin_option,
                         stdout=stdout_option,
                         stderr=stderr_option,
@@ -255,12 +256,15 @@ class ExternalServiceManager:
                 else:
                     # TODO 对于前台启动的程序还需额外处理
                     subprocess.run([python_path, service_script], check=True, cwd=script_dir)
+            # 不用python
             else:
                 # 启动服务模块，直接运行命令（例如 ollama serve）
                 self.logger.info(f"Starting service '{service_name}' using system shell")
+                command_list = [service_script] + args
+                command_str = ' '.join(shlex.quote(arg) for arg in command_list)
                 if run_in_background:
                     process = subprocess.Popen(
-                        service_script,
+                        args=command_str,
                         shell=True,
                         stdin=stdin_option,
                         stdout=stdout_option,
