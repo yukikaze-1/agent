@@ -85,7 +85,7 @@ class APIGateway:
     
     def validate_config(self):
         """验证配置文件是否包含所有必需的配置项"""
-        required_keys = ["consul_url", "routes", "services", "listen_host","register_address", "port", "service_name", "health_check_url"]
+        required_keys = ["consul_url", "routes", "services", "listen_host","register_address", "port", "service_name", "service_id", "health_check_url"]
         for key in required_keys:
             if key not in self.config:
                 self.logger.error(f"Missing required configuration key: {key}")
@@ -124,17 +124,25 @@ class APIGateway:
             self.logger.error(f"Exception during lifespan: {e}")
             raise
         finally:
-            # 应用关闭时执行
+            # 关闭 AsyncClient
             self.logger.info("Shutting down Async HTTP Client")
             if self.client:
                 await self.client.aclose()
+            
+            # 关闭后台任务    
             task.cancel()
             try:
                 await task
             except asyncio.CancelledError:
                 self.logger.info("Background task cancelled successfully.")
+            
             # 注销服务从 Consul
-            await self.unregister_service_from_consul(self.service_id)
+            try:
+                self.logger.info("Deregistering service from Consul...")
+                await self.unregister_service_from_consul(self.service_id)
+                self.logger.info("Service deregistered from Consul.")
+            except Exception as e:
+                self.logger.error(f"Error while deregistering service: {e}")
         
 
     # --------------------------------
@@ -146,11 +154,18 @@ class APIGateway:
         try:
             response = await self.client.get(url)
             if response.status_code == 200:
-                self.logger.info(f"Successfully fetched service instances for '{service_name}' from Consul.")
-                return [
+                instances = [
                     {"address": instance["Address"], "port": instance["ServicePort"]}
                     for instance in response.json()
                 ]
+                if instances:
+                    self.logger.info(f"Successfully fetched service instances for '{service_name}' from Consul.")
+                    self.logger.debug(f"Service instances for '{service_name}': {instances}")
+                else:
+                    self.logger.error(f"No service instances found for '{service_name}' in Consul.")
+                    # 可选择抛出异常或采取其他措施
+                    # raise ValueError(f"No service instances found for '{service_name}' in Consul.")
+                return instances
             else:
                 self.logger.warning(f"Failed to fetch service instances for '{service_name}': {response.status_code}")
         except httpx.RequestError as exc:

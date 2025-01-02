@@ -23,7 +23,7 @@ external_services:
         script: "/home/yomu/GPTSoVits/api_v2.py"
         service_name: "GPTSoVits_server"
         conda_env: "/home/yomu/data/anaconda3/envs/GPTSoVits"
-        args: ["-a", "127.0.0.1","-p","9880"]
+        args: ["-a", "0.0.0.0","-p","9880"]
         use_python: true
         run_in_background: true
         is_base: true
@@ -92,6 +92,16 @@ external_services:
         run_in_background: true
         is_base: true
         log_file: "Consul.log"
+
+    - GPTSovitsAgent:
+        script: "/home/yomu/agent/Module/TTS/GPTSoVits/GPTSoVitsAgent.py"
+        service_name: "GPTSovitsAgent"
+        conda_env: "/home/yomu/data/anaconda3/envs/agent"
+        args: []
+        use_python: true
+        run_in_background: true
+        is_base: true
+        log_file: "GPTSovitsAgent.log"
 
   # (可选)启动的optional外部服务
   optional_services:

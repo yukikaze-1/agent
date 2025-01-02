@@ -1,0 +1,35 @@
+# GPTSovitsAgent配置
+GPTSovits:
+  # 本身的地址和端口
+  host: 127.0.0.1
+  port: 20040
+
+  # Consul 服务器的 URL，包括协议前缀
+  consul_url: "http://127.0.0.1:8500"
+
+  # 需要通过 Consul 进行服务发现的微服务列表
+  services:
+    - "APIGateway"
+
+  # 健康检查的 URL
+  health_check_url: "http://127.0.0.1:20040/health"  # 可选，默认会自动生成
+
+  # 当前微服务的名称和唯一标识符
+  service_name: "GPTSoVitsAgent"
+  service_id: "GPTSoVitsAgent-127.0.0.1:20040"  # 可选，默认会自动生成
+
+  # GPTSoVits服务设置
+  setting:
+    server_url: "http://127.0.0.1:9880"
+    save_dir: "/home/yomu/agent/Module/TTS/GPTSoVits/output"
+  
+  # 声线  
+  characters:
+    Elysia:
+      gpt_path: "/home/yomu/GPTSoVits/GPT_weights_v2/alxy_all_modified_v1.0-e50.ckpt"
+      sovits_path: "/home/yomu/GPTSoVits/SoVITS_weights_v2/alxy_all_modified_v1.0_e50_s4700.pth"
+      ref_audio: "/home/yomu/agent/Module/TTS/GPTSoVits/reference/audio/1_301.wav"
+      ref_audio_text: 
+          path: "/home/yomu/agent/Module/TTS/GPTSoVits/reference/text/1_301.txt"
+          content:  "我的话，呢哼，更多是靠少女的小心思吧。看看你现在的表情。好想去那里。"
+        
