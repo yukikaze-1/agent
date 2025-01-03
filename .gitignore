@@ -9,3 +9,4 @@ Log/*.Log
 Log/*.pos
 Service/Gateway/Other
 Service/Other/InternalModule
+Module/TTS/GPTSoVits/ExternalService

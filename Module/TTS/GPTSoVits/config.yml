@@ -1,6 +1,6 @@
 # GPTSovitsAgent配置
 GPTSovits:
-  # 本身的地址和端口
+  # 微服务本身的地址和端口
   host: 127.0.0.1
   port: 20040
 

@@ -126,10 +126,6 @@ class MicroServiceGateway():
             self.logger.error(f"Exception during lifespan: {e}")
             raise
         finally:
-            # 关闭 AsyncClient
-            self.logger.info("Shutting down Async HTTP Client")
-            if self.client:
-                await self.client.aclose()
                 
             # 关闭后台任务
             task.cancel()
@@ -145,6 +141,11 @@ class MicroServiceGateway():
                 self.logger.info("Service deregistered from Consul.")
             except Exception as e:
                 self.logger.error(f"Error while deregistering service: {e}")
+                
+            # 关闭 AsyncClient
+            self.logger.info("Shutting down Async HTTP Client")
+            if self.client:
+                await self.client.aclose()
 
     
     
@@ -255,14 +256,14 @@ class MicroServiceGateway():
     # --------------------------------
     # 5. Consul 服务注册与注销
     # --------------------------------
-    async def register_service_to_consul(self, service_name, service_id, address, port, health_check_url):
+    async def register_service_to_consul(self, service_name, service_id, address, port, health_check_url, retries=3, delay=2.0):
         """向 Consul 注册该微服务网关"""
         payload = {
             "Name": service_name,
             "ID": service_id,
             "Address": address,
             "Port": port,
-            "Tags": ["v1", "MicroService"],
+            "Tags": ["v1", "UserService"],
             "Check": {
                 "HTTP": health_check_url,
                 "Interval": "10s",
@@ -270,15 +271,23 @@ class MicroServiceGateway():
             }
         }
 
-        try:
-            response = await self.client.put(f"{self.consul_url}/v1/agent/service/register", json=payload)
-            if response.status_code == 200:
-                self.logger.info(f"Service '{service_name}' registered successfully to Consul.")
-            else:
-                self.logger.warning(f"Failed to register service '{service_name}': {response.status_code}, {response.text}")
-        except Exception as e:
-            self.logger.error(f"Error while registering service '{service_name}': {e}")
-    
+        for attempt in range(1, retries + 1):
+            try:
+                response = await self.client.put(f"{self.consul_url}/v1/agent/service/register", json=payload)
+                if response.status_code == 200:
+                    self.logger.info(f"Service '{service_name}' registered successfully to Consul.")
+                    return
+                else:
+                    self.logger.warning(f"Attempt {attempt}: Failed to register service '{service_name}': {response.status_code}, {response.text}")
+            except Exception as e:
+                self.logger.error(f"Attempt {attempt}: Error while registering service '{service_name}': {e}")
+            
+            if attempt < retries:
+                self.logger.info(f"Retrying in {delay} seconds...")
+                await asyncio.sleep(delay)
+
+        self.logger.error(f"All {retries} attempts to register service '{service_name}' failed.")
+        raise HTTPException(status_code=500, detail="Service registration failed.")
     
     async def unregister_service_from_consul(self, service_id: str):
         """从 Consul 注销该微服务网关"""
@@ -367,7 +376,9 @@ class MicroServiceGateway():
         self.logger.info(f"Operator: usr_ping_server. Result: True, Message: {message}")
         return {"result": True, "message": message, "time": current_time}
     
-        
+    # --------------------------------
+    # 请求转发过滤逻辑
+    # --------------------------------     
     def filter_headers(self, headers):
         """过滤请求头，移除不必要的头"""
         excluded_headers = {"host", "content-length", "transfer-encoding", "connection"}
