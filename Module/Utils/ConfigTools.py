@@ -3,13 +3,17 @@
 # Time:         2024/12/27
 # Version:      0.1
 # Description:  load config
+
 """
-    负责从指定yml文件读取配置信息
+    1. load_config负责从指定yml文件读取配置信息
+    2. validate_config负责验证配置文件是否包含所有必需的配置项
 """
+
 import yaml
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, List
 from logging import Logger
+
 
 def load_config(config_path: str, config_name: str, logger: Logger) -> Dict[str, Any]:
         """
@@ -44,7 +48,7 @@ def load_config(config_path: str, config_name: str, logger: Logger) -> Dict[str,
         
         try:
             with open(config_path, 'r', encoding='utf-8') as file:
-                config = yaml.safe_load(file)  # 使用 safe_load 安全地加载 YAML 数据
+                config: Dict = yaml.safe_load(file)  # 使用 safe_load 安全地加载 YAML 数据
                 
                 if config is None:
                     logger.error(f"The YAML config file {config_path} is empty.")
@@ -69,3 +73,38 @@ def load_config(config_path: str, config_name: str, logger: Logger) -> Dict[str,
         except yaml.YAMLError as e:
             logger.error(f"Error parsing the YAML config file: {e}")
             raise ValueError(f"Error parsing the YAML config file '{config_path}': {e}") from e 
+
+
+
+def validate_config(required_keys: List[str], config: Dict, logger: Logger):
+    """
+    验证配置字典是否包含所有必需的配置项。
+
+    参数:
+        required_keys (List[str]): 必需的配置键列表。
+        config (Dict): 配置字典，通常从配置文件或环境变量中加载。
+        logger (Logger): 用于记录日志的日志记录器实例。
+
+    行为:
+        检查 `config` 中是否包含所有 `required_keys` 中列出的键。
+        如果缺少任何必需的键，则对每个缺失的键记录一个错误日志，
+        并抛出一个 KeyError，列出所有缺失的键。
+
+    异常:
+        KeyError: 如果缺少一个或多个必需的配置键。
+
+    示例:
+        required = ['host', 'port', 'username']
+        config = {'host': 'localhost', 'port': 8080}
+        validate_config(required, config, logger)
+        # 这将记录缺少 'username' 的错误并抛出 KeyError
+    """
+    # 使用列表推导找出所有缺失的必需键
+    missing_keys = [key for key in required_keys if key not in config]
+    
+    # 如果有缺失的键，则记录错误并抛出异常
+    if missing_keys:
+        for key in missing_keys:
+            logger.error(f"缺少必需的配置键: {key}")  # 记录每个缺失键的错误日志
+        # 抛出包含所有缺失键的 KeyError 异常
+        raise KeyError(f"缺少必需的配置键: {', '.join(missing_keys)}")

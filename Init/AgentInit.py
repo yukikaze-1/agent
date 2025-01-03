@@ -28,7 +28,7 @@ from Service.Gateway.APIGateway import APIGateway
 from Service.Other.UserService import UserService
 
 from Module.Utils.Logger import setup_logger
-from Module.Utils.LoadConfig import load_config
+from Module.Utils.ConfigTools import load_config
 
 
 

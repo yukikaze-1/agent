@@ -14,7 +14,7 @@ from dotenv import dotenv_values
 from logging import Logger
 
 from Module.Utils.Logger import setup_logger
-from Module.Utils.LoadConfig import load_config
+from Module.Utils.ConfigTools import load_config
 from Module.Utils.Database.MySQLAgent import MySQLAgent
 
 

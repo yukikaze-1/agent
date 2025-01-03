@@ -19,7 +19,7 @@ from typing import Dict, List, Any
 from urllib.parse import urljoin
 from dotenv import dotenv_values
 
-from Module.Utils.LoadConfig import load_config
+from Module.Utils.ConfigTools import load_config, validate_config
 from Module.Utils.Logger import setup_logger
 
 # TODO 之后考虑将GPTSoVits的server集成到AI agent内部。现阶段还是采用分离式C/S
@@ -71,7 +71,7 @@ class GPTSoVitsAgent:
         self.infer_count = 0
         
         # 验证配置文件
-        self.validate_config()
+        self._validate_config()
         
         # 服务注册信息
         self.service_name = self.config.get("service_name", "GPTSoVits")
@@ -85,15 +85,12 @@ class GPTSoVitsAgent:
         self.setup_routes()
         
         
-    def validate_config(self):
+    def _validate_config(self):
         """
         验证配置文件是否包含所有必需的配置项。
         """
         required_keys = ["consul_url", "host", "port", "service_name", "health_check_url", "characters", "setting"]
-        for key in required_keys:
-            if key not in self.config:
-                self.logger.error(f"Missing required configuration key: {key}")
-                raise KeyError(f"Missing required configuration key: {key}")
+        validate_config(required_keys, self.config, self.logger)
         
         # 验证特定配置
         if not self.characters:
@@ -132,7 +129,7 @@ class GPTSoVitsAgent:
             # 初始化 AsyncClient
             self.client = httpx.AsyncClient(
                 limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
-                timeout=httpx.Timeout(10.0, read=5.0)
+                timeout=httpx.Timeout(10.0, read=60.0)
             )
             self.logger.info("Async HTTP Client Initialized")
 

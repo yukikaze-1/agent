@@ -26,7 +26,7 @@ from collections import defaultdict
 # import redis.asyncio as redis  # 使用异步 Redis 客户端
 
 from Module.Utils.Logger import setup_logger
-from Module.Utils.LoadConfig import load_config
+from Module.Utils.ConfigTools import load_config, validate_config
 
 
 class MicroServiceGateway():
@@ -62,7 +62,7 @@ class MicroServiceGateway():
         self.routes: Dict[str, str] = self.config["routes"]
         
         # 验证配置文件
-        self.validate_config()
+        self._validate_config()
         
         # 确保 routes 中的每个服务 URL 包含协议前缀
         for server, url in self.routes.items():
@@ -86,17 +86,16 @@ class MicroServiceGateway():
         self.setup_routes()
 
     
-    def validate_config(self):
+    def _validate_config(self):
         """验证配置文件是否包含所有必需的配置项"""
         required_keys = ["consul_url", "routes", "services", "host", "port", "service_name", "service_id","health_check_url"]
-        for key in required_keys:
-            if key not in self.config:
-                self.logger.error(f"Missing required configuration key: {key}")
-                raise KeyError(f"Missing required configuration key: {key}")
+        validate_config(required_keys, self.config, self.logger)
+        
         # 检查 routes 是否为空
         if not self.routes:
             self.logger.error("No routes defined in configuration.")
             raise ValueError("No routes defined in configuration.")
+        
         # 检查 routes 中的每个 URL 是否包含协议前缀
         for server, url in self.routes.items():
             if not url.startswith("http://") and not url.startswith("https://"):
@@ -110,7 +109,7 @@ class MicroServiceGateway():
         # 应用启动时执行
         self.client = httpx.AsyncClient(
             limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
-            timeout=httpx.Timeout(10.0, read=5.0)
+            timeout=httpx.Timeout(10.0, read=60.0)
         )
         self.logger.info("Async HTTP Client Initialized")
         
@@ -351,7 +350,7 @@ class MicroServiceGateway():
                 url=target_url,
                 headers=self.filter_headers(request.headers),
                 content=await request.body(),
-                timeout=httpx.Timeout(10.0, read=5.0)
+                timeout=httpx.Timeout(10.0, read=60.0)
             )
             self.reset_failure(service_name, instance)
             return Response(
@@ -412,7 +411,7 @@ class MicroServiceGateway():
                 url=user_service_url,
                 headers=self.filter_headers(request.headers),
                 content=await request.body(),
-                timeout=httpx.Timeout(10.0, read=5.0)
+                timeout=httpx.Timeout(10.0, read=60.0)
             )
             # 检查响应状态
             forwarded_response.raise_for_status()

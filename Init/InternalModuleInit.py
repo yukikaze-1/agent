@@ -29,7 +29,7 @@ from typing import List, Dict, Tuple, Any, Optional
 from dotenv import dotenv_values
 
 from Module.Utils.Logger import setup_logger
-from Module.Utils.LoadConfig import load_config
+from Module.Utils.ConfigTools import load_config
 
 
 class InternalModuleManager:

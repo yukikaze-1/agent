@@ -14,7 +14,7 @@ from fastapi import Form, FastAPI
 from typing import Dict
 from dotenv import dotenv_values
 
-from Module.Utils.LoadConfig import load_config
+from Module.Utils.ConfigTools import load_config
 from Module.Utils.Logger import setup_logger
 
 class UserTextInputProcessModule:

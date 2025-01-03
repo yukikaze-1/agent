@@ -18,7 +18,7 @@ import concurrent.futures
 
 from Module.Utils.Database.UserAccountDataBaseAgent import  UserAccountDataBaseAgent
 from Module.Utils.Logger import setup_logger
-from Module.Utils.LoadConfig import load_config
+from Module.Utils.ConfigTools import load_config, validate_config
 
 # from Service.Other.EnvironmentManagerClient import EnvironmentManagerClient
 
@@ -42,7 +42,8 @@ class UserService:
         self.config = load_config(config_path=self.config_path, config_name='UserService', logger=self.logger)
         
         # 验证配置文件
-        self.validate_config()
+        required_keys = ["consul_url", "host", "port", "service_name", "service_id", "health_check_url"]
+        validate_config(required_keys, self.config, self.logger)
         
         # 用户信息数据库
         self.usr_account_database = UserAccountDataBaseAgent(logger=self.logger)
@@ -80,15 +81,6 @@ class UserService:
         
         # 设置路由
         self.setup_routes()
-        
-        
-    def validate_config(self):
-        """验证配置文件是否包含所有必需的配置项"""
-        required_keys = ["consul_url", "host", "port", "service_name", "service_id", "health_check_url"]
-        for key in required_keys:
-            if key not in self.config:
-                self.logger.error(f"Missing required configuration key: {key}")
-                raise KeyError(f"Missing required configuration key: {key}")
     
     
     async def lifespan(self, app: FastAPI):
@@ -96,7 +88,7 @@ class UserService:
         # 应用启动时执行
         self.client = httpx.AsyncClient(
             limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
-            timeout=httpx.Timeout(10.0, read=5.0)
+            timeout=httpx.Timeout(10.0, read=60.0)
         )
         self.logger.info("Async HTTP Client Initialized")
         

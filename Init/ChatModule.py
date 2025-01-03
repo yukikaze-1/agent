@@ -9,7 +9,7 @@
 """
 
 from Module.LLM.OllamaAgent import OllamaAgent
-from Module.Utils.LoadConfig import load_config
+from Module.Utils.ConfigTools import load_config
 from Module.Utils.Logger import setup_logger
 
 class ChatModule:

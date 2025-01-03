@@ -33,7 +33,7 @@ from typing import List, Dict, Optional, Tuple
 from dotenv import dotenv_values
 
 from Module.Utils.Logger import setup_logger
-from Module.Utils.LoadConfig import load_config
+from Module.Utils.ConfigTools import load_config
 
 # TODO 要支持stop系列函数，则每个模块应添加支持stop的方法
 # TODO ollama run llama3.2好像有点问题，没跑起来？
