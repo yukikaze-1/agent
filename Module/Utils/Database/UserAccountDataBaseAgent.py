@@ -55,6 +55,7 @@ class UserAccountDataBaseAgent():
         self.db_name = self.config.get("database","")
         self.table = self.config.get("table", "")
         
+        # TODO 应该是向MySQLAgent注册，返回一个链接id
         self.db = MySQLAgent(logger=self.logger)
         self.connect_id = -1
         
@@ -98,15 +99,31 @@ class UserAccountDataBaseAgent():
             return False
         
     
+    def delete_usr_info(self, username: str)->bool:
+        """删除用户信息"""
+        delete_sql = f"" 
+        result = self.db.delete(self.connect_id, delete_sql, [username,])
+        if result:
+        # TODO 待修改
+            self.logger.info(f"Delete userinfo success. Username:{username}")
+            return True
+        else:
+            self.logger.warning(f"Delete userinfo failed. Username:{username}")
+            return False
+        
+    
     def connect_to_db(self):
+        """连接MySQL数据库"""
         res = self.db.connect(host=self.config["host"],
                         user=self.config["user"],
                         password=self.config["password"],
                         database=self.config["database"],
                         )
+        # 连接失败
         if res == -1:
             self.logger.error(f"Connect to database '{self.db_name}' failed!")
             raise ConnectionError(f"Connect to database '{self.db_name}' failed!")
+        # 连接成功
         else:    
             self.connect_id = res
             self.logger.info(f"Connect to database '{self.db_name}' success!")

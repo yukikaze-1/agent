@@ -1,5 +1,4 @@
 # 用户账户数据库配置
----
 UserAccountDataBaseAgent:
   host: localhost
   port: 3306
@@ -8,3 +7,18 @@ UserAccountDataBaseAgent:
   database: "userinfo"
   table: "account"
   charset: "utf8mb4"
+
+# MySQLAgent配置
+MySQLAgent:
+  host: 127.0.0.1
+  port: 20050
+
+  # Consul 服务器的 URL，包括协议前缀
+  consul_url: "http://127.0.0.1:8500"
+
+  # 健康检查的 URL
+  health_check_url: "http://127.0.0.1:20050/health"  # 可选，默认会自动生成
+
+  # 当前微服务的名称和唯一标识符
+  service_name: "MySQLAgent"
+  service_id: "MySQLAgent-127.0.0.1:20050"  # 可选，默认会自动生成

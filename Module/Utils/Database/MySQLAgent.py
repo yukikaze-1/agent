@@ -1,106 +1,341 @@
 """
-    MySQL的模块类
+    MySQL的代理
     提供MySQL的封装
     使用pymsql
 """
 
+import uvicorn
+import httpx
+import asyncio
 import pymysql
 from logging import Logger
-from typing import List, Optional, Tuple, Dict
+from typing import List, Optional, Tuple, Dict, Any
+from dotenv import dotenv_values
+from fastapi import FastAPI, Form, Body, HTTPException
+from pydantic import BaseModel
 
 import pymysql.cursors
 
+from Module.Utils.Logger import setup_logger
+from Module.Utils.ConfigTools import load_config, validate_config
+
+
+class SQLRequest(BaseModel):
+    id: int
+    sql: str
+    sql_args: List[str]
+    
+    
+class ConnectRequest(BaseModel):
+    host: str
+    user: str
+    password: str
+    database: str
+    port: str
+    charset: str
+    
 
 class MySQLAgent:
     """
-    MySQL封装类
+    MySQL代理
     用于管理 MySQL 数据库连接池。
     """
-    def __init__(self, logger: Logger):
-        self.logger = logger
+    def __init__(self):
+        self.logger = setup_logger(name="MySQLAgent", log_path="InternalModule")
+
+        # 加载环境变量和配置
+        self.env_vars = dotenv_values("/home/yomu/agent/Module/Utils/Database/.env") 
+        self.config_path = self.env_vars.get("MYSQL_AGENT_CONFIG_PATH","") 
+        self.config: Dict = load_config(config_path=self.config_path, config_name='MySQLAgent', logger=self.logger)
+        
+        # 验证配置文件
+        required_keys = ["consul_url", "host", "port" ,"service_name", "service_id", "health_check_url"]
+        validate_config(required_keys, self.config, self.logger)
+        
+        # Consul URL，确保包含协议前缀
+        self.consul_url: str = self.config.get("consul_url", "http://127.0.0.1:8500")
+        if not self.consul_url.startswith("http://") and not self.consul_url.startswith("https://"):
+            self.consul_url = "http://" + self.consul_url
+            self.logger.info(f"Consul URL adjusted to include http://: {self.consul_url}") 
+        
+        # 微服务本身地址
+        self.host = self.config.get("host", "127.0.0.1")
+        self.port = self.config.get("port", 20050)
+        
+        # 服务注册信息
+        self.service_name = self.config.get("service_name", "OllamaAgent")
+        self.service_id = self.config.get("service_id", f"{self.service_name}-{self.host}:{self.port}")
+        self.health_check_url = self.config.get("health_check_url", f"http://{self.host}:{self.port}/health")
+        
         self.ids = 0
         # 存储 (id, connection) 的列表
         self.connections: Dict[int, pymysql.connections.Connection] = {}
         
-    def query(self,id: int, sql: str, sql_args: List[str]):
+        # 初始化 httpx.AsyncClient
+        self.client = None  # 在lifespan中初始化
+        
+        # 初始化 FastAPI 应用，使用生命周期管理
+        self.app = FastAPI(lifespan=self.lifespan)
+        
+        # 设置路由
+        self.setup_routes()
+        
+    
+    async def lifespan(self, app: FastAPI):
+        """管理应用生命周期"""
+        self.logger.info("Starting lifespan...")
+
+        try:
+            # 初始化 AsyncClient
+            self.client = httpx.AsyncClient(
+                limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
+                timeout=httpx.Timeout(10.0, read=60.0)
+            )
+            self.logger.info("Async HTTP Client Initialized")
+
+            # 注册服务到 Consul
+            self.logger.info("Registering service to Consul...")
+            await self.register_service_to_consul(self.service_name, self.service_id, self.host, self.port, self.health_check_url)
+            self.logger.info("Service registered to Consul.")
+
+            yield  # 应用正常运行
+
+        except Exception as e:
+            self.logger.error(f"Exception during lifespan: {e}")
+            raise
+
+        finally:
+            # 关闭 AsyncClient
+            self.logger.info("Shutting down Async HTTP Client")
+            if self.client:
+                await self.client.aclose() 
+                
+            # 注销服务从 Consul
+            try:
+                self.logger.info("Deregistering service from Consul...")
+                await self.unregister_service_from_consul(self.service_id)
+                self.logger.info("Service deregistered from Consul.")
+            except Exception as e:
+                self.logger.error(f"Error while deregistering service: {e}")    
+             
+            # 关闭所有数据库连接    
+            self.close_all()
+            
+        
+    # --------------------------------
+    # Consul 服务注册与注销
+    # --------------------------------
+    async def register_service_to_consul(self, service_name, service_id, address, port, health_check_url, retries=3, delay=2.0):
+        """向 Consul 注册该微服务网关"""
+        payload = {
+            "Name": service_name,
+            "ID": service_id,
+            "Address": address,
+            "Port": port,
+            "Tags": ["v1", "MySQLAgent"],
+            "Check": {
+                "HTTP": health_check_url,
+                "Interval": "10s",
+                "Timeout": "5s",
+            }
+        }
+
+        for attempt in range(1, retries + 1):
+            try:
+                response = await self.client.put(f"{self.consul_url}/v1/agent/service/register", json=payload)
+                if response.status_code == 200:
+                    self.logger.info(f"Service '{service_name}' registered successfully to Consul.")
+                    return
+                else:
+                    self.logger.warning(f"Attempt {attempt}: Failed to register service '{service_name}': {response.status_code}, {response.text}")
+            except Exception as e:
+                self.logger.error(f"Attempt {attempt}: Error while registering service '{service_name}': {e}")
+            
+            if attempt < retries:
+                self.logger.info(f"Retrying in {delay} seconds...")
+                await asyncio.sleep(delay)
+
+        self.logger.error(f"All {retries} attempts to register service '{service_name}' failed.")
+        raise HTTPException(status_code=500, detail="Service registration failed.")
+    
+    
+    async def unregister_service_from_consul(self, service_id: str):
+        """从 Consul 注销该微服务网关"""
+        try:
+            response = await self.client.put(f"{self.consul_url}/v1/agent/service/deregister/{service_id}")
+            if response.status_code == 200:
+                self.logger.info(f"Service with ID '{service_id}' deregistered successfully from Consul.")
+            else:
+                self.logger.warning(f"Failed to deregister service ID '{service_id}': {response.status_code}, {response.text}")
+        except Exception as e:
+            self.logger.error(f"Error while deregistering service ID '{service_id}': {e}")
+    
+    # --------------------------------
+    # 设置路由
+    # --------------------------------
+    def setup_routes(self):
+        """设置 API 路由"""
+        
+        @self.app.get("/health", summary="健康检查接口")
+        async def health_check():
+            """返回服务的健康状态"""
+            return {"status": "healthy"}
+        
+        
+        @self.app.post("/database/mysql/insert")
+        async def insert(payload: SQLRequest):
+            return await self._insert(payload.id, payload.sql, payload.sql_args)
+
+        
+        @self.app.post("/database/mysql/update", summary="更新接口")
+        async def update(payload: SQLRequest):
+            return await self._update(payload.id, payload.sql, payload.sql_args)
+        
+        
+        @self.app.post("/database/mysql/delete", summary= "删除接口")
+        async def delete(payload: SQLRequest):
+            return await self._delete(payload.id, payload.sql, payload.sql_args)
+        
+        
+        @self.app.post("/database/mysql/query", summary= "查询接口")
+        async def query(payload: SQLRequest):
+            return await self._query(payload.id, payload.sql, payload.sql_args)
+        
+        
+        @self.app.post("/database/mysql/connect", summary= "连接接口")
+        async def connect(payload: ConnectRequest):
+            return await self._connect(payload.host, payload.user, payload.password, payload.database, payload.port, payload.charset)
+        
+    # --------------------------------
+    # 功能函数
+    # --------------------------------     
+    async def _query(self,id: int, sql: str, sql_args: List[str])-> Dict[str, Any]:
         """查询"""
         connection=self.connections[id]
+        
+        operator = "Query"
+        message=f"Query success."
+        result = False
+        
         if connection:
             try:
                 with connection.cursor(pymysql.cursors.DictCursor) as cursor:
                     cursor.execute(sql, sql_args)
                     result = cursor.fetchone()
-                    return result
+                    self.logger.info(f"Operator: {operator}, Message:{message}, Result: {result}")
+                    return {"Operator": operator, "Message":message, "Result":result}
+                
             except Exception as e:
-                self.logger.error(f"Query failed! Error:{str(e)}")
-                return None
+                message = f"Query failed! Error:{str(e)}"
+                self.logger.error(f"Operator: {operator}, Message:{message}, Result: {result}")
+                return {"Operator": operator, "Message":message, "Result":result}
+
         else:
-            self.logger.error(f"ID {id} not exist! Query failed")
+            message = f"ID {id} not exist! Query failed"
+            self.logger.error(f"Operator: {operator}, Message:{message}, Result: {result}")
+            return {"Operator": operator, "Message":message, "Result":result}
             
+                    
     
-    def insert(self, id: int, sql: str, sql_args: List[str])->bool:
+    async def _insert(self, id: int, sql: str, sql_args: List[str])-> Dict[str, Any]:
         """插入"""
         connection=self.connections[id]
+        
+        operator = "Insert"
+        message=f"Insert success."
+        result = False
+        
         if connection:
             try:
                 with connection.cursor(pymysql.cursors.DictCursor) as cursor:
                     cursor.execute(sql, sql_args)
                     connection.commit()
-                    return True
+                    result = True
+                    self.logger.info(f"Operator: {operator}, Message:{message}, Result: {result}")
+                    return {"Operator": operator, "Message":message, "Result":result}
+                
             except Exception as e:
-                self.logger.error(f"Insert failed,Error:{str(e)}")
-                return False
+                message= f"Insert failed,Error:{str(e)}"
+                self.logger.error(f"Operator: {operator}, Message:{message}, Result: {result}")
+                return {"Operator": operator, "Message":message, "Result":result}
         else:
-            self.logger.error(f"ID {id} not exist! Insert failed")    
-            return False
+            message = f"ID {id} not exist! Insert failed"
+            self.logger.error(message)    
+            return {"Operator": operator, "Message":message, "Result":result}
         
-    def delete(self, id: int, sql: str, sql_args: List[str])->bool:
+        
+    async def _delete(self, id: int, sql: str, sql_args: List[str])-> Dict[str, Any]:
         """删除"""
         connection=self.connections[id]
+        
+        operator = "Delete"
+        message=f"Delete success."
+        result = False
+        
         if connection:
             try:
                 with connection.cursor(pymysql.cursors.DictCursor) as cursor:
                     cursor.execute(sql, sql_args)
                     connection.commit()
+                    result = True
                     
                     # 检查是否删除了记录
                     if cursor.rowcount > 0:
-                        self.logger.info(f"Delete success, {cursor.rowcount} rows affected")
-                        return True
+                        message = f"Delete success, {cursor.rowcount} rows affected"
+                        self.logger.info(f"Operator: {operator}, Message:{message}, Result: {result}")
+                        return {"Operator": operator, "Message":message, "Result":result}
                     else:
-                        self.logger.info(f"Delete success, but no rows were affected")
-                        return False
+                        message = f"Delete success, but no rows were affected"
+                        self.logger.warning(f"Operator: {operator}, Message:{message}, Result: {result}")
+                        return {"Operator": operator, "Message":message, "Result":result}
+                    
             except Exception as e:
-                self.logger.error(f"Delete failed,Error:{str(e)}")
-                return False
+                message = f"Delete failed,Error:{str(e)}"
+                self.logger.error(f"Operator: {operator}, Message:{message}, Result: {result}")
+                return {"Operator": operator, "Message":message, "Result":result}
         else:
-            self.logger.error(f"ID {id} not exist! Delete failed")    
-            return False
+            message = f"ID {id} not exist! Delete failed"
+            self.logger.error(f"Operator: {operator}, Message:{message}, Result: {result}")
+            return {"Operator": operator, "Message":message, "Result":result}
+        
     
-    def modify(self, id: int, sql: str, sql_args: List[str])->bool:
+    async def _update(self, id: int, sql: str, sql_args: List[str])-> Dict[str, Any]:
         """修改"""
         connection=self.connections[id]
+        
+        operator = "Update"
+        message=f"Update success."
+        result = False
+        
         if connection:
             try:
                 with connection.cursor(pymysql.cursors.DictCursor) as cursor:
                     cursor.execute(sql, sql_args)
                     connection.commit()
+                    result = True
                     
                     # 检查是否更新了记录
                     if cursor.rowcount > 0:
-                        self.logger.info(f"Update success, {cursor.rowcount} rows affected")
-                        return True
+                        message = f"Update success, {cursor.rowcount} rows affected"
+                        self.logger.info(f"Operator: {operator}, Message:{message}, Result: {result}")
+                        return {"Operator": operator, "Message":message, "Result":result}
                     else:
-                        self.logger.warning(f"Update success, but no rows were affected")
-                        return False
+                        message = f"Update success, but no rows were affected"
+                        self.logger.warning(f"Operator: {operator}, Message:{message}, Result: {result}")
+                        return {"Operator": operator, "Message":message, "Result":result}
+                    
             except Exception as e:
-                self.logger.error(f"Update failed,Error:{str(e)}")
-                return False
+                message = f"Update failed,Error:{str(e)}"
+                self.logger.error(f"Operator: {operator}, Message:{message}, Result: {result}")
+                return {"Operator": operator, "Message":message, "Result":result}
+            
         else:
-            self.logger.error(f"ID {id} not exist! Update failed")    
-            return False
+            message = f"ID {id} not exist! Update failed"
+            self.logger.error(f"Operator: {operator}, Message:{message}, Result: {result}")
+            return {"Operator": operator, "Message":message, "Result":result}
+        
     
-    def connect(self, host: str, user: str, password: str, database: str, port: int = 3306, charset: str = "utf8mb4") -> int:
+    async def _connect(self, host: str, user: str, password: str, database: str, port: int = 3306, charset: str = "utf8mb4")-> Dict[str, Any]:
         """
         创建一个新的 MySQL 数据库连接，并返回其 ID。
 
@@ -112,6 +347,11 @@ class MySQLAgent:
         :param charset: 字符集，默认为 'utf8mb4'
         :return: 新建连接的 ID
         """
+        
+        operator = "Connect"
+        message=f"Connect success."
+        result = False
+        
         try:
             connection = pymysql.connect(
                 host=host,
@@ -124,10 +364,16 @@ class MySQLAgent:
             connection_id = self.ids
             self.ids += 1
             self.connections[connection_id] = connection
-            return connection_id
+            message = f"Connect success. ConnectionID: '{connection_id}'"
+            result = True
+            self.logger.info(f"Operator: {operator}, Message:{message}, Result: {result}")
+            return {"Operator": operator, "Message":message, "Result":result, "ConnectionID": connection_id}
+        
         except pymysql.MySQLError as e:
-            self.logger.error(f"Failed to connect with mysql databse : {e}")
-            return -1
+            message = f"Failed to connect with mysql databse : {e}"
+            self.logger.error(message)
+            return {"Operator": operator, "Message":message, "Result":result, "ConnectionID": -1}
+        
 
     def close(self, id: int) -> bool:
         """
@@ -136,13 +382,17 @@ class MySQLAgent:
         :param id: 要关闭的连接 ID
         :return: 是否成功关闭
         """
+        if id not in self.connections:
+            self.logger.error(f"No such connection ID: {id}")
+            return False
         connection = self.connections[id]
         try:
             connection.close()
+            del self.connections[id]
             return True
         except pymysql.MySQLError as e:
-            self.logger.error(f"Failed to close the connection with mysql databse : {e}")
-            return False
+            self.logger.error(f"Failed to close the connection with mysql database : {e}")
+            raise
 
 
     def close_all(self) -> None:
@@ -151,14 +401,19 @@ class MySQLAgent:
         """
         ids = list(self.connections.keys())
         for id in ids:
-            connect = self.connections[id]
             try:
-                connect.close()
-                del self.connections[id]
+                res = self.close(id)
+                if res:
+                    self.logger.info(f"Success to close the connection with mysql databse.")
+                    del self.connections[id]
+                else:
+                    self.logger.error(f"Failed to close the connection with mysql databse.")
+                
             except pymysql.MySQLError as e:
                 self.logger.error(f"Failed to close the connection with mysql databse : {e}")
 
         self.connections.clear()
+
 
     def __del__(self):
         """
@@ -166,4 +421,17 @@ class MySQLAgent:
         """
         self.close_all()
         self.logger.info("ALL MySQL connections are closed.")
+        
+        
+    def run(self):
+        uvicorn.run(self.app, host=self.host, port=self.port)
+        
+        
+def main():
+    agent = MySQLAgent()
+    agent.run()
+
+
+if __name__ == "__main__":
+    main()
 
