@@ -284,6 +284,7 @@ class APIGateway:
         self.logger.error(f"All {retries} attempts to register service '{service_name}' failed.")
         raise HTTPException(status_code=500, detail="Service registration failed.")
     
+    
     async def unregister_service_from_consul(self, service_id: str):
         """从 Consul 注销该微服务网关"""
         try:

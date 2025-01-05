@@ -5,17 +5,16 @@
 # Description:  agent User information database initialize
 
 """
-    初始化用户账户数据库
+    用户账户数据库
 """
-
-from typing import Dict
-from typing import Tuple, Optional
+import httpx
+from typing import Tuple, Optional, Dict
 from dotenv import dotenv_values
 from logging import Logger
+from fastapi import HTTPException
 
 from Module.Utils.Logger import setup_logger
-from Module.Utils.ConfigTools import load_config
-from Module.Utils.Database.MySQLAgent import MySQLAgent
+from Module.Utils.ConfigTools import load_config, validate_config
 
 
 class UserAccountDataBaseAgent():
@@ -48,84 +47,210 @@ class UserAccountDataBaseAgent():
     def __init__(self, logger: Logger=None):
         self.logger = logger or setup_logger(name="UserAccountDataBaseAgent", log_path="InternalModule")
         
+        # 加载环境变量和配置
         self.env_vars = dotenv_values("/home/yomu/agent/Module/Utils/Database/.env")
         self.config_path = self.env_vars.get("USER_ACCOUNT_DATABASE_AGENT_CONFIG_PATH","")
         self.config = load_config(config_path=self.config_path, config_name='UserAccountDataBaseAgent', logger=self.logger)
         
-        self.db_name = self.config.get("database","")
+        # 验证配置文件
+        required_keys = [ "mysql_host", "mysql_port", "mysql_agent_url", "mysql_user",  "mysql_password", "database", "table", "charset"]
+        validate_config(required_keys, self.config, self.logger)
+        
+        # MySQL配置
+        self.mysql_host = self.config.get("mysql_host", "")
+        self.mysql_port = self.config.get("mysql_port", "")
+        self.mysql_agent_url = self.config.get("mysql_agent_url", "")
+        self.mysql_user = self.config.get("mysql_user", "")
+        self.mysql_password = self.config.get("mysql_password", "")  
+        self.database = self.config.get("database","")
         self.table = self.config.get("table", "")
+        self.charset = self.config.get("charset", "") 
         
-        # TODO 应该是向MySQLAgent注册，返回一个链接id
-        self.db = MySQLAgent(logger=self.logger)
-        self.connect_id = -1
+        # 初始化 AsyncClient
+        self.client = httpx.AsyncClient(
+            limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
+            timeout=httpx.Timeout(10.0, read=60.0)
+        )
         
-        self.connect_to_db()
+        # 向MySQLAgent注册，返回一个链接id
+        self.connect_id: Optional[int] = None
         
         
-    def fetch_user_by_name(self,username: str)-> Optional[Dict]:
+    async def init_connection(self) -> None:
+        """
+        真正执行连接, 并为 self.connect_id 赋值
+        """
+        try:
+            self.connect_id = await self.connect_to_database()
+            self.logger.info(f"connect_id = {self.connect_id}")
+        except Exception as e:
+            self.logger.error(f"Failed to init connection: {e}")
+            raise
+        
+    # --------------------------------
+    # 功能函数
+    # --------------------------------     
+    async def fetch_user_by_name(self,username: str)-> Optional[Dict]:
         """通过名字来查询用户账号信息"""
         query_sql = f"SELECT * FROM {self.table} WHERE username = %s;"
-        result = self.db.query(self.connect_id, sql=query_sql, sql_args=[username,])
-        if not result:
-            self.logger.info(f"No such a account named {username}")
+        url = self.mysql_agent_url + "/database/mysql/query"
+        payload = {
+            "id": self.connect_id,
+            "sql": query_sql,
+            "sql_args": [username]
+        }
+        try:
+            response = await self.client.post(url=url, json=payload)
+            response.raise_for_status()
+            response_data :Dict = response.json()
+            
+            if response.status_code == 200:
+                self.logger.info(f"Query success.")
+                result = response_data["Result"]
+                if result:
+                    return result
+                else:
+                    self.logger.info(f"No such a account named {username}")
+                    return None
+            else:
+                self.logger.error(f"Query failed! Error:{response}")
+                return None
+            
+        except Exception as e:
+            self.logger.error(f"Query failed! Error:{str(e)}")
             return None
-        self.logger.info(f"Query success. Username:{username}")
-        return result
     
     
-    def insert_user_info(self, username: str,  password: str)->bool:
+    async def insert_user_info(self, username: str,  password: str)->bool:
         """插入用户信息"""
         insert_sql = f"INSERT INTO {self.table} (username, password) VALUES (%s, %s);"
-        result = self.db.insert(self.connect_id, sql=insert_sql, sql_args=[username, password])
-        if result:
-            # TODO 待修改，正式上线时删掉password
-            self.logger.info(f"Insert userinfo success. Username:{username}, Password:{password}")
-            return True
-        else:
-            self.logger.warning(f"Insert userinfo failed. Username:{username}")
+        url = self.mysql_agent_url + "/database/mysql/insert"
+        payload = {
+            "id": self.connect_id,
+            "sql": insert_sql,
+            "sql_args": [username, password]
+        }
+        try:
+            response = await self.client.post(url=url, json=payload)
+            response.raise_for_status()
+            response_data :Dict = response.json()
+            
+            if response.status_code == 200:
+                result = response_data["Result"]
+                if result :
+                    # TODO 待修改，正式上线时删掉password
+                    self.logger.info(f"Insert userinfo success. Username:{username}, Password:{password}")
+                    return True
+                else:
+                    self.logger.warning(f"Insert userinfo failed. Username:{username}")
+                    return False
+            else:
+                self.logger.error(f"Insert userinfo failed! Error:{response}")
+                return False
+            
+        except Exception as e:
+            self.logger.error(f"Insert failed! Error:{str(e)}")
             return False
         
         
-    def update_user_password(self, username: str, new_password: str)->bool:
+    async def update_user_password(self, username: str, new_password: str)->bool:
         """修改用户密码"""
         update_sql = f"UPDATE {self.table} SET password = %s WHERE username = %s;"
-        result = self.db.modify(self.connect_id, update_sql, [new_password, username])
-        if result:
-            # TODO 待修改，正式上线时删掉NewPassword
-            self.logger.info(f"Insert userinfo success. Username:{username}, NewPassword:{new_password}")
-            return True
-        else:
-            self.logger.warning(f"Update password failed. Username:{username}")
-            return False
-        
-    
-    def delete_usr_info(self, username: str)->bool:
-        """删除用户信息"""
-        delete_sql = f"" 
-        result = self.db.delete(self.connect_id, delete_sql, [username,])
-        if result:
-        # TODO 待修改
-            self.logger.info(f"Delete userinfo success. Username:{username}")
-            return True
-        else:
-            self.logger.warning(f"Delete userinfo failed. Username:{username}")
-            return False
-        
-    
-    def connect_to_db(self):
-        """连接MySQL数据库"""
-        res = self.db.connect(host=self.config["host"],
-                        user=self.config["user"],
-                        password=self.config["password"],
-                        database=self.config["database"],
-                        )
-        # 连接失败
-        if res == -1:
-            self.logger.error(f"Connect to database '{self.db_name}' failed!")
-            raise ConnectionError(f"Connect to database '{self.db_name}' failed!")
-        # 连接成功
-        else:    
-            self.connect_id = res
-            self.logger.info(f"Connect to database '{self.db_name}' success!")
+        url = self.mysql_agent_url + "/database/mysql/update"
+        payload = {
+            "id": self.connect_id,
+            "sql": update_sql,
+            "sql_args": [new_password, username]
+        }
+        try:
+            response = await self.client.post(url=url, json=payload)
+            response.raise_for_status()
+            response_data :Dict = response.json()
             
+            if response.status_code == 200:
+                result = response_data["Result"]
+                if result :
+                    # TODO 待修改，正式上线时删掉password
+                    self.logger.info(f"Update password success. Username:{username}, NewPassword:{new_password}")
+                    return True
+                else:
+                    self.logger.warning(f"Update password failed. Username:{username}")
+                    return False
+            else:
+                self.logger.error(f"Update password failed! Error:{response}")
+                return False
+            
+        except Exception as e:
+            self.logger.error(f"Update password failed! Error:{str(e)}")
+            return False
+        
+    
+    async def delete_usr_info(self, username: str)->bool:
+        """删除用户信息"""
+        delete_sql = f"DELETE FROM {self.table} WHERE username=%s;" 
+        url = self.mysql_agent_url + "/database/mysql/delete"
+        payload = {
+            "id": self.connect_id,
+            "sql": delete_sql,
+            "sql_args": [username]
+        }
+        try:
+            response = await self.client.post(url=url, json=payload)
+            response.raise_for_status()
+            response_data :Dict = response.json()
+            
+            if response.status_code == 200:
+                result = response_data["Result"]
+                if result :
+                    self.logger.info(f"Delete user success. Username:{username}")
+                    return True
+                else:
+                    self.logger.warning(f"Delete user failed. Username:{username}")
+                    return False
+            else:
+                self.logger.error(f"Delete user failed! Error:{response}")
+                return False
+            
+        except Exception as e:
+            self.logger.error(f"Delete user failed! Error:{str(e)}")
+            return False
+        
+    
+    async def connect_to_database(self)->int:
+        """连接MySQL数据库"""
+        headers = {"Content-Type": "application/json"}
+        url = self.mysql_agent_url + "/database/mysql/connect"
+        payload = {
+            "host": self.mysql_host,
+            "port": self.mysql_port,
+            "user": self.mysql_user,
+            "password": self.mysql_password,
+            "database": self.database,
+            "charset":  self.charset
+        }
+        try:
+            response = await self.client.post(url=url, json=payload, headers=headers)
+            response.raise_for_status()
+            response_data :Dict = response.json()
+            
+            if response.status_code == 200:
+                id = response_data.get("ConnectionID")
+                self.logger.info(f"Success connect to the database '{self.database}'. Message: '{response_data}'")
+                return int(id)
+            else:
+                self.logger.error(f"Unexpected response structure: {response_data}")
+                raise ValueError(f"Failed to connect to the database '{self.database}'")
+                
+        except httpx.HTTPStatusError as e:
+            self.logger.error(f"Connect to database '{self.database}' failed! HTTP error: {e.response.status_code}, {e.response.text}")
+            raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+        
+        except httpx.RequestError as e:
+            self.logger.error(f"Connect to database '{self.database}' failed! Request error: {e}")
+            raise HTTPException(status_code=503, detail="Failed to communicate with MySQLAgent.")
+        
+        except Exception as e:
+            self.logger.error(f"Connect to database '{self.database}' failed! Unexpected error: {e}")
+            raise HTTPException(status_code=500, detail="Internal server error.")
+        
         

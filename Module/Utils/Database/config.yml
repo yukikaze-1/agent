@@ -1,9 +1,10 @@
-# 用户账户数据库配置
+# UserAccountDataBaseAgent配置
 UserAccountDataBaseAgent:
-  host: localhost
-  port: 3306
-  user: "root"
-  password: "scgy19971205wq"
+  mysql_host: 127.0.0.1
+  mysql_port: 3306
+  mysql_agent_url: "http://127.0.0.1:20050"
+  mysql_user: "root"
+  mysql_password: "scgy19971205wq"
   database: "userinfo"
   table: "account"
   charset: "utf8mb4"

@@ -46,7 +46,8 @@ class UserService:
         validate_config(required_keys, self.config, self.logger)
         
         # 用户信息数据库
-        self.usr_account_database = UserAccountDataBaseAgent(logger=self.logger)
+        self.usr_account_database = UserAccountDataBaseAgent()
+        
         
         # Consul URL，确保包含协议前缀
         self.consul_url: str = self.config.get("consul_url", "http://127.0.0.1:8500")
@@ -95,6 +96,8 @@ class UserService:
         try:
             # 注册服务到 Consul
             await self.register_service_to_consul(self.service_name, self.service_id, self.host, self.port, self.health_check_url)
+            # 异步调用 init_connection，让 usr_account_database 拿到 connect_id
+            await self.usr_account_database.init_connection()
             yield  # 应用正常运行
             
         except Exception as e:
@@ -102,6 +105,8 @@ class UserService:
             raise
         
         finally:
+            # 关闭UserAccountDataBaseAgent中的httpx
+            await self.usr_account_database.client.aclose()
             # 注销服务从 Consul
             try:
                 self.logger.info("Deregistering service from Consul...")
@@ -246,8 +251,9 @@ class UserService:
         """验证用户登录"""
         operator = 'usr_login'
         try:
-            loop = asyncio.get_event_loop()
-            res = await loop.run_in_executor(self.executor, self.usr_account_database.fetch_user_by_name, username)
+            # loop = asyncio.get_event_loop()
+            # res = await loop.run_in_executor(self.executor, self.usr_account_database.fetch_user_by_name, username)
+            res = await self.usr_account_database.fetch_user_by_name(username)
         except Exception as e:
             self.logger.error(f"Database error during login for user '{username}': {e}")
             # return {"result": False, "message": "Internal server error.", "username": username}
@@ -281,8 +287,9 @@ class UserService:
         """用户注册"""
         operator = 'usr_register'
         try:
-            loop = asyncio.get_event_loop()
-            res = await loop.run_in_executor(self.executor, self.usr_account_database.fetch_user_by_name, username)
+            # loop = asyncio.get_event_loop()
+            # res = await loop.run_in_executor(self.executor, self.usr_account_database.fetch_user_by_name, username)
+            res = await self.usr_account_database.fetch_user_by_name(username)
         except Exception as e:
             self.logger.error(f"Database error during registration for user '{username}': {e}")
             return {"result": False, "message": "Internal server error.", "username": username}
@@ -299,7 +306,8 @@ class UserService:
         
         # 注册
         try:
-            res = await loop.run_in_executor(self.executor, self.usr_account_database.insert_user_info, username, password)
+            # res = await loop.run_in_executor(self.executor, self.usr_account_database.insert_user_info, username, password)
+            res = await self.usr_account_database.insert_user_info(username, password)
         except Exception as e:
             self.logger.error(f"Database error during inserting user '{username}': {e}")
             return {"result": False, "message": "Internal server error.", "username": username}
@@ -333,8 +341,9 @@ class UserService:
         
         # 更新密码
         try:
-            loop = asyncio.get_event_loop()
-            res = await loop.run_in_executor(self.executor, self.usr_account_database.update_user_password, username, password)
+            # loop = asyncio.get_event_loop()
+            # res = await loop.run_in_executor(self.executor, self.usr_account_database.update_user_password, username, password)
+            res = await self.usr_account_database.update_user_password(username, password)
         except Exception as e:
             self.logger.error(f"Database error during password update for user '{username}': {e}")
             return {"result": False, "message": "Internal server error.", "username": username}

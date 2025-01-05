@@ -28,10 +28,10 @@ class SQLRequest(BaseModel):
     
 class ConnectRequest(BaseModel):
     host: str
+    port: int
     user: str
     password: str
     database: str
-    port: str
     charset: str
     
 
@@ -204,7 +204,7 @@ class MySQLAgent:
         
         @self.app.post("/database/mysql/connect", summary= "连接接口")
         async def connect(payload: ConnectRequest):
-            return await self._connect(payload.host, payload.user, payload.password, payload.database, payload.port, payload.charset)
+            return await self._connect(payload.host, payload.port, payload.user, payload.password, payload.database,  payload.charset)
         
     # --------------------------------
     # 功能函数
@@ -252,7 +252,7 @@ class MySQLAgent:
                     connection.commit()
                     result = True
                     self.logger.info(f"Operator: {operator}, Message:{message}, Result: {result}")
-                    return {"Operator": operator, "Message":message, "Result":result}
+                    return {"Operator": operator, "Message": message, "Result": result}
                 
             except Exception as e:
                 message= f"Insert failed,Error:{str(e)}"
@@ -335,7 +335,7 @@ class MySQLAgent:
             return {"Operator": operator, "Message":message, "Result":result}
         
     
-    async def _connect(self, host: str, user: str, password: str, database: str, port: int = 3306, charset: str = "utf8mb4")-> Dict[str, Any]:
+    async def _connect(self, host: str, port: int, user: str, password: str, database: str, charset: str)-> Dict[str, Any]:
         """
         创建一个新的 MySQL 数据库连接，并返回其 ID。
 
@@ -355,10 +355,10 @@ class MySQLAgent:
         try:
             connection = pymysql.connect(
                 host=host,
+                port=port,
                 user=user,
                 password=password,
                 database=database,
-                port=port,
                 charset=charset
             )
             connection_id = self.ids
