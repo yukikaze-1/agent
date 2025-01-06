@@ -114,6 +114,16 @@ external_services:
         is_base: true
         log_file: "UserService.log"
 
+    - ChatModule:
+        script: "/home/yomu/agent/Module/Chat/ChatModule.py"
+        service_name: "ChatModule"
+        conda_env: "/home/yomu/data/anaconda3/envs/agent"
+        args: []
+        use_python: true
+        run_in_background: true
+        is_base: true
+        log_file: "ChatModule.log"
+
   # (可选)启动的optional外部服务
   optional_services:
     

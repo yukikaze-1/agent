@@ -7,6 +7,10 @@ UserService:
   # Consul 服务器的 URL，包括协议前缀
   consul_url: "http://127.0.0.1:8500"
 
+  # 需要通过 Consul 进行服务发现的微服务列表
+  services:
+    - "MySQLAgent"
+
   # 健康检查的 URL
   health_check_url: "http://127.0.0.1:20010/health"  # 可选，默认会自动生成
 

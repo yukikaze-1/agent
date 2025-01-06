@@ -18,7 +18,12 @@ from collections import defaultdict
 
 from Module.Utils.Logger import setup_logger
 from Module.Utils.ConfigTools import load_config, validate_config
-
+from Module.Utils.ServiceTools import (
+    get_service_instances,
+    update_service_instances_periodically,
+    register_service_to_consul,
+    unregister_service_from_consul
+)
 
 
 class APIGateway:
@@ -97,9 +102,7 @@ class APIGateway:
         for server, url in self.routes.items():
             if not url.startswith("http://") and not url.startswith("https://"):
                 self.logger.error(f"Route URL for '{server}' must start with 'http://' or 'https://'. Current URL: {url}")
-                raise ValueError(f"Route URL for '{server}' must start with 'http://' or 'https://'.")
-
-        
+                raise ValueError(f"Route URL for '{server}' must start with 'http://' or 'https://'.")      
         
         
     async def lifespan(self, app: FastAPI):
@@ -111,12 +114,26 @@ class APIGateway:
         )
         self.logger.info("Async HTTP Client Initialized")
         
+        task = None
         try:
             # 注册服务到 Consul
-            await self.register_service_to_consul(self.service_name, self.service_id, self.register_address, self.port, self.health_check_url)
+            await register_service_to_consul(consul_url=self.consul_url,
+                                             client=self.client,
+                                             logger=self.logger,
+                                             service_name=self.service_name,
+                                             service_id=self.service_id,
+                                             address=self.register_address,
+                                             port=self.port,
+                                             health_check_url=self.health_check_url)
             
             # 启动后台任务
-            task = asyncio.create_task(self.update_service_instances_periodically())
+            task = asyncio.create_task(update_service_instances_periodically(
+                                            consul_url=self.consul_url,
+                                            client=self.client,
+                                            service_instances=self.service_instances,
+                                            config=self.config,
+                                            logger=self.logger
+                                        ))
             
             yield  # 应用正常运行
         except Exception as e:
@@ -124,16 +141,21 @@ class APIGateway:
             raise
         finally:
             # 关闭后台任务    
-            task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                self.logger.info("Background task cancelled successfully.")
+            # 如果 task 没有赋值过(None)，就不去 cancel
+            if task is not None:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    self.logger.info("Background task cancelled successfully.")
             
             # 注销服务从 Consul
             try:
                 self.logger.info("Deregistering service from Consul...")
-                await self.unregister_service_from_consul(self.service_id)
+                await unregister_service_from_consul(consul_url=self.consul_url,
+                                                     client=self.client,
+                                                     logger=self.logger,
+                                                     service_id=self.service_id)
                 self.logger.info("Service deregistered from Consul.")
             except Exception as e:
                 self.logger.error(f"Error while deregistering service: {e}")
@@ -144,48 +166,6 @@ class APIGateway:
                 await self.client.aclose()
         
 
-    # --------------------------------
-    # 1. 服务发现与动态更新
-    # --------------------------------
-    async def get_service_instances(self, service_name: str) -> List[Dict]:
-        """从 Consul 拉取服务实例列表"""
-        url = f"{self.consul_url}/v1/catalog/service/{service_name}"
-        try:
-            response = await self.client.get(url)
-            if response.status_code == 200:
-                instances = [
-                    {"address": instance["Address"], "port": instance["ServicePort"]}
-                    for instance in response.json()
-                ]
-                if instances:
-                    self.logger.info(f"Successfully fetched service instances for '{service_name}' from Consul.")
-                    self.logger.debug(f"Service instances for '{service_name}': {instances}")
-                else:
-                    self.logger.error(f"No service instances found for '{service_name}' in Consul.")
-                    # 可选择抛出异常或采取其他措施
-                    # raise ValueError(f"No service instances found for '{service_name}' in Consul.")
-                return instances
-            else:
-                self.logger.warning(f"Failed to fetch service instances for '{service_name}': {response.status_code}")
-        except httpx.RequestError as exc:
-            self.logger.error(f"Error fetching service instances from Consul for '{service_name}': {exc}")
-        return []
-    
-    
-    async def update_service_instances_periodically(self):
-        """后台任务：定期更新服务实例"""
-        while True:
-            try:
-                self.logger.info("Updating service instances...")
-                # 从配置中动态获取需要监控的服务列表
-                services = self.config.get("services", ["UserService"])
-                for service_name in services:
-                    instances = await self.get_service_instances(service_name)
-                    self.service_instances[service_name] = instances
-                    self.logger.debug(f"Service '{service_name}' instances updated: {instances}")
-            except Exception as e:
-                self.logger.error(f"Error updating service instances: {e}")
-            await asyncio.sleep(10)  # 每 10 秒更新一次
     
     
     # --------------------------------
@@ -247,55 +227,7 @@ class APIGateway:
     #         self.logger.error(f"Failed to initialize FastAPILimiter: {e}")
     #         raise    
     
-    
-    # --------------------------------
-    # 5. Consul 服务注册与注销
-    # --------------------------------
-    async def register_service_to_consul(self, service_name, service_id, address, port, health_check_url, retries=3, delay=2.0):
-        """向 Consul 注册该微服务网关"""
-        payload = {
-            "Name": service_name,
-            "ID": service_id,
-            "Address": address,
-            "Port": port,
-            "Tags": ["v1", "UserService"],
-            "Check": {
-                "HTTP": health_check_url,
-                "Interval": "10s",
-                "Timeout": "5s",
-            }
-        }
 
-        for attempt in range(1, retries + 1):
-            try:
-                response = await self.client.put(f"{self.consul_url}/v1/agent/service/register", json=payload)
-                if response.status_code == 200:
-                    self.logger.info(f"Service '{service_name}' registered successfully to Consul.")
-                    return
-                else:
-                    self.logger.warning(f"Attempt {attempt}: Failed to register service '{service_name}': {response.status_code}, {response.text}")
-            except Exception as e:
-                self.logger.error(f"Attempt {attempt}: Error while registering service '{service_name}': {e}")
-            
-            if attempt < retries:
-                self.logger.info(f"Retrying in {delay} seconds...")
-                await asyncio.sleep(delay)
-
-        self.logger.error(f"All {retries} attempts to register service '{service_name}' failed.")
-        raise HTTPException(status_code=500, detail="Service registration failed.")
-    
-    
-    async def unregister_service_from_consul(self, service_id: str):
-        """从 Consul 注销该微服务网关"""
-        try:
-            response = await self.client.put(f"{self.consul_url}/v1/agent/service/deregister/{service_id}")
-            if response.status_code == 200:
-                self.logger.info(f"Service with ID '{service_id}' deregistered successfully from Consul.")
-            else:
-                self.logger.warning(f"Failed to deregister service ID '{service_id}': {response.status_code}, {response.text}")
-        except Exception as e:
-            self.logger.error(f"Error while deregistering service ID '{service_id}': {e}")
-    
        
     # --------------------------------
     # 6. 请求转发逻辑

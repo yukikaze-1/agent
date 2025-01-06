@@ -1,0 +1,20 @@
+# ChatModule配置
+ChatModule:
+  # 微服务本身的地址和端口
+  host: 127.0.0.1
+  port: 20060
+
+  # Consul 服务器的 URL，包括协议前缀
+  consul_url: "http://127.0.0.1:8500"
+
+  # 需要通过 Consul 进行服务发现的微服务列表
+  services:
+    - "OllamaAgent"
+    - "GPTSoVitsAgent"
+
+  # 当前微服务网关的名称和唯一标识符
+  service_name: "ChatModule"
+  service_id: "ChatModule-127.0.0.1:20060"  # 可选，默认会自动生成
+
+  # 健康检查的 URL
+  health_check_url: "http://127.0.0.1:20060/health"  # 可选，默认会自动生成

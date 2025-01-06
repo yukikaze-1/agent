@@ -21,9 +21,14 @@ from dotenv import dotenv_values
 
 from Module.Utils.ConfigTools import load_config, validate_config
 from Module.Utils.Logger import setup_logger
+from Module.Utils.ServiceTools import (
+    get_service_instances,
+    update_service_instances_periodically,
+    register_service_to_consul,
+    unregister_service_from_consul
+)
 
 # TODO 之后考虑将GPTSoVits的server集成到AI agent内部。现阶段还是采用分离式C/S
-# TODO 给该类添加注释，更改类成员函数名字，添加类型注解
 class GPTSoVitsAgent:
     """
     GPTSoVitsAgent 类作为 GPTSoVits 客户端的代理，负责与 GPTSoVits 服务交互、
@@ -135,7 +140,14 @@ class GPTSoVitsAgent:
 
             # 注册服务到 Consul
             self.logger.info("Registering service to Consul...")
-            await self.register_service_to_consul(self.service_name, self.service_id, self.host, self.port, self.health_check_url)
+            await register_service_to_consul(consul_url=self.consul_url,
+                                             client=self.client,
+                                             logger=self.logger,
+                                             service_name=self.service_name,
+                                             service_id=self.service_id,
+                                             address=self.host,
+                                             port=self.port,
+                                             health_check_url=self.health_check_url)
             self.logger.info("Service registered to Consul.")
 
             yield  # 应用正常运行
@@ -145,59 +157,21 @@ class GPTSoVitsAgent:
             raise
 
         finally:
-            # 关闭 AsyncClient
-            self.logger.info("Shutting down Async HTTP Client")
-            if self.client:
-                await self.client.aclose() 
-                
             # 注销服务从 Consul
             try:
                 self.logger.info("Deregistering service from Consul...")
-                await self.unregister_service_from_consul(self.service_id)
+                await unregister_service_from_consul(consul_url=self.consul_url,
+                                                     client=self.client,
+                                                     logger=self.logger,
+                                                     service_id=self.service_id)
                 self.logger.info("Service deregistered from Consul.")
             except Exception as e:
                 self.logger.error(f"Error while deregistering service: {e}")
-
-              
-    
-    # --------------------------------
-    # Consul 服务注册与注销
-    # --------------------------------
-    async def register_service_to_consul(self, service_name, service_id, address, port, health_check_url):
-        """向 Consul 注册该微服务网关"""
-        payload = {
-            "Name": service_name,
-            "ID": service_id,
-            "Address": address,
-            "Port": port,
-            "Tags": ["v1", "MicroService"],
-            "Check": {
-                "HTTP": health_check_url,
-                "Interval": "10s",
-                "Timeout": "5s",
-            }
-        }
-
-        try:
-            response = await self.client.put(f"{self.consul_url}/v1/agent/service/register", json=payload)
-            if response.status_code == 200:
-                self.logger.info(f"Service '{service_name}' registered successfully to Consul.")
-            else:
-                self.logger.warning(f"Failed to register service '{service_name}': {response.status_code}, {response.text}")
-        except Exception as e:
-            self.logger.error(f"Error while registering service '{service_name}': {e}")
-    
-    
-    async def unregister_service_from_consul(self, service_id: str):
-        """从 Consul 注销该微服务网关"""
-        try:
-            response = await self.client.put(f"{self.consul_url}/v1/agent/service/deregister/{service_id}")
-            if response.status_code == 200:
-                self.logger.info(f"Service with ID '{service_id}' deregistered successfully from Consul.")
-            else:
-                self.logger.warning(f"Failed to deregister service ID '{service_id}': {response.status_code}, {response.text}")
-        except Exception as e:
-            self.logger.error(f"Error while deregistering service ID '{service_id}': {e}")
+                
+            # 关闭 AsyncClient
+            self.logger.info("Shutting down Async HTTP Client")
+            if self.client:
+                await self.client.aclose()               
     
     
     def setup_routes(self):

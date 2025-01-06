@@ -1,0 +1,15 @@
+SenseVoiceAgent:
+  # 微服务本身的地址和端口
+  host: 127.0.0.1
+  port: 20041
+
+  # Consul 服务器的 URL，包括协议前缀
+  consul_url: "http://127.0.0.1:8500"
+
+
+  # 当前微服务网关的名称和唯一标识符
+  service_name: "SenseVoiceAgent"
+  service_id: "SenseVoiceAgent-127.0.0.1:20041"  # 可选，默认会自动生成
+
+  # 健康检查的 URL
+  health_check_url: "http://127.0.0.1:20041/health"  # 可选，默认会自动生成
