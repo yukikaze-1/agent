@@ -17,7 +17,7 @@ from typing import Dict, List, Any
 
 from Module.Utils.Logger import setup_logger
 from Module.Utils.ConfigTools import load_config, validate_config
-from Module.Utils.ServiceTools import (
+from Module.Utils.FastapiServiceTools import (
     register_service_to_consul,
     unregister_service_from_consul
 )

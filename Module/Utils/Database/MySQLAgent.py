@@ -18,7 +18,7 @@ import pymysql.cursors
 
 from Module.Utils.Logger import setup_logger
 from Module.Utils.ConfigTools import load_config, validate_config
-from Module.Utils.ServiceTools import (
+from Module.Utils.FastapiServiceTools import (
     get_service_instances,
     update_service_instances_periodically,
     register_service_to_consul,
