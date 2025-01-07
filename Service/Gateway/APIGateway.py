@@ -22,7 +22,12 @@ from Module.Utils.FastapiServiceTools import (
     get_service_instances,
     update_service_instances_periodically,
     register_service_to_consul,
-    unregister_service_from_consul
+    unregister_service_from_consul,
+    get_next_instance,
+    is_instance_healthy,
+    record_failure,
+    reset_failure,
+    setup_redis_limiter
 )
 
 
@@ -165,72 +170,9 @@ class APIGateway:
             if self.client:
                 await self.client.aclose()
         
-
-    
-    
-    # --------------------------------
-    # 2. 负载均衡
-    # --------------------------------
-    def get_next_instance(self, service_name: str) -> Dict:
-        """获取服务的下一个实例（轮询负载均衡）"""
-        instances = self.service_instances.get(service_name, [])
-        if not instances:
-            self.logger.warning(f"No instances found for service '{service_name}'.")
-            return None
-
-        index = self.load_balancer_index[service_name]
-        instance = instances[index]
-        self.load_balancer_index[service_name] = (index + 1) % len(instances)
-        self.logger.debug(f"Selected instance {instance} for service '{service_name}'")
-        return instance
-    
-    
-    # --------------------------------
-    # 3. 熔断机制
-    # --------------------------------
-    def is_instance_healthy(self, service_name: str, instance: Dict) -> bool:
-        """检查服务实例是否健康"""
-        failure_threshold = 3  # 设置失败阈值
-        instance_key = f"{instance['address']}:{instance['port']}"
-        is_healthy = self.failure_counts[service_name][instance_key] < failure_threshold
-        self.logger.debug(f"Instance {instance_key} healthy: {is_healthy}")
-        return is_healthy
-
-
-    def record_failure(self, service_name: str, instance: Dict):
-        """记录服务实例的失败次数"""
-        instance_key = f"{instance['address']}:{instance['port']}"
-        self.failure_counts[service_name][instance_key] += 1
-        self.logger.warning(f"Recorded failure for {service_name} instance {instance_key}. Total failures: {self.failure_counts[service_name][instance_key]}")
-
-
-    def reset_failure(self, service_name: str, instance: Dict):
-        """重置服务实例的失败计数"""
-        instance_key = f"{instance['address']}:{instance['port']}"
-        self.failure_counts[service_name][instance_key] = 0
-        self.logger.info(f"Reset failure count for {service_name} instance {instance_key}.")
-    
-    
-    # --------------------------------
-    # 4. 限流机制
-    # --------------------------------
-    # async def setup_redis_limiter(self):
-    #     """初始化 Redis 用于限流"""
-    #     redis_host = self.config.get("redis_host", "127.0.0.1")
-    #     redis_port = self.config.get("redis_port", 6379)
-    #     redis_db = self.config.get("redis_db", 0)
-    #     try:
-    #         redis_client = redis.Redis(host=redis_host, port=redis_port, db=redis_db, decode_responses=True)
-    #         await FastAPILimiter.init(redis_client)
-    #         self.logger.info("FastAPILimiter initialized successfully.")
-    #     except Exception as e:
-    #         self.logger.error(f"Failed to initialize FastAPILimiter: {e}")
-    #         raise    
-    
-
        
     # --------------------------------
-    # 6. 请求转发逻辑
+    # 请求转发逻辑
     # --------------------------------    
     def setup_routes(self):
         """设置 API 路由"""
@@ -279,11 +221,14 @@ class APIGateway:
     
     async def _gateway(self, service_name: str, path: str, request: Request):
         """统一网关入口"""
-        instance = self.get_next_instance(service_name)
+        instance = get_next_instance(service_instances=self.service_instances,
+                                     service_name=service_name,
+                                     load_balancer_index=self.load_balancer_index,
+                                     logger=self.logger)
         if not instance:
             self.logger.error(f"No available instances for service '{service_name}'.")
             raise HTTPException(status_code=503, detail=f"No available instances for service '{service_name}'")
-        if not self.is_instance_healthy(service_name, instance):
+        if not is_instance_healthy(service_name=service_name, instance=instance, failure_counts=self.failure_counts, logger=self.logger):
             self.logger.warning(f"Service instance {instance['address']}:{instance['port']} is unhealthy.")
             raise HTTPException(status_code=503, detail=f"Service instance {instance['address']}:{instance['port']} is unhealthy")
         target_url = f"{instance['address']}:{instance['port']}/{path}"
@@ -295,18 +240,18 @@ class APIGateway:
                 content=await request.body(),
                 timeout=httpx.Timeout(10.0, read=60.0)
             )
-            self.reset_failure(service_name, instance)
+            reset_failure(service_name=service_name, instance=instance, failure_counts=self.failure_counts, logger=self.logger)
             return Response(
                 content=response.content,
                 status_code=response.status_code,
                 headers=self.filter_response_headers(response.headers)
             )
         except httpx.RequestError as e:
-            self.record_failure(service_name, instance)
+            record_failure(service_name=service_name, instance=instance, failure_counts=self.failure_counts, logger=self.logger)
             self.logger.error(f"Error connecting to service '{service_name}': {e}")
             raise HTTPException(status_code=500, detail=f"Error connecting to service '{service_name}': {e}")
         except httpx.HTTPStatusError as exc:
-            self.record_failure(service_name, instance)
+            record_failure(service_name=service_name, instance=instance, failure_counts=self.failure_counts, logger=self.logger)
             self.logger.error(f"HTTP error from service '{service_name}': {exc}")
             raise HTTPException(status_code=exc.response.status_code, detail=f"{service_name} 返回错误")
      

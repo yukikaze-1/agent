@@ -12,8 +12,12 @@ import httpx
 import asyncio
 from logging import Logger
 from fastapi import HTTPException
-from typing import List, Dict
+from typing import List, Dict, TypedDict, Optional
 from pydantic import BaseModel
+from fastapi_limiter import FastAPILimiter
+from fastapi_limiter.depends import RateLimiter
+import redis.asyncio as redis  # 使用异步 Redis 客户端
+
 
 # --------------------------------
 # 服务发现
@@ -26,6 +30,9 @@ from pydantic import BaseModel
 #     logger: Logger
 #     model_config = {"arbitrary_types_allowed": True}
 
+class ServiceInstance(TypedDict):
+    address: str
+    port: int
     
 
 async def get_service_instances(consul_url: str, service_name: str, client: httpx.AsyncClient,logger: Logger) -> List[Dict]:
@@ -69,7 +76,7 @@ async def update_service_instances_periodically(consul_url: str, client: httpx.A
         try:
             logger.info("Updating service instances...")
             # 从配置中动态获取需要监控的服务列表
-            services = config.get("services", ["UserService"])
+            services = config.get("services")
             for service_name in services:
                 instances = await get_service_instances(consul_url=consul_url,
                                                         service_name=service_name,
@@ -153,3 +160,67 @@ async def unregister_service_from_consul(consul_url: str, client: httpx.AsyncCli
             logger.warning(f"Failed to deregister service ID '{service_id}': {response.status_code}, {response.text}")
     except Exception as e:
         logger.error(f"Error while deregistering service ID '{service_id}': {e}")
+        
+
+# --------------------------------
+# 负载均衡
+# --------------------------------
+def get_next_instance(service_instances: Dict[str, List[Dict]], service_name: str, load_balancer_index: Dict[str, int], logger: Logger) -> Optional[Dict]:
+    """获取服务的下一个实例（轮询负载均衡）"""
+    instances = service_instances.get(service_name, [])
+    if not instances:
+        logger.warning(f"No instances found for service '{service_name}'.")
+        return None
+    index = load_balancer_index[service_name]
+    instance = instances[index]
+    load_balancer_index[service_name] = (index + 1) % len(instances)
+    logger.debug(f"Selected instance {instance} for service '{service_name}'")
+    return instance
+
+
+# --------------------------------
+# 熔断机制
+# --------------------------------
+def is_instance_healthy(service_name: str, instance: Dict, failure_counts: Dict[str, Dict[str, int]], logger: Logger) -> bool:
+    """检查服务实例是否健康"""
+    failure_threshold = 3  # 设置失败阈值
+    instance_key = f"{instance['address']}:{instance['port']}"
+    is_healthy = failure_counts[service_name][instance_key] < failure_threshold
+    logger.debug(f"Instance {instance_key} healthy: {is_healthy}")
+    return is_healthy
+
+
+def record_failure(service_name: str, instance: Dict, failure_counts: Dict[str, Dict[str, int]], logger: Logger):
+    """记录服务实例的失败次数"""
+    instance_key = f"{instance['address']}:{instance['port']}"
+    failure_counts[service_name][instance_key] += 1
+    logger.warning(f"Recorded failure for {service_name} instance {instance_key}. Total failures: {failure_counts[service_name][instance_key]}")
+
+
+def reset_failure(service_name: str, instance: Dict, failure_counts: Dict[str, Dict[str, int]], logger: Logger):
+    """重置服务实例的失败计数"""
+    instance_key = f"{instance['address']}:{instance['port']}"
+    failure_counts[service_name][instance_key] = 0
+    logger.info(f"Reset failure count for {service_name} instance {instance_key}.")
+
+
+# --------------------------------
+# 限流机制
+# --------------------------------
+async def setup_redis_limiter(config: Dict, logger: Logger):
+    """初始化 Redis 用于限流"""
+    redis_host = config.get("redis_host", "127.0.0.1")
+    redis_port = config.get("redis_port", 6379)
+    redis_db = config.get("redis_db", 0)
+    try:
+        redis_client = redis.Redis(host=redis_host, port=redis_port, db=redis_db, decode_responses=True)
+        await FastAPILimiter.init(redis_client)
+        logger.info("FastAPILimiter initialized successfully.")
+    except Exception as e:
+        await redis_client.aclose()
+        logger.error(f"Failed to initialize FastAPILimiter: {e}")
+        raise    
+    
+    # 测试连接
+    await redis_client.ping()
+    logger.info("Redis connection successful.")

@@ -38,7 +38,3 @@ def setup_logger(name: str, log_path: Literal['ExternalService', 'InternalModule
 
     return logger
 
-
-if __name__ == "__main__":
-    l = setup_logger("hello", "Other")
-    l.info("你好")
