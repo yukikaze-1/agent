@@ -182,7 +182,7 @@ class GPTSoVitsAgent:
             """返回服务的健康状态"""
             return {"status": "healthy"}
         
-        @self.app.post("/agent/chat/TTS/infer", summary="生成语音")
+        @self.app.post("/predict/sentences", summary="生成语音")
         async def generate_voice(content: str = Form(...)):
             """
             接收文本内容并生成语音。

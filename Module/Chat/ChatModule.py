@@ -154,10 +154,11 @@ class ChatModule:
             """处理用户的视频输入"""
             return await self._user_input_video()
         
-        @self.app.api_route("/agent/chat/input/picture", methods=["POST"], summary="用户图片输入接口")
-        async def user_input_picture():
+        
+        @self.app.api_route("/agent/chat/input/image", methods=["POST"], summary="用户图片输入接口")
+        async def user_input_image():
             """处理用户的视频输入"""
-            return await self._user_input_picture()
+            return await self._user_input_image()
         
     
     # --------------------------------
@@ -194,7 +195,7 @@ class ChatModule:
         return await self._chat(vision_response)
     
     
-    async def _user_input_picture(self):
+    async def _user_input_image(self):
         """处理用户的图片输入"""
         # TODO 暂时未实现视觉Agent，待修改
         # 将图片发送给Vision进行识别

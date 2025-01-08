@@ -48,7 +48,7 @@ external_services:
         script: "/home/yomu/SenseVoice/SenseVoice_server.py"
         service_name: "SenseVoice_server"
         conda_env: "/home/yomu/data/anaconda3/envs/SenseVoice"
-        args: ["--host", "127.0.0.1", "--port", "9890"]
+        args: []
         use_python: true
         run_in_background: true
         is_base: true
@@ -123,6 +123,26 @@ external_services:
         run_in_background: true
         is_base: true
         log_file: "ChatModule.log"
+
+    - SenseVoiceAgent:
+        script: "/home/yomu/agent/Module/STT/SenseVoice/SenseVoiceAgent.py"
+        service_name: "SenseVoiceAgent"
+        conda_env: "/home/yomu/data/anaconda3/envs/agent"
+        args: []
+        use_python: true
+        run_in_background: true
+        is_base: true
+        log_file: "SenseVoiceAgent.log"
+
+    - PromptOptimizer:
+        script: "/home/yomu/agent/Module/Input/PromptOptimizer.py"
+        service_name: "PromptOptimizer"
+        conda_env: "/home/yomu/data/anaconda3/envs/agent"
+        args: []
+        use_python: true
+        run_in_background: true
+        is_base: true
+        log_file: "PromptOptimizer.log"
 
   # (可选)启动的optional外部服务
   optional_services:

@@ -21,9 +21,6 @@ from typing import Dict, List
 from dotenv import dotenv_values
 from collections import defaultdict
 
-# from fastapi_limiter import FastAPILimiter
-# from fastapi_limiter.depends import RateLimiter
-# import redis.asyncio as redis  # 使用异步 Redis 客户端
 
 from Module.Utils.Logger import setup_logger
 from Module.Utils.ConfigTools import load_config, validate_config
@@ -135,7 +132,7 @@ class MicroServiceGateway():
                                              address=self.host,
                                              port=self.port,
                                              health_check_url=self.health_check_url)
-            
+            self.logger.info("Service registered to Consul.")
             # 启动后台任务
             task = asyncio.create_task(update_service_instances_periodically(
                                             consul_url=self.consul_url,

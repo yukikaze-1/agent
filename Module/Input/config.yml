@@ -2,3 +2,19 @@
 UserTextInputProcessModule:
   host: 127.0.0.1
   port: 20020
+
+
+# PromptOptimizer配置
+PromptOptimizer:
+  host: 127.0.0.1
+  port: 20022
+
+  # Consul 服务器的 URL，包括协议前缀
+  consul_url: "http://127.0.0.1:8500"
+
+  # 当前微服务网关的名称和唯一标识符
+  service_name: "PromptOptimizer"
+  service_id: "PromptOptimizer-127.0.0.1:20022"  # 可选，默认会自动生成
+
+  # 健康检查的 URL
+  health_check_url: "http://127.0.0.1:20022/health"  # 可选，默认会自动生成
