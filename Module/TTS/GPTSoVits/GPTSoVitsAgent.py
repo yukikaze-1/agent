@@ -18,6 +18,7 @@ from fastapi import Form, Request, File, FastAPI
 from typing import Dict, List, Any
 from urllib.parse import urljoin
 from dotenv import dotenv_values
+from pydantic import BaseModel
 
 from Module.Utils.ConfigTools import load_config, validate_config
 from Module.Utils.Logger import setup_logger
@@ -40,6 +41,9 @@ class GPTSoVitsAgent:
     - 设置 API 路由
     - 处理语音生成请求
     """
+    class ChatRequest(BaseModel):
+        content: str
+        
     def __init__(self):
         self.logger = setup_logger(name="GPTSoVitsAgent", log_path='ExternalService')
         
@@ -183,12 +187,9 @@ class GPTSoVitsAgent:
             return {"status": "healthy"}
         
         @self.app.post("/predict/sentences", summary="生成语音")
-        async def generate_voice(content: str = Form(...)):
-            """
-            接收文本内容并生成语音。
-
-            - **content**: 需要生成语音的文本内容。
-            """
+        async def generate_voice(request: 'GPTSoVitsAgent.ChatRequest'):
+            """接收文本内容并生成语音"""
+            content = request.content
             return await self._generate_voice(content)
         
     
@@ -316,7 +317,7 @@ class GPTSoVitsAgent:
         for attempt in range(max_retries):
             try:
                 # 发起异步请求
-                response = await self.client.request(method, url, **kwargs, stream=True)
+                response = await self.client.request(method, url, **kwargs)
                 
                 # 检查 HTTP 响应状态码
                 response.raise_for_status()
@@ -341,8 +342,8 @@ class GPTSoVitsAgent:
                 
             except httpx.RequestError as e:
                 self.logger.error(f"Request error: {e}")
-                if e.response:
-                    self.logger.warning(f"Response content: {e.response.text}")
+                # if e.response:
+                #     self.logger.warning(f"Response content: {e.response.text}")
                 if attempt < max_retries - 1:
                     wait_time = 2 ** (attempt + 1)
                     self.logger.info(f"Retrying in {wait_time} seconds...")

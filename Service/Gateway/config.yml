@@ -50,6 +50,7 @@ APIGateway:
   services:
     - "UserService"
     - "MicroServiceGateway"
+    - "ChatModule"
 
   # Redis 服务器的配置，用于限流
   # redis_host: "127.0.0.1"
@@ -61,6 +62,7 @@ APIGateway:
     UserService: "http://127.0.0.1:20010"
     MicroServiceGateway: "http://127.0.0.1:20000"
     OllamaAgent: "http://127.0.0.1:20030"
+    ChatModule: "http://127.0.0.1:20060"
     
   # 当前微服务网关的名称和唯一标识符
   service_name: "APIGateway"

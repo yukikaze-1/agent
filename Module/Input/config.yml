@@ -18,3 +18,7 @@ PromptOptimizer:
 
   # 健康检查的 URL
   health_check_url: "http://127.0.0.1:20022/health"  # 可选，默认会自动生成
+
+  # 大模型参数
+  model_name: "llama3.2"
+  temperature: 0.1

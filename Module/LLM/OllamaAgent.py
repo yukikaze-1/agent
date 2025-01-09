@@ -15,6 +15,7 @@ from urllib.parse import urljoin
 from dotenv import dotenv_values
 from typing import Dict, List
 from fastapi import FastAPI, Form, Body, HTTPException
+from pydantic import BaseModel
 
 from Module.Utils.Logger import setup_logger
 from Module.Utils.ConfigTools import load_config, validate_config
@@ -27,6 +28,9 @@ class OllamaAgent:
     """
         Ollama 的代理
     """
+    class ChatRequest(BaseModel):
+        content: str
+    
     def __init__(self):
         self.logger = setup_logger(name="OllamaAgent", log_path="InternalModule")
         
@@ -119,13 +123,23 @@ class OllamaAgent:
             return {"status": "healthy"}
         
         # chat 
-        @self.app.api_route("/agent/chat/to_ollama/chat/", methods=["POST"], summary="Chat with Ollama", description="Send a chat message to Ollama and receive a response.")
-        async def  chat_with_ollama(data: Dict=Body(...)):
+        @self.app.api_route("/agent/chat/to_ollama/chat", methods=["POST"], summary="Chat with Ollama", description="Send a chat message to Ollama and receive a response.")
+        async def  chat_with_ollama(request: 'OllamaAgent.ChatRequest'):
+            data = {
+                "model": "llama3.2",
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": request.content
+                        }
+                    ],
+                    "stream": False
+            }
             return await self._chat(data)
 
         
         #generate
-        @self.app.api_route("/agent/chat/to_ollama/generate/", methods=["POST"], summary="Generate response from Ollama", description="Send a prompt to Ollama and receive a generated response.")
+        @self.app.api_route("/agent/chat/to_ollama/generate", methods=["POST"], summary="Generate response from Ollama", description="Send a prompt to Ollama and receive a generated response.")
         async def generate_respone(data: Dict=Body(...)):
             return await self._generate_response(data)
         
@@ -165,7 +179,7 @@ class OllamaAgent:
             raise HTTPException(status_code=500, detail="Internal server error.")
         
         
-    async def _chat(self,data: Dict):
+    async def _chat(self, data: Dict):
         """与 Ollama 进行聊天"""
         headers = {"Content-Type": "application/json"}
         url = urljoin(self.ollama_url,"/api/chat")

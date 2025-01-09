@@ -186,6 +186,7 @@ class APIGateway:
         # 用户相关服务
         @self.app.api_route("/usr/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
         async def usr_service_proxy(request: Request, path: str):
+            """路由到UserService"""
             prefix = "/usr"
             return await self._usr_service_proxy(request, prefix ,path)
 
@@ -193,23 +194,27 @@ class APIGateway:
         # TODO 这个usr_ping_serve函数名字要改下，转发给微服务网关
         @self.app.api_route("/option/{path:path}", methods=["GET", "POST"])
         async def usr_ping_server(request: Request, path: str):
+            """路由到MicroServiceGateway"""
             prefix = "/option"
             return await self._usr_ping_server(request, prefix, path)
         
         
         # 用户输入
-        @self.app.api_route("/agent/input/{path:path}", methods=["POST"])
+        @self.app.api_route("/agent/chat/input/{path:path}", methods=["POST"])
         async def usr_chat_input(request: Request, path: str):
-            prefix = "/agent/input"
-            return await self._usr_chat_input(request, prefix, path)
-
-
-        # DEBUG 用户输入
-        @self.app.api_route("/agent/chat/{path:path}", methods=["POST"])
-        async def test_usr_chat_input(request: Request, path: str):
-            prefix = "/agent/chat"
-            server = "OllamaAgent"
+            """路由到ChatModule"""
+            prefix = "/agent/chat/input"
+            server = "ChatModule"
             return await self.forward(request, prefix, path, server)
+
+
+        # # DEBUG 用户输入
+        # @self.app.api_route("/agent/chat/{path:path}", methods=["POST"])
+        # async def test_usr_chat_input(request: Request, path: str):
+        #     """路由到OllamaAgent"""
+        #     prefix = "/agent/chat"
+        #     server = "OllamaAgent"
+        #     return await self.forward(request, prefix, path, server)
         
         
         # 通用网关入口

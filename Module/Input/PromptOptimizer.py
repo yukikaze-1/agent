@@ -14,7 +14,12 @@ import uvicorn
 from typing import Dict, List, Any
 from dotenv import dotenv_values
 from fastapi import HTTPException, FastAPI, status, Form, Body
+from pydantic import BaseModel
 
+from langchain_ollama import ChatOllama
+from langchain.prompts import PromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+from langchain.schema.runnable import RunnableSerializable
 
 from Module.Utils.Logger import setup_logger
 from Module.Utils.ConfigTools import load_config, validate_config
@@ -23,7 +28,7 @@ from Module.Utils.FastapiServiceTools import(
     unregister_service_from_consul,
 )
 from Module.Utils.PromptTemplate.PromptOptimizerTemplate import (
-    check_prompt,
+    check_typographical_errors_prompt,
     optimize_prompt
 )
 
@@ -32,6 +37,10 @@ class PromptOptimizer:
     """
         提示词Prompt 优化器
     """
+    class PromptPayload(BaseModel):
+        user: str
+        content: str
+    
     def __init__(self):
         self.logger = setup_logger(name="APIGateway", log_path='Other')
         
@@ -65,8 +74,19 @@ class PromptOptimizer:
          # 初始化 FastAPI 应用，使用生命周期管理
         self.app = FastAPI(lifespan=self.lifespan)
         
+        # 大模型相关参数
+        self.temperature = self.config.get("temperature", 0.1)
+        self.model_name = self.config.get("model_name", "llama3.2")
+        self.llm = ChatOllama(model=self.model_name, temperature=self.temperature)
+        
+        # 纠正逻辑的chain(在setup_chains中初始化)
+        self.correct_prompt_chain: RunnableSerializable[dict, str] = None
+        
         # 设置路由
         self.setup_routes()
+        
+        # 设置LLM链
+        self.setup_chains()
         
         
     async def lifespan(self, app: FastAPI):
@@ -115,7 +135,15 @@ class PromptOptimizer:
             self.logger.info("Shutting down Async HTTP Client")
             if self.client:
                 await self.client.aclose() 
-            
+    
+    # --------------------------------
+    # 设置LLMChain
+    # --------------------------------
+    def setup_chains(self):
+        """设置LLM链"""       
+        # 纠正逻辑的chain
+        self.correct_prompt_chain = check_typographical_errors_prompt | self.llm | StrOutputParser() 
+        
         
     # --------------------------------
     # 设置路由
@@ -129,20 +157,24 @@ class PromptOptimizer:
             return {"status": "healthy"}
         
         
-        @self.app.api_route("/prompt_optimize", summary="提示词优化")
-        async def prompt_optimize(content: str=Form(...)):
+        @self.app.api_route("/prompt/optimize", methods=["POST", "GET"], summary="提示词优化")
+        async def prompt_optimize(payload: 'PromptOptimizer.PromptPayload'):
             """提示词优化"""
+            content = payload.content
+            self.logger.info(f"payload: {payload}")
+            self.logger.info(f"content: {content}")
             return await self._prompt_optimize(content)
     
     
-    async def _prompt_optimize(content: str):
+    async def _prompt_optimize(self, content: str):
         """提示词优化"""
-        # 检查可能的错误
-        
-        # 修正可能的错误
+        # 检查并修正可能的错误
+        prompt = {"text": content}
+        check_result = self.correct_prompt_chain.invoke(prompt)
         
         # 进行优化
         
+        return check_result
         
     
     

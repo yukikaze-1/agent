@@ -7,13 +7,23 @@
 """
     负责处理与用户对话的ChatModule
 """
+import os
 import uvicorn
 import httpx
 import random
 import asyncio
+import json
+
 from typing import Dict, List, Any, Tuple
-from fastapi import FastAPI, Form, UploadFile, HTTPException, status, Body
+from fastapi import FastAPI, Form, UploadFile, HTTPException, status, Body, Response
 from dotenv import dotenv_values
+from pydantic import BaseModel
+
+from langchain_ollama import ChatOllama
+from langchain.prompts import PromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+from langchain.schema.runnable import RunnableSerializable
+
 
 from Module.Utils.ConfigTools import load_config, validate_config
 from Module.Utils.Logger import setup_logger
@@ -32,6 +42,16 @@ class ChatModule:
             3. 将LLM的输出文本进行语音转换 
             4. 汇聚LLM的输出文本和语音，一同返回给客户端
     """
+    # 定义数据模型
+    class Message(BaseModel):
+        role: str
+        content: str
+        
+
+    class ChatRequest(BaseModel):
+        messages: List['ChatModule.Message']
+        
+        
     def __init__(self):
         self.logger = setup_logger(name="ChatModule", log_path="InternalModule")
         
@@ -138,8 +158,10 @@ class ChatModule:
         
         
         @self.app.api_route("/agent/chat/input/text", methods=["POST"], summary="用户文本输入接口")
-        async def user_input_text(content: str=Form(...)):
+        async def user_input_text(chat_request: 'ChatModule.ChatRequest'):
             """处理用户的文本输入"""
+            content = chat_request.messages[0].content
+            self.logger.info(f"user input message:{content}")
             return await self._user_input_text(content)
         
         
@@ -210,29 +232,82 @@ class ChatModule:
     
     async def _chat(self, content: str):
         """通用函数"""
-         # 将语音识别的结果发送给PromptOptimizer进行优化
-        po_instance = self.pick_instance(service_name="PromptOptimizer")
-        po_path = ""
+         # 将文本发送给PromptOptimizer进行优化
+        po_instance = await self.pick_instance(service_name="PromptOptimizer")
+        po_path = "/prompt/optimize"
         po_payload = {
-            
+            "user":  "test",
+            "content": content
         }
         optimize_content = await self.call_service_api(instance=po_instance, path=po_path, payload=po_payload)
+        self.logger.info(f"optimize content: {optimize_content}")
+        
         # 将优化后的文本发送给LLM(OllamaAgent)
-        llm_instance = self.pick_instance(service_name="OllamaAgent")
-        llm_path = ""
+        llm_instance = await self.pick_instance(service_name="OllamaAgent")
+        llm_path = "/agent/chat/to_ollama/chat"
         llm_payload= {
-            
+            "user":  "test",
+            "content": optimize_content
         }
         content_response = await self.call_service_api(instance=llm_instance, path=llm_path, payload=llm_payload)
+        self.logger.info(f"llm response content: {content_response}")
+        
         # 将从LLM(OllamaAgent)收到的答复发送给GPTSoVitsAgent进行语音生成
-        tts_instance = self.pick_instance(service_name="GPTSoVitsAgent")
-        tts_path = ""
+        tts_instance = await self.pick_instance(service_name="GPTSoVitsAgent")
+        tts_path = "/predict/sentences"
         tts_payload = {
-            
+            "content": content_response['message']['content']
         }
-        audio_response = await self.call_service_api(instance=tts_instance, path=tts_path, payload=tts_payload)
+        audio_path: str = await self.call_service_api(instance=tts_instance, path=tts_path, payload=tts_payload)
+        self.logger.info(f"audio path : {audio_path}")
+        
         # 将文本回复语语音回复返回给客户端
-        return {"Content": content_response, "Audio": audio_response}
+        return await self.return_response(content_response, audio_path)
+      
+    
+    async def return_response(self, content: str, audio_path: str):
+        """返回文本+语音文件给客户端"""
+        # TODO 选取合适的分隔符
+        # 分隔符 
+        boundary = "myboundary123456"
+        
+        # 文本JSON元数据
+        metadata = {
+            "user": "test",
+            "content": content
+        }
+        metadata_bytes = json.dumps(metadata).encode("utf-8")
+        
+        # 构造 Part 1 的 HTTP 头部和内容
+        # 注意每个 Part 都以 "--boundary" 开头，随后是特定的头部，再加一个空行后是内容
+        metadata_part = (
+            f"--{boundary}\r\n"
+            f"Content-Type: application/json\r\n\r\n"
+        ).encode("utf-8") + metadata_bytes + b"\r\n"
+        
+        # Part 2: 文件（二进制）
+        with open(audio_path, "rb") as f:
+            file_content = f.read()
+            
+        # 构造 Part 2 的 HTTP 头部和内容
+        file_part = (
+            f"--{boundary}\r\n"
+            f"Content-Type: application/octet-stream\r\n"
+            f"Content-Disposition: attachment; filename={audio_path}\r\n\r\n"
+        ).encode("utf-8") + file_content + b"\r\n"
+        
+        # 结束标识
+        end_part = f"--{boundary}--\r\n".encode("utf-8")
+
+        # 拼接最终响应体
+        body = metadata_part + file_part + end_part
+        
+        return Response(
+            content=body,
+            media_type=f"multipart/mixed; boundary={boundary}",
+            # 在实际生产中，也可加上 Content-Length 等头部
+        )
+    
       
     # TODO 将这个函数完善并抽象出来放到ServiceTools.py中去
     async def call_service_api(self, instance: Dict, path: str, payload: Dict) -> Dict:
