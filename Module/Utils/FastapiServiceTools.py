@@ -106,15 +106,23 @@ async def update_service_instances_periodically(consul_url: str, client: httpx.A
 #     delay: float=2.0
 #     model_config = {"arbitrary_types_allowed": True}
     
- # TODO 修改，让其满足能自定义Tags的功能   
-async def register_service_to_consul(consul_url: str, client: httpx.AsyncClient, logger: Logger, service_name: str, service_id: str, address: str, port: int, health_check_url: str, retries=3, delay=2.0):
+   
+async def register_service_to_consul(consul_url: str,
+                                     client: httpx.AsyncClient,
+                                     logger: Logger, service_name: str,
+                                     service_id: str, address: str,
+                                     port: int,
+                                     tags: List[str],
+                                     health_check_url: str,
+                                     retries=3,
+                                     delay=2.0):
     """向 Consul 注册该微服务网关"""
     payload = {
         "Name": service_name,
         "ID": service_id,
         "Address": address,
         "Port": port,
-        "Tags": ["v1", "UserService"],
+        "Tags": [tag for tag in tags],
         "Check": {
             "HTTP": health_check_url,
             "Interval": "10s",

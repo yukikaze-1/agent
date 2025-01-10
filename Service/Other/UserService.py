@@ -105,6 +105,8 @@ class UserService:
         task = None
         try:
             # 注册服务到 Consul
+            self.logger.info("Registering service to Consul...")
+            tags = ["UserService"]
             await register_service_to_consul(consul_url=self.consul_url,
                                              client=self.client,
                                              logger=self.logger,
@@ -112,6 +114,7 @@ class UserService:
                                              service_id=self.service_id,
                                              address=self.host,
                                              port=self.port,
+                                             tags=tags,
                                              health_check_url=self.health_check_url)
             # 异步调用 init_connection，让 usr_account_database 拿到 connect_id
             await self.usr_account_database.init_connection()

@@ -92,7 +92,7 @@ class ChatModule:
     
     async def lifespan(self, app: FastAPI):
         """管理应用生命周期"""
-        # 应用启动时执行
+        # 初始化 AsyncClient
         self.client = httpx.AsyncClient(
             limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
             timeout=httpx.Timeout(10.0, read=60.0)
@@ -102,6 +102,8 @@ class ChatModule:
         task = None
         try:
             # 注册服务到 Consul
+            self.logger.info("Registering service to Consul...")
+            tags = ["ChatModule"]
             await register_service_to_consul(consul_url=self.consul_url,
                                              client=self.client,
                                              logger=self.logger,
@@ -109,6 +111,7 @@ class ChatModule:
                                              service_id=self.service_id,
                                              address=self.host,
                                              port=self.port,
+                                             tags=tags,
                                              health_check_url=self.health_check_url)
             yield  # 应用正常运行
             

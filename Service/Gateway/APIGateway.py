@@ -122,6 +122,8 @@ class APIGateway:
         task = None
         try:
             # 注册服务到 Consul
+            self.logger.info("Registering service to Consul...")
+            tags = ["APIGateway"]
             await register_service_to_consul(consul_url=self.consul_url,
                                              client=self.client,
                                              logger=self.logger,
@@ -129,6 +131,7 @@ class APIGateway:
                                              service_id=self.service_id,
                                              address=self.register_address,
                                              port=self.port,
+                                             tags=tags,
                                              health_check_url=self.health_check_url)
             
             # 启动后台任务
