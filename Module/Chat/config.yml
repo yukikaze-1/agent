@@ -18,3 +18,5 @@ ChatModule:
 
   # 健康检查的 URL
   health_check_url: "http://127.0.0.1:20060/health"  # 可选，默认会自动生成
+
+  save_dir: "/home/yomu/agent/Module/Chat/user_audio_input"

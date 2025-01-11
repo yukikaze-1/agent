@@ -129,7 +129,7 @@ class OllamaAgent:
         @self.app.api_route("/agent/chat/to_ollama/chat", methods=["POST"], summary="Chat with Ollama", description="Send a chat message to Ollama and receive a response.")
         async def  chat_with_ollama(request: 'OllamaAgent.ChatRequest'):
             data = {
-                "model": "llama3.2",
+                "model": "qwen2.5",
                     "messages": [
                         {
                             "role": "user",

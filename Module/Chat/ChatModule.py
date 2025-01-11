@@ -13,9 +13,13 @@ import httpx
 import random
 import asyncio
 import json
+import shutil
 
 from typing import Dict, List, Any, Tuple
-from fastapi import FastAPI, Form, UploadFile, HTTPException, status, Body, Response
+from fastapi import (
+    FastAPI, Form, UploadFile, HTTPException, status, Body, Response,
+    File
+)
 from dotenv import dotenv_values
 from pydantic import BaseModel
 
@@ -48,8 +52,9 @@ class ChatModule:
         content: str
         
 
-    class ChatRequest(BaseModel):
+    class TextChatRequest(BaseModel):
         messages: List['ChatModule.Message']
+        
         
         
     def __init__(self):
@@ -61,8 +66,11 @@ class ChatModule:
         self.config = load_config(config_path=self.config_path, config_name='ChatModule', logger=self.logger)
         
         # 验证配置文件
-        required_keys = ["consul_url", "host", "port", "services", "service_name", "service_id", "health_check_url"]
+        required_keys = ["consul_url", "host", "port", "services", "service_name", "service_id", "health_check_url", "save_dir"]
         validate_config(required_keys, self.config, self.logger)
+        
+        # 用户上传文件的保存地址
+        self.audio_save_dir = self.config.get("save_dir")
         
         # 微服务本身地址
         self.host = self.config.get("host", "127.0.0.1")
@@ -161,7 +169,7 @@ class ChatModule:
         
         
         @self.app.api_route("/agent/chat/input/text", methods=["POST"], summary="用户文本输入接口")
-        async def user_input_text(chat_request: 'ChatModule.ChatRequest'):
+        async def user_input_text(chat_request: 'ChatModule.TextChatRequest'):
             """处理用户的文本输入"""
             content = chat_request.messages[0].content
             self.logger.info(f"user input message:{content}")
@@ -169,9 +177,26 @@ class ChatModule:
         
         
         @self.app.api_route("/agent/chat/input/audio", methods=["POST"], summary="用户语音输入接口")
-        async def user_input_audio():
+        async def user_input_audio(file: UploadFile = File(...)):
             """处理用户的语音输入"""
-            return await self._user_input_audio()
+            # 1. 获取客户端传来的原始文件名
+            original_filename = file.filename
+
+            # 2. 可以根据需要生成新的文件名，或直接使用原始文件名
+            #    为了避免文件名冲突，可以在前面加 UUID 或时间戳之类
+            #    这里演示直接用原始名字
+            save_filename = original_filename  # 或用 f"{uuid4()}_{original_filename}"
+            
+            save_path = os.path.join(self.audio_save_dir, save_filename)
+            
+            # 3. 一次性读取文件并写入本地（适合中小文件）
+            #    如果文件较大，可以考虑分块读取
+            contents = await file.read()
+            with open(save_path, "wb") as f:
+                f.write(contents)
+                
+            self.logger.info(f"Audio synthesis successful, saved as '{save_path}'")    
+            return await self._user_input_audio(save_path)
         
         
         @self.app.api_route("/agent/chat/input/video", methods=["POST"], summary="用户视频输入接口")
@@ -194,27 +219,31 @@ class ChatModule:
         return await self._chat(content)
         
         
-    async def _user_input_audio(self, audio_file):
+    async def _user_input_audio(self, audio_file: str):
         """处理用户的语音输入"""
         # 将用户的语音输入发送给STT(SenseVoiceAgent)进行语音识别
-        stt_instance = self.pick_instance(service_name="SenseVoiceAgent")
-        stt_path = "/audio/infer"
+        stt_instance = await self.pick_instance(service_name="SenseVoiceAgent")
+        stt_path = "/audio/recognize"
         stt_payload = {
-            
+            "audio_path": audio_file
         }
-        recognize_result = await self.call_service_api(instance=stt_instance, path=stt_path, payload=stt_payload)
-       
+        response = await self.call_service_api(instance=stt_instance, path=stt_path, payload=stt_payload)
+        self.logger.info(response)
+        res = next(iter(response))
+        _, recognize_result = res
+        self.logger.info(recognize_result)
         return await self._chat(recognize_result)
         
         
-    async def _user_input_video(self):
+    async def _user_input_video(self, filename: str):
         """处理用户的视频输入"""
         # TODO 暂时未实现视觉Agent，待修改
         # 将视频发送给Vision进行识别
         vision_instance = self.pick_instance(service_name="VisionAgent")
         vision_path = ""
         vision_payload = {
-            
+            "user":  "test",
+            "content": ""
         }
         vision_response = await self.call_service_api(instance=vision_instance, path=vision_path, payload=vision_payload)
         return await self._chat(vision_response)

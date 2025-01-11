@@ -8,12 +8,14 @@
     负责识别语音
 """
 
+import os
 import httpx
 import asyncio
 import uvicorn
-from fastapi import FastAPI, status, Form, HTTPException
+from fastapi import FastAPI, status, Form, HTTPException, Body
 from dotenv import dotenv_values
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Tuple
+from pydantic import BaseModel
 
 from Module.Utils.Logger import setup_logger
 from Module.Utils.ConfigTools import load_config, validate_config
@@ -24,6 +26,14 @@ from Module.Utils.FastapiServiceTools import (
 
 
 class SenseVoiceAgent:
+    """
+    
+    """
+    
+    class AudioRecognizeRequest(BaseModel):
+        audio_path: str
+        
+    
     def __init__(self):
         self.logger = setup_logger(name="SenseVoiceAgent", log_path="InternalModule")
         
@@ -33,7 +43,7 @@ class SenseVoiceAgent:
         self.config = load_config(config_path=self.config_path, config_name='SenseVoiceAgent', logger=self.logger)
         
         # 验证配置文件
-        required_keys = ["consul_url", "host", "port", "service_name", "service_id", "health_check_url"]
+        required_keys = ["consul_url", "server_url", "host", "port", "service_name", "service_id", "health_check_url"]
         validate_config(required_keys, self.config, self.logger)
         
         # Consul URL，确保包含协议前缀
@@ -45,6 +55,9 @@ class SenseVoiceAgent:
         # 微服务本身地址
         self.host = self.config.get("host", "127.0.0.1")
         self.port = self.config.get("port", 20041)
+        
+        # SenseVoice_server地址
+        self.server_url = self.config.get("server_url")
         
         # 服务注册信息
         self.service_name = self.config.get("service_name", "SenseVoiceAgent")
@@ -120,6 +133,53 @@ class SenseVoiceAgent:
         async def health_check():
             """健康检查接口"""
             return {"status": "healthy"}
+        
+        @self.app.post("/audio/recognize")
+        async def audio_recognize(recognize_request: 'SenseVoiceAgent.AudioRecognizeRequest'):
+            """语音识别接口"""
+            file_path = recognize_request.audio_path
+            return await self._audio_recognize(file_path)
+    
+    
+    async def _audio_recognize(self, audio_path: str, lang: str="auto")->List[Tuple[str,str]]:
+        """语音识别"""
+        # 提取音频文件名作为 key
+        keys = os.path.basename(audio_path)
+        ret: List[Tuple[str,str]] = [] 
+
+        try:
+            # 使用单文件版本的发送函数
+            result = await self._send_audio_files(audio_path, keys, lang)
+            
+            # 解析API返回的结果
+            for res in result.get("result", []):
+                ret.append((res['key'], res.get('clean_text', '')))
+            return ret
+        except Exception as e:
+            self.logger.error(f"Error during ASR inference: {e}")
+            return ret
+        
+    
+    async def _send_audio_files(self, audio_file: str, keys: str, lang: str="auto")->Dict:
+        """发送音频文件到 ASR API"""
+        try:
+            with open(audio_file, "rb") as f:
+                files = {"files": (os.path.basename(audio_file), f, "audio/wav")}
+                form_data = {
+                    "keys": keys,
+                    "lang": lang,
+                }
+                # 发送POST请求到ASR API
+                url = self.server_url + "/predict/sentences"
+                response = await self.client.post(url, files=files, data=form_data, timeout=30)
+                response.raise_for_status()  # 如果响应错误，则抛出异常
+                return response.json()
+        except httpx.RequestError as e:
+            self.logger.error(f"Failed to connect to server with error: {e}")
+            return {}
+        except Exception as e:
+            self.logger.error(f"An unexpected error occurred: {e}")
+            return {}
     
     def run(self):
             uvicorn.run(self.app, host=self.host, port=self.port)

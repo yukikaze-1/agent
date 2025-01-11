@@ -6,6 +6,8 @@ SenseVoiceAgent:
   # Consul 服务器的 URL，包括协议前缀
   consul_url: "http://127.0.0.1:8500"
 
+  # SenseVoice_server地址
+  server_url: "http://127.0.0.1:20042"
 
   # 当前微服务网关的名称和唯一标识符
   service_name: "SenseVoiceAgent"
