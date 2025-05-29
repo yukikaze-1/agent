@@ -44,7 +44,7 @@ class UserAccountDataBaseAgent():
                 UNIQUE KEY (id)             -- 保证 id 唯一，但不是主键
             );
     """
-    def __init__(self, logger: Logger=None):
+    def __init__(self, logger: Logger| None=None):
         self.logger = logger or setup_logger(name="UserAccountDataBaseAgent", log_path="InternalModule")
         
         # 加载环境变量和配置
@@ -67,7 +67,7 @@ class UserAccountDataBaseAgent():
         self.charset = self.config.get("charset", "") 
         
         # 初始化 AsyncClient
-        self.client = httpx.AsyncClient(
+        self.client: httpx.AsyncClient = httpx.AsyncClient(
             limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
             timeout=httpx.Timeout(10.0, read=60.0)
         )
@@ -100,7 +100,7 @@ class UserAccountDataBaseAgent():
             "sql_args": [username]
         }
         try:
-            response = await self.client.post(url=url, json=payload)
+            response = await self.client.post(url=url, json=payload, timeout=120.0)
             response.raise_for_status()
             response_data :Dict = response.json()
             
@@ -131,7 +131,7 @@ class UserAccountDataBaseAgent():
             "sql_args": [username, password]
         }
         try:
-            response = await self.client.post(url=url, json=payload)
+            response = await self.client.post(url=url, json=payload, timeout=120.0)
             response.raise_for_status()
             response_data :Dict = response.json()
             
@@ -163,7 +163,7 @@ class UserAccountDataBaseAgent():
             "sql_args": [new_password, username]
         }
         try:
-            response = await self.client.post(url=url, json=payload)
+            response = await self.client.post(url=url, json=payload, timeout=120.0)
             response.raise_for_status()
             response_data :Dict = response.json()
             
@@ -195,7 +195,7 @@ class UserAccountDataBaseAgent():
             "sql_args": [username]
         }
         try:
-            response = await self.client.post(url=url, json=payload)
+            response = await self.client.post(url=url, json=payload, timeout=120.0)
             response.raise_for_status()
             response_data :Dict = response.json()
             
@@ -229,14 +229,18 @@ class UserAccountDataBaseAgent():
             "charset":  self.charset
         }
         try:
-            response = await self.client.post(url=url, json=payload, headers=headers)
+            response = await self.client.post(url=url, json=payload, headers=headers, timeout=120.0)
             response.raise_for_status()
             response_data :Dict = response.json()
             
             if response.status_code == 200:
-                id = response_data.get("ConnectionID")
-                self.logger.info(f"Success connect to the database '{self.database}'. Message: '{response_data}'")
-                return int(id)
+                id = response_data.get("ConnectionID", -1)
+                if id == -1:
+                    self.logger.error(f"Failed connect to the database '{self.database}'. Message: '{response_data}'")
+                    raise HTTPException(status_code=500, detail="Internal server error. Get the default wrong ConnectionID: -1")
+                else: 
+                    self.logger.info(f"Success connect to the database '{self.database}'. Message: '{response_data}'")
+                    return int(id)
             else:
                 self.logger.error(f"Unexpected response structure: {response_data}")
                 raise ValueError(f"Failed to connect to the database '{self.database}'")

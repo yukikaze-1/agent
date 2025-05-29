@@ -10,12 +10,13 @@
 """
 
 import yaml
+from typing import Optional
 from pathlib import Path
 from typing import Dict, Any, List
 from logging import Logger
 
 
-def load_config(config_path: str, config_name: str, logger: Logger) -> Dict[str, Any]:
+def load_config(config_path: Optional[str], config_name: str, logger: Logger) -> Dict[str, Any]:
         """
         从 config_path 中读取指定的配置 (YAML 文件).
 
@@ -34,31 +35,31 @@ def load_config(config_path: str, config_name: str, logger: Logger) -> Dict[str,
             TypeError: 当指定的 config_name 对应的内容不是字典时。
             yaml.YAMLError: 当 YAML 文件解析出错时。
         """
-        config_path: Path = Path(config_path)
-        
-        # 检查 config_path 是否为空
+        # 检查 _config_path 是否为空
         if not config_path:
             logger.error("Config path is empty.")
             raise ValueError("Config path is empty.")
         
+        _config_path: Path = Path(config_path)
+        
         # 检查配置文件是否存在且是一个文件
-        if not config_path.is_file():
-            logger.error(f"Config file '{config_path}' is empty.")
-            raise ValueError(f"Config file '{config_path}' is empty.")
+        if not _config_path.is_file():
+            logger.error(f"Config file '{_config_path}' is empty.")
+            raise ValueError(f"Config file '{_config_path}' is empty.")
         
         try:
-            with open(config_path, 'r', encoding='utf-8') as file:
+            with open(_config_path, 'r', encoding='utf-8') as file:
                 config: Dict = yaml.safe_load(file)  # 使用 safe_load 安全地加载 YAML 数据
                 
                 if config is None:
-                    logger.error(f"The YAML config file {config_path} is empty.")
-                    raise ValueError(f"The YAML config file {config_path} is empty.")
+                    logger.error(f"The YAML config file {_config_path} is empty.")
+                    raise ValueError(f"The YAML config file {_config_path} is empty.")
                 
                 res = config.get(config_name, {})
                 
                 if res is None:
-                    logger.error(f"Config name '{config_name}' not found in '{config_path}'.")
-                    raise KeyError(f"Config name '{config_name}' not found in '{config_path}'.")
+                    logger.error(f"Config name '{config_name}' not found in '{_config_path}'.")
+                    raise KeyError(f"Config name '{config_name}' not found in '{_config_path}'.")
                 
                 if not isinstance(res, dict):
                     logger.error(f"Config '{config_name}' is not a dictionary.")
@@ -66,13 +67,13 @@ def load_config(config_path: str, config_name: str, logger: Logger) -> Dict[str,
                 
                 return res
         
-        except FileNotFoundError:
-            logger.error(f"Config file '{config_path}' was not found during file opening.")
-            raise FileNotFoundError(f"Config file '{config_path}' was not found during file opening.") from e
+        except FileNotFoundError as e:
+            logger.error(f"Config file '{_config_path}' was not found during file opening.")
+            raise FileNotFoundError(f"Config file '{_config_path}' was not found during file opening.") from e
         
         except yaml.YAMLError as e:
             logger.error(f"Error parsing the YAML config file: {e}")
-            raise ValueError(f"Error parsing the YAML config file '{config_path}': {e}") from e 
+            raise ValueError(f"Error parsing the YAML config file '{_config_path}': {e}") from e 
 
 
 

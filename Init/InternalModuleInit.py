@@ -136,9 +136,9 @@ class InternalModuleManager:
         
         return (False, module_name, "")
 
-    def _get_modules(self,isBaseModules:bool)->List[Tuple[str,str]]:
+    def _get_modules(self, isBaseModules:bool)->List[Tuple[str,str]]:
         """
-            返回 要启动的[modules+module_path]列表
+            返回 要启动的[modules + module_path]列表
             
             :param isBase: True:base_modules False: optional_modules
             
@@ -217,11 +217,11 @@ class InternalModuleManager:
         """
         return  self._start_modules_sequentially(self._get_modules(isBaseModules=False), isBaseModules=False)
     
-    def _start_single_module(self,module:Tuple[str,str],isBaseModule: bool)->bool:
+    def _start_single_module(self, module:Tuple[str,str], isBaseModule: bool)->bool:
         """
             单次启动 一个内部服务模块
             
-            :param module: 应包含模型名字和模型路径,比如GPTSoVitsAgent,Module.TTS.GPTSoVits
+            :param module: 应包含模型名字和模型路径,比如 [GPTSoVitsAgent, Module.TTS.GPTSoVits]
             :param isBaseModule: 是否是base module
             
             返回:
@@ -241,10 +241,10 @@ class InternalModuleManager:
             agent = self._create_agent(module_name, module_path, logger=self.logger)
             # 将模块添加到相应的列表
             if isBaseModule:
-                self.base_processes.append((module, agent))
+                self.base_processes.append((module_name, agent))
                 self.logger.info(f"Started base module {module}")
             else:
-                self.optional_processes.append((module, agent))
+                self.optional_processes.append((module_name, agent))
                 self.logger.info(f"Started optional module {module}")
             return True  # 成功启动模块后返回 True
         except Exception as e:
@@ -531,7 +531,7 @@ class InternalModuleManager:
         
         return self._stop_modules(modules_to_restart, isBaseModule=False)
            
-    def list_started_modules(self, isBaseModule: bool = None) -> List[str]:
+    def list_started_modules(self, isBaseModule: Optional[bool] = None) -> List[str]:
         """
         返回已启动的所有内部模块的名字。
         
@@ -557,8 +557,8 @@ class InternalModuleManager:
         print("InternalModuleManager deleted")
         
     def _show(self):
-        self.logger.info(f"Startted base modules: {[module for module in self.list_started_modules(isBaseModule=True)]}")
-        self.logger.info(f"Startted optional modules: {[module for module in self.list_started_modules(isBaseModule=False)]}")
+        self.logger.info(f"Started base modules: {[module for module in self.list_started_modules(isBaseModule=True)]}")
+        self.logger.info(f"Started optional modules: {[module for module in self.list_started_modules(isBaseModule=False)]}")
 
 
 if __name__ == "__main__":

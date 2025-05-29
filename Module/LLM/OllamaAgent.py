@@ -13,9 +13,10 @@ import httpx
 import asyncio
 from urllib.parse import urljoin
 from dotenv import dotenv_values
-from typing import Dict, List
+from typing import Dict, List, AsyncGenerator
 from fastapi import FastAPI, Form, Body, HTTPException
 from pydantic import BaseModel
+from contextlib import asynccontextmanager
 
 from Module.Utils.Logger import setup_logger
 from Module.Utils.ConfigTools import load_config, validate_config
@@ -62,7 +63,7 @@ class OllamaAgent:
         self.health_check_url = self.config.get("health_check_url", f"http://{self.host}:{self.port}/health")
         
         # 初始化 httpx.AsyncClient
-        self.client = None  # 在lifespan中初始化
+        self.client:  httpx.AsyncClient  # 在lifespan中初始化
         
         # 初始化 FastAPI 应用，使用生命周期管理
         self.app = FastAPI(lifespan=self.lifespan)
@@ -71,7 +72,8 @@ class OllamaAgent:
         self.setup_routes()
         
     
-    async def lifespan(self, app: FastAPI):
+    @asynccontextmanager
+    async def lifespan(self, app: FastAPI)-> AsyncGenerator[None, None]:
         """管理应用生命周期"""
         # 应用启动时执行
         self.client = httpx.AsyncClient(
@@ -155,10 +157,10 @@ class OllamaAgent:
         headers = {"Content-Type": "application/json"}
         url = urljoin(self.ollama_url, "/api/generate")
 
-        response = await self.client.post(url, json=data, headers=headers)
+        response = await self.client.post(url, json=data, headers=headers, timeout=120.0)
 
         try:
-            response = await self.client.post(url, json=data, headers=headers)
+            response = await self.client.post(url, json=data, headers=headers, timeout=120.0)
             response.raise_for_status()
             response_data = response.json()
             
@@ -187,10 +189,10 @@ class OllamaAgent:
         headers = {"Content-Type": "application/json"}
         url = urljoin(self.ollama_url,"/api/chat")
 
-        response = await self.client.post(url, json=data, headers=headers)
+        response = await self.client.post(url, json=data, headers=headers, timeout=120.0)
 
         try:
-            response = await self.client.post(url, json=data, headers=headers)
+            response = await self.client.post(url, json=data, headers=headers, timeout=120.0)
             response.raise_for_status()
             response_data = response.json()
             

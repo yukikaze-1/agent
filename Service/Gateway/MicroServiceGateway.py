@@ -17,9 +17,10 @@ from urllib.parse import urljoin, quote
 from fastapi import FastAPI, File, HTTPException, Form, Request, Response, status, Depends
 from fastapi.responses import JSONResponse
 from datetime import datetime
-from typing import Dict, List
+from typing import Dict, List, AsyncGenerator
 from dotenv import dotenv_values
 from collections import defaultdict
+from contextlib import asynccontextmanager
 
 
 from Module.Utils.Logger import setup_logger
@@ -49,8 +50,6 @@ class MicroServiceGateway():
         self.config_path = self.env_vars.get("MICRO_SERVICE_GATEWAY_CONFIG_PATH","")
         self.config = load_config(config_path=self.config_path, config_name='MicroServiceGateway', logger=self.logger)
         
-        # 初始化 AsyncClient 为 None
-        self.client = None
         
         # 存储服务实例和失败计数
         self.service_instances: Dict[str, List[Dict]] = {}  # 存储从 Consul 获取的服务实例信息
@@ -87,6 +86,9 @@ class MicroServiceGateway():
         self.service_id = self.config.get("service_id", f"{self.service_name}-{self.host}:{self.port}")
         self.health_check_url = self.config.get("health_check_url", f"http://{self.host}:{self.port}/health")
         
+        # 初始化 httpx.AsyncClient
+        self.client:  httpx.AsyncClient # 在lifespan中初始化
+        
         # 初始化 FastAPI 应用，使用生命周期管理
         self.app = FastAPI(lifespan=self.lifespan)
         
@@ -112,7 +114,8 @@ class MicroServiceGateway():
 
             
         
-    async def lifespan(self, app: FastAPI):
+    @asynccontextmanager
+    async def lifespan(self, app: FastAPI)-> AsyncGenerator[None, None]:
         """管理应用生命周期"""
         # 应用启动时执行
         self.client = httpx.AsyncClient(

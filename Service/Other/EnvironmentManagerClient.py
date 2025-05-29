@@ -58,7 +58,7 @@ class EnvironmentManagerClient:
         service_url = f"http://{instance['address']}:{instance['port']}/{endpoint}"
 
         try:
-            response = await self.client.post(service_url, json=data)
+            response = await self.client.post(service_url, json=data, timeout=120.0)
             response.raise_for_status()
             return response.json()
         except httpx.RequestError as exc:

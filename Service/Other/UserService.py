@@ -11,10 +11,11 @@
 import uvicorn
 import httpx
 import asyncio
-from typing import Dict, List, Any
+import concurrent.futures
+from typing import Dict, List, Any, AsyncGenerator
 from fastapi import FastAPI, Form, HTTPException, status
 from dotenv import dotenv_values
-import concurrent.futures
+from contextlib import asynccontextmanager
 
 from Module.Utils.Database.UserAccountDataBaseAgent import  UserAccountDataBaseAgent
 from Module.Utils.Logger import setup_logger
@@ -92,7 +93,8 @@ class UserService:
         self.setup_routes()
     
     
-    async def lifespan(self, app: FastAPI):
+    @asynccontextmanager
+    async def lifespan(self, app: FastAPI)-> AsyncGenerator[None, None]:
         """管理应用生命周期"""
         # 应用启动时执行
         self.client = httpx.AsyncClient(

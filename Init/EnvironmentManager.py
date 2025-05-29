@@ -7,6 +7,9 @@
 """
     负责AIagent的环境的设置
 """
+class UserEnvironment:
+    Username: str
+    
 
 class EnvironmentManager:
     """

@@ -15,10 +15,11 @@ import httpx
 import asyncio
 import uvicorn
 from fastapi import Form, Request, File, FastAPI
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional, AsyncGenerator
 from urllib.parse import urljoin
 from dotenv import dotenv_values
 from pydantic import BaseModel
+from contextlib import asynccontextmanager
 
 from Module.Utils.ConfigTools import load_config, validate_config
 from Module.Utils.Logger import setup_logger
@@ -87,6 +88,9 @@ class GPTSoVitsAgent:
         self.service_id = self.config.get("service_id", f"{self.service_name}-{self.host}:{self.port}")
         self.health_check_url = self.config.get("health_check_url", f"http://{self.host}:{self.port}/health")
         
+        # 初始化 httpx.AsyncClient
+        self.client:  httpx.AsyncClient # 在lifespan中初始化
+        
         # 初始化 FastAPI 应用，使用生命周期管理
         self.app = FastAPI(lifespan=self.lifespan)
         
@@ -130,7 +134,8 @@ class GPTSoVitsAgent:
                 raise KeyError(f"Missing required setting configuration key: {key}")
     
     
-    async def lifespan(self, app: FastAPI):
+    @asynccontextmanager
+    async def lifespan(self, app: FastAPI)-> AsyncGenerator[None, None]:
         """管理应用生命周期"""
         self.logger.info("Starting lifespan...")
 
@@ -213,7 +218,7 @@ class GPTSoVitsAgent:
         return config
     
 
-    async def infer_tts_get(self, content: str, config: Dict[str, Any] = None) -> str:
+    async def infer_tts_get(self, content: str, config:  Dict[str, Any] | None= None) -> str:
         """
         使用 GET 请求进行语音生成。
 
@@ -239,7 +244,7 @@ class GPTSoVitsAgent:
         return await self._send_request("GET", url, save_response=True, params=params)
 
 
-    async def infer_tts_post(self, content: str, config: Dict[str, Any] = None) -> str:
+    async def infer_tts_post(self, content: str, config: Optional[Dict[str, Any]] = None) -> str:
         """
         使用 POST 请求进行语音生成。
 
@@ -249,7 +254,9 @@ class GPTSoVitsAgent:
         """
         if config is None:
             config = self.generate_config()
+            
         url = urljoin(self.server_url, "tts")
+        
         payload = {
             "text": content,
             "text_lang": config["text_lang"],

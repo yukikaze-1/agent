@@ -19,4 +19,11 @@ ChatModule:
   # 健康检查的 URL
   health_check_url: "http://127.0.0.1:20060/health"  # 可选，默认会自动生成
 
-  save_dir: "/home/yomu/agent/Module/Chat/user_audio_input"
+  # 用户上传的文件的临时存放地点
+  # TODO 解决路径合并
+  save_dir: "/home/yomu/agent/Module/Chat/"
+  audio_save_dir: "./user_audio_input"
+  image_save_dir: "./user_image_input"
+  video_save_dir: "./user_video_input"
+
+  boundary: "myboundary123456"

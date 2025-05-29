@@ -13,8 +13,9 @@ import asyncio
 from dotenv import dotenv_values
 from urllib.parse import urljoin, quote
 from fastapi import FastAPI, File, HTTPException, Form, Request, Response, status
-from typing import Dict, List
+from typing import Dict, List, AsyncGenerator
 from collections import defaultdict
+from contextlib import asynccontextmanager
 
 from Module.Utils.Logger import setup_logger
 from Module.Utils.ConfigTools import load_config, validate_config
@@ -48,8 +49,8 @@ class APIGateway:
         self.config_path = self.env_vars.get("API_GATEWAY_CONFIG_PATH","") 
         self.config: Dict = load_config(config_path=self.config_path, config_name='APIGateway', logger=self.logger)
         
-        # 初始化 AsyncClient 为 None
-        self.client = None
+        # 初始化 httpx.AsyncClient
+        self.client: httpx.AsyncClient # 在lifespan中初始化
         
         # 存储服务实例和失败计数
         self.service_instances: Dict[str, List[Dict]] = {}  # 存储从 Consul 获取的服务实例信息
@@ -110,7 +111,8 @@ class APIGateway:
                 raise ValueError(f"Route URL for '{server}' must start with 'http://' or 'https://'.")      
         
         
-    async def lifespan(self, app: FastAPI):
+    @asynccontextmanager
+    async def lifespan(self, app: FastAPI)-> AsyncGenerator[None, None]:
         """管理应用生命周期"""
         # 应用启动时执行
         self.client = httpx.AsyncClient(

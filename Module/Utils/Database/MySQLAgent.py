@@ -9,10 +9,11 @@ import httpx
 import asyncio
 import pymysql
 from logging import Logger
-from typing import List, Optional, Tuple, Dict, Any
+from typing import List, Optional, Tuple, Dict, Any, AsyncGenerator
 from dotenv import dotenv_values
 from fastapi import FastAPI, Form, Body, HTTPException
 from pydantic import BaseModel
+from contextlib import asynccontextmanager
 
 import pymysql.cursors
 
@@ -78,7 +79,7 @@ class MySQLAgent:
         self.connections: Dict[int, pymysql.connections.Connection] = {}
         
         # 初始化 httpx.AsyncClient
-        self.client = None  # 在lifespan中初始化
+        self.client:  httpx.AsyncClient   # 在lifespan中初始化
         
         # 初始化 FastAPI 应用，使用生命周期管理
         self.app = FastAPI(lifespan=self.lifespan)
@@ -87,7 +88,8 @@ class MySQLAgent:
         self.setup_routes()
         
     
-    async def lifespan(self, app: FastAPI):
+    @asynccontextmanager
+    async def lifespan(self, app: FastAPI)-> AsyncGenerator[None, None]:
         """管理应用生命周期"""
         self.logger.info("Starting lifespan...")
 

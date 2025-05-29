@@ -35,7 +35,7 @@ class ServiceInstance(TypedDict):
     port: int
     
 
-async def get_service_instances(consul_url: str, service_name: str, client: httpx.AsyncClient,logger: Logger) -> List[Dict]:
+async def get_service_instances(consul_url: str, service_name: str, client: httpx.AsyncClient, logger: Logger) -> List[Dict]:
     """从 Consul 拉取服务实例列表"""
     url = f"{consul_url}/v1/catalog/service/{service_name}"
     try:
@@ -76,14 +76,17 @@ async def update_service_instances_periodically(consul_url: str, client: httpx.A
         try:
             logger.info("Updating service instances...")
             # 从配置中动态获取需要监控的服务列表
-            services = config.get("services")
-            for service_name in services:
-                instances = await get_service_instances(consul_url=consul_url,
-                                                        service_name=service_name,
-                                                        client=client,
-                                                        logger=logger)
-                service_instances[service_name] = instances
-                logger.debug(f"Service '{service_name}' instances updated: {instances}")
+            services = config.get("services", {})
+            if not services:
+                logger.error(f"Services that need to observe in config is empty. ")
+            else:  
+                for service_name in services:
+                    instances = await get_service_instances(consul_url=consul_url,
+                                                            service_name=service_name,
+                                                            client=client,
+                                                            logger=logger)
+                    service_instances[service_name] = instances
+                    logger.debug(f"Service '{service_name}' instances updated: {instances}")
         except Exception as e:
             logger.error(f"Error updating service instances: {e}")
         await asyncio.sleep(10)  # 每 10 秒更新一次   

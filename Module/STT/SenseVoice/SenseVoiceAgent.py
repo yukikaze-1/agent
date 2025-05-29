@@ -14,8 +14,9 @@ import asyncio
 import uvicorn
 from fastapi import FastAPI, status, Form, HTTPException, Body
 from dotenv import dotenv_values
-from typing import Dict, List, Any, Tuple
+from typing import Dict, List, Any, Tuple, AsyncGenerator
 from pydantic import BaseModel
+from contextlib import asynccontextmanager
 
 from Module.Utils.Logger import setup_logger
 from Module.Utils.ConfigTools import load_config, validate_config
@@ -57,7 +58,7 @@ class SenseVoiceAgent:
         self.port = self.config.get("port", 20041)
         
         # SenseVoice_server地址
-        self.server_url = self.config.get("server_url")
+        self.server_url = self.config.get("server_url", "")
         
         # 服务注册信息
         self.service_name = self.config.get("service_name", "SenseVoiceAgent")
@@ -65,7 +66,7 @@ class SenseVoiceAgent:
         self.health_check_url = self.config.get("health_check_url", f"http://{self.host}:{self.port}/health")
         
         # 初始化 httpx.AsyncClient
-        self.client = None  # 在lifespan中初始化
+        self.client:  httpx.AsyncClient  # 在lifespan中初始化
         
         # 初始化 FastAPI 应用，使用生命周期管理
         self.app = FastAPI(lifespan=self.lifespan)
@@ -74,7 +75,8 @@ class SenseVoiceAgent:
         self.setup_routes()
         
     
-    async def lifespan(self, app: FastAPI):
+    @asynccontextmanager
+    async def lifespan(self, app: FastAPI)-> AsyncGenerator[None, None]:
         """管理应用生命周期"""
         # 应用启动时执行
         self.client = httpx.AsyncClient(
@@ -171,7 +173,7 @@ class SenseVoiceAgent:
                 }
                 # 发送POST请求到ASR API
                 url = self.server_url + "/predict/sentences"
-                response = await self.client.post(url, files=files, data=form_data, timeout=30)
+                response = await self.client.post(url, files=files, data=form_data, timeout=120.0)
                 response.raise_for_status()  # 如果响应错误，则抛出异常
                 return response.json()
         except httpx.RequestError as e:

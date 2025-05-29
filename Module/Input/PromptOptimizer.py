@@ -11,10 +11,11 @@
 import httpx
 import asyncio
 import uvicorn
-from typing import Dict, List, Any
+from typing import Dict, List, Any, AsyncGenerator, Optional
 from dotenv import dotenv_values
 from fastapi import HTTPException, FastAPI, status, Form, Body
 from pydantic import BaseModel
+from contextlib import asynccontextmanager
 
 from langchain_ollama import ChatOllama
 from langchain.prompts import PromptTemplate
@@ -50,7 +51,7 @@ class PromptOptimizer:
         self.config: Dict = load_config(config_path=self.config_path, config_name='PromptOptimizer', logger=self.logger)
         
         # 初始化 AsyncClient 为 None
-        self.client = None
+        self.client: httpx.AsyncClient
         
         # Consul URL，确保包含协议前缀
         self.consul_url: str = self.config.get("consul_url", "http://127.0.0.1:8500")
@@ -80,7 +81,7 @@ class PromptOptimizer:
         self.llm = ChatOllama(model=self.model_name, temperature=self.temperature)
         
         # 纠正逻辑的chain(在setup_chains中初始化)
-        self.correct_prompt_chain: RunnableSerializable[dict, str] = None
+        self.correct_prompt_chain: RunnableSerializable[dict, str] | None = None
         
         # 设置路由
         self.setup_routes()
@@ -89,7 +90,8 @@ class PromptOptimizer:
         self.setup_chains()
         
         
-    async def lifespan(self, app: FastAPI):
+    @asynccontextmanager
+    async def lifespan(self, app: FastAPI)-> AsyncGenerator[None, None]:
         """管理应用生命周期"""
         self.logger.info("Starting lifespan...")
 
