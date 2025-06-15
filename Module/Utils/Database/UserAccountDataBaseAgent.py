@@ -8,10 +8,12 @@
     用户账户数据库
 """
 import httpx
+import uuid
 from typing import Tuple, Optional, Dict
 from dotenv import dotenv_values
 from logging import Logger
 from fastapi import HTTPException
+import re
 
 from Module.Utils.Logger import setup_logger
 from Module.Utils.ConfigTools import load_config, validate_config
@@ -31,7 +33,8 @@ from Module.Utils.ConfigTools import load_config, validate_config
 | `last_login_time` | `DATETIME`                                                       | 最后登录时间     |
 | `session_token`   | `VARCHAR(2048)`                                                  | Session令牌  |
 | `created_at`      | `DATETIME DEFAULT CURRENT_TIMESTAMP`                             | 创建时间       |
-| `updated_at`      | `DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | 修改时间       |
+| `updated_at`      | `DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | 修改时间
+| `deleted_at`      | `DATETIME NULL`                                                  | 删除时间 |
 
 CREATE TABLE users (
   user_id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -43,7 +46,8 @@ CREATE TABLE users (
   last_login_time DATETIME,
   session_token VARCHAR(2048),
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  deleted_at DATETIME NULL
 );
 
 ---
@@ -53,7 +57,7 @@ CREATE TABLE users (
 | --------------------- | ---------------------------------------------------------------- | ----------- |
 | `user_id`             | `INT UNSIGNED PRIMARY KEY`                                       | 用户ID（主键+外键） |
 | `user_name`           | `VARCHAR(255)`                                                   | 用户名         |
-| `profile_picture_url` | `VARCHAR(512) DEFAULT 'default_profile_picture_url'`                                                   | 头像URL地址     |
+| `profile_picture_url` | `VARCHAR(512) DEFAULT 'Resources/img/nahida.jpg'`                | 头像URL地址     |
 | `signature`           | `VARCHAR(255)`                                                   | 用户个性签名      |
 | `created_at`          | `DATETIME DEFAULT CURRENT_TIMESTAMP`                             | 创建时间        |
 | `updated_at`          | `DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | 修改时间        |
@@ -61,7 +65,7 @@ CREATE TABLE users (
 CREATE TABLE user_profile (
   user_id INT UNSIGNED PRIMARY KEY,
   user_name VARCHAR(255),
-  profile_picture_url VARCHAR(512) DEFAULT 'default_profile_picture_url',
+  profile_picture_url VARCHAR(512) DEFAULT 'Resources/img/nahida.jpg',
   signature VARCHAR(255),
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -217,6 +221,13 @@ CREATE TABLE user_files (
 """
 
 
+def is_email(identifier: str) -> bool:
+    return re.match(r"[^@]+@[^@]+\.[^@]+", identifier) is not None
+
+def is_account_name(identifier: str) -> bool:
+    return re.match(r"^[a-zA-Z0-9_]{3,16}$", identifier) is not None
+
+
 class UserAccountDataBaseAgent():
     """
         数据库:userinfo
@@ -235,7 +246,8 @@ class UserAccountDataBaseAgent():
                     charset
                     
         # TODO 应该让程序自动创建一个数据库，待实现            
-        需要手动在mysql数据库中创建用户信息数据库(注：要先手动创建一个名为userinfo的database才行):    
+        需要手动在mysql数据库中创建用户信息数据库
+        (注：1.要先手动创建一个名为userinfo的database才行 2. 创建表的SQL语句见本文件顶部的注释):    
             1. 用户主表 (`users`)
             2. 用户扩展资料 (`user_profile`)
             3. 用户登录认证 (`user_login_logs`)
@@ -263,6 +275,7 @@ class UserAccountDataBaseAgent():
         self.mysql_user = self.config.get("mysql_user", "")
         self.mysql_password = self.config.get("mysql_password", "")  
         self.database = self.config.get("database","")
+        # TODO 考虑删除这项。将表明写死在SQL语句中？
         self.table = self.config.get("table", "")
         self.charset = self.config.get("charset", "") 
         
@@ -294,14 +307,24 @@ class UserAccountDataBaseAgent():
     # --------------------------------
     # 功能函数
     # --------------------------------     
-    async def fetch_user_by_name(self,username: str)-> Optional[Dict]:
-        """通过名字来查询用户账号信息"""
-        query_sql = f"SELECT * FROM {self.table} WHERE username = %s;"
+    async def fetch_password_by_email_or_account(self, identifier: str)-> Optional[str]:
+        """通过 email 或 account 查询用户密码哈希"""
+        
+        if is_email(identifier):
+            query_sql = "SELECT password_hash FROM users WHERE email = %s;"
+            sql_args = [identifier]
+        elif is_account_name(identifier):
+            query_sql = "SELECT password_hash FROM users WHERE account = %s;"
+            sql_args = [identifier]
+        else:
+            self.logger.error(f"Invalid identifier: {identifier}. Need email or valid account.")
+            return None
+        
         url = self.mysql_agent_url + "/database/mysql/query"
         payload = {
             "id": self.connect_id,
             "sql": query_sql,
-            "sql_args": [username]
+            "sql_args": sql_args
         }
         try:
             response = await self.client.post(url=url, json=payload, timeout=120.0)
@@ -312,9 +335,9 @@ class UserAccountDataBaseAgent():
                 self.logger.info(f"Query success.")
                 result = response_data["Result"]
                 if result:
-                    return result
+                    return result["password_hash"]
                 else:
-                    self.logger.info(f"No such a account named {username}")
+                    self.logger.info(f"No user found with identifier: {identifier}")
                     return None
             else:
                 self.logger.error(f"Query failed! Error:{response}")
@@ -324,101 +347,322 @@ class UserAccountDataBaseAgent():
             self.logger.error(f"Query failed! Error:{str(e)}")
             return None
     
+
+    async def insert_user_info(self, account: str, email: str, password_hash: str, user_name: Optional[str] = None, signature: Optional[str] = None) -> Optional[int]:
+        """
+        插入用户注册信息到 users 表和 user_profile 表。
+        返回 user_id（成功）或 None（失败）。
+        """
+        user_uuid = str(uuid.uuid4())
+
+        # 插入 users 表
+        insert_user_sql = """
+            INSERT INTO users (user_uuid, account, email, password_hash)
+            VALUES (%s, %s, %s, %s);
+        """
+        user_payload = {
+            "id": self.connect_id,
+            "sql": insert_user_sql,
+            "sql_args": [user_uuid, account, email, password_hash]
+        }
+
+        try:
+            user_insert_response = await self.client.post(
+                url=self.mysql_agent_url + "/database/mysql/insert",
+                json=user_payload,
+                timeout=120.0
+            )
+            user_insert_response.raise_for_status()
+
+            if user_insert_response.status_code == 200:
+                self.logger.info("Inserted user info.")
+
+                # 获取 user_id（通过 UUID 查询）
+                fetch_id_sql = "SELECT user_id FROM users WHERE user_uuid = %s;"
+                id_payload = {
+                    "id": self.connect_id,
+                    "sql": fetch_id_sql,
+                    "sql_args": [user_uuid]
+                }
+                id_response = await self.client.post(
+                    url=self.mysql_agent_url + "/database/mysql/query",
+                    json=id_payload,
+                    timeout=60.0
+                )
+                id_response.raise_for_status()
+                id_result = id_response.json().get("Result")
+
+                if not id_result:
+                    self.logger.error("Failed to retrieve user_id after insert.")
+                    return None
+
+                user_id = id_result["user_id"]
+
+                # 插入 user_profile 表（使用默认头像）
+                insert_profile_sql = """
+                    INSERT INTO user_profile (user_id, user_name, signature)
+                    VALUES (%s, %s, %s);
+                """
+                profile_payload = {
+                    "id": self.connect_id,
+                    "sql": insert_profile_sql,
+                    "sql_args": [user_id, user_name or account, signature or ""]
+                }
+
+                profile_response = await self.client.post(
+                    url=self.mysql_agent_url + "/database/mysql/insert",
+                    json=profile_payload,
+                    timeout=60.0
+                )
+                profile_response.raise_for_status()
+
+                if profile_response.status_code == 200:
+                    self.logger.info("Inserted user profile.")
+                    return user_id
+                else:
+                    self.logger.warning("User profile insert may have failed.")
+                    return None
+            else:
+                self.logger.error(f"User insert failed: {user_insert_response.text}")
+                return None
+
+        except Exception as e:
+            self.logger.error(f"Insert error: {str(e)}")
+            return None
+
     
-    async def insert_user_info(self, username: str,  password: str)->bool:
-        """插入用户信息"""
-        insert_sql = f"INSERT INTO {self.table} (username, password) VALUES (%s, %s);"
-        url = self.mysql_agent_url + "/database/mysql/insert"
+    # async def insert_user_info(self, username: str,  password: str)->bool:
+    #     """插入用户信息"""
+    #     insert_sql = f"INSERT INTO {self.table} (username, password) VALUES (%s, %s);"
+    #     url = self.mysql_agent_url + "/database/mysql/insert"
+    #     payload = {
+    #         "id": self.connect_id,
+    #         "sql": insert_sql,
+    #         "sql_args": [username, password]
+    #     }
+    #     try:
+    #         response = await self.client.post(url=url, json=payload, timeout=120.0)
+    #         response.raise_for_status()
+    #         response_data :Dict = response.json()
+            
+    #         if response.status_code == 200:
+    #             result = response_data["Result"]
+    #             if result :
+    #                 # TODO 待修改，正式上线时删掉password
+    #                 self.logger.info(f"Insert userinfo success. Username:{username}, Password:{password}")
+    #                 return True
+    #             else:
+    #                 self.logger.warning(f"Insert userinfo failed. Username:{username}")
+    #                 return False
+    #         else:
+    #             self.logger.error(f"Insert userinfo failed! Error:{response}")
+    #             return False
+            
+    #     except Exception as e:
+    #         self.logger.error(f"Insert failed! Error:{str(e)}")
+    #         return False
+        
+    async def update_user_password_by_identifier(self, identifier: str, new_password_hash: str) -> bool:
+        """
+        根据 email 或 account 更新用户密码哈希。
+        """
+        if not is_email(identifier) and not is_account_name(identifier):
+            self.logger.error(f"Invalid identifier: {identifier}. Must be a valid email or account.")
+            return False
+
+        sql = """
+            UPDATE users
+            SET password_hash = %s, updated_at = CURRENT_TIMESTAMP
+            WHERE email = %s OR account = %s AND status != 'deleted';
+        """
         payload = {
             "id": self.connect_id,
-            "sql": insert_sql,
-            "sql_args": [username, password]
+            "sql": sql,
+            "sql_args": [new_password_hash, identifier, identifier]
         }
+
         try:
-            response = await self.client.post(url=url, json=payload, timeout=120.0)
+            response = await self.client.post(
+                url=self.mysql_agent_url + "/database/mysql/update",
+                json=payload,
+                timeout=60.0
+            )
             response.raise_for_status()
-            response_data :Dict = response.json()
-            
-            if response.status_code == 200:
-                result = response_data["Result"]
-                if result :
-                    # TODO 待修改，正式上线时删掉password
-                    self.logger.info(f"Insert userinfo success. Username:{username}, Password:{password}")
-                    return True
-                else:
-                    self.logger.warning(f"Insert userinfo failed. Username:{username}")
-                    return False
+            response_data = response.json()
+
+            if response.status_code == 200 and response_data.get("Result") is True:
+                self.logger.info(f"Password updated successfully for identifier: {identifier}.")
+                return True
             else:
-                self.logger.error(f"Insert userinfo failed! Error:{response}")
+                self.logger.warning(f"Password update might have failed. Response: {response_data}")
                 return False
-            
+
         except Exception as e:
-            self.logger.error(f"Insert failed! Error:{str(e)}")
+            self.logger.error(f"Password update failed! Error: {str(e)}")
             return False
+  
+    # async def update_user_password(self, username: str, new_password: str)->bool:
+    #     """修改用户密码"""
+    #     update_sql = f"UPDATE {self.table} SET password = %s WHERE username = %s;"
+    #     url = self.mysql_agent_url + "/database/mysql/update"
+    #     payload = {
+    #         "id": self.connect_id,
+    #         "sql": update_sql,
+    #         "sql_args": [new_password, username]
+    #     }
+    #     try:
+    #         response = await self.client.post(url=url, json=payload, timeout=120.0)
+    #         response.raise_for_status()
+    #         response_data :Dict = response.json()
+            
+    #         if response.status_code == 200:
+    #             result = response_data["Result"]
+    #             if result :
+    #                 # TODO 待修改，正式上线时删掉password
+    #                 self.logger.info(f"Update password success. Username:{username}, NewPassword:{new_password}")
+    #                 return True
+    #             else:
+    #                 self.logger.warning(f"Update password failed. Username:{username}")
+    #                 return False
+    #         else:
+    #             self.logger.error(f"Update password failed! Error:{response}")
+    #             return False
+            
+    #     except Exception as e:
+    #         self.logger.error(f"Update password failed! Error:{str(e)}")
+    #         return False
         
         
-    async def update_user_password(self, username: str, new_password: str)->bool:
-        """修改用户密码"""
-        update_sql = f"UPDATE {self.table} SET password = %s WHERE username = %s;"
-        url = self.mysql_agent_url + "/database/mysql/update"
+    async def soft_delete_user_by_id(self, user_id: int) -> bool:
+        """
+        软删除用户：设为 'deleted' 并记录删除时间。
+        """
+        sql = """
+            UPDATE users
+            SET status = 'deleted', deleted_at = CURRENT_TIMESTAMP
+            WHERE user_id = %s;
+        """
         payload = {
             "id": self.connect_id,
-            "sql": update_sql,
-            "sql_args": [new_password, username]
+            "sql": sql,
+            "sql_args": [str(user_id)]
         }
+
         try:
-            response = await self.client.post(url=url, json=payload, timeout=120.0)
+            response = await self.client.post(
+                url=self.mysql_agent_url + "/database/mysql/update",
+                json=payload,
+                timeout=60.0
+            )
             response.raise_for_status()
-            response_data :Dict = response.json()
-            
-            if response.status_code == 200:
-                result = response_data["Result"]
-                if result :
-                    # TODO 待修改，正式上线时删掉password
-                    self.logger.info(f"Update password success. Username:{username}, NewPassword:{new_password}")
-                    return True
-                else:
-                    self.logger.warning(f"Update password failed. Username:{username}")
-                    return False
+            response_data = response.json()
+
+            if response.status_code == 200 and response_data.get("Result") is True:
+                self.logger.info(f"Soft-deleted user ID {user_id}.")
+                return True
             else:
-                self.logger.error(f"Update password failed! Error:{response}")
+                self.logger.warning(f"Soft delete may have failed. Response: {response_data}")
                 return False
-            
+
         except Exception as e:
-            self.logger.error(f"Update password failed! Error:{str(e)}")
+            self.logger.error(f"Soft delete failed! Error: {str(e)}")
             return False
         
-    
-    async def delete_usr_info(self, username: str)->bool:
-        """删除用户信息"""
-        delete_sql = f"DELETE FROM {self.table} WHERE username=%s;" 
-        url = self.mysql_agent_url + "/database/mysql/delete"
+            
+    async def delete_user_by_id(self, user_id: int) -> bool:
+        """
+        根据 user_id 删除用户（包含自动删除 user_profile 中的关联记录）。
+        返回 True 表示成功，False 表示失败。
+        """
+        delete_sql = "DELETE FROM users WHERE user_id = %s;"
         payload = {
             "id": self.connect_id,
             "sql": delete_sql,
-            "sql_args": [username]
+            "sql_args": [str(user_id)]
         }
+
         try:
-            response = await self.client.post(url=url, json=payload, timeout=120.0)
+            response = await self.client.post(
+                url=self.mysql_agent_url + "/database/mysql/delete",
+                json=payload,
+                timeout=60.0
+            )
             response.raise_for_status()
-            response_data :Dict = response.json()
-            
-            if response.status_code == 200:
-                result = response_data["Result"]
-                if result :
-                    self.logger.info(f"Delete user success. Username:{username}")
-                    return True
-                else:
-                    self.logger.warning(f"Delete user failed. Username:{username}")
-                    return False
+            response_data = response.json()
+
+            if response.status_code == 200 and response_data.get("Result") is True:
+                self.logger.info(f"Successfully deleted user with ID {user_id}.")
+                return True
             else:
-                self.logger.error(f"Delete user failed! Error:{response}")
+                self.logger.warning(f"User deletion might have failed. Response: {response_data}")
                 return False
-            
+
         except Exception as e:
-            self.logger.error(f"Delete user failed! Error:{str(e)}")
+            self.logger.error(f"Delete failed! Error: {str(e)}")
             return False
+
+    # async def delete_usr_info(self, username: str)->bool:
+    #     """删除用户信息"""
+    #     delete_sql = f"DELETE FROM {self.table} WHERE username=%s;" 
+    #     url = self.mysql_agent_url + "/database/mysql/delete"
+    #     payload = {
+    #         "id": self.connect_id,
+    #         "sql": delete_sql,
+    #         "sql_args": [username]
+    #     }
+    #     try:
+    #         response = await self.client.post(url=url, json=payload, timeout=120.0)
+    #         response.raise_for_status()
+    #         response_data :Dict = response.json()
+            
+    #         if response.status_code == 200:
+    #             result = response_data["Result"]
+    #             if result :
+    #                 self.logger.info(f"Delete user success. Username:{username}")
+    #                 return True
+    #             else:
+    #                 self.logger.warning(f"Delete user failed. Username:{username}")
+    #                 return False
+    #         else:
+    #             self.logger.error(f"Delete user failed! Error:{response}")
+    #             return False
+            
+    #     except Exception as e:
+    #         self.logger.error(f"Delete user failed! Error:{str(e)}")
+    #         return False
         
+        
+    async def hard_delete_expired_users(self) -> int:
+        """
+        物理删除已标记为 deleted 超过 30 天的用户。
+        """
+        sql = """
+            DELETE FROM users
+            WHERE status = 'deleted' AND deleted_at < (NOW() - INTERVAL 30 DAY);
+        """
+        payload = {
+            "id": self.connect_id,
+            "sql": sql,
+            "sql_args": []
+        }
+
+        try:
+            response = await self.client.post(
+                url=self.mysql_agent_url + "/database/mysql/delete",
+                json=payload,
+                timeout=120.0
+            )
+            response.raise_for_status()
+            response_data = response.json()
+
+            if response.status_code == 200:
+                self.logger.info("Expired deleted users purged.")
+            return response_data.get("Result", 0)
+
+        except Exception as e:
+            self.logger.error(f"Hard delete failed! Error: {str(e)}")
+            return 0
+
     
     async def connect_to_database(self)->int:
         """连接MySQL数据库"""

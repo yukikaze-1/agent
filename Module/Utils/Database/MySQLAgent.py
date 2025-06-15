@@ -207,8 +207,7 @@ class MySQLAgent:
             self.logger.error(f"Operator: {operator}, Message:{message}, Result: {result}")
             return {"Operator": operator, "Message":message, "Result":result}
             
-                    
-    
+                        
     async def _insert(self, id: int, sql: str, sql_args: List[str])-> Dict[str, Any]:
         """插入"""
         connection=self.connections[id]
