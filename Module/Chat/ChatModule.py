@@ -42,10 +42,13 @@ from Module.Utils.FastapiServiceTools import (
 class ChatModule:
     """
         负责处理与用户对话
-            1. 负责将用户的各种输入进行转换
-            2. 负责将用户输入发送给LLM，并接受相应的输出
-            3. 将LLM的输出文本进行语音转换 
-            4. 汇聚LLM的输出文本和语音，一同返回给客户端
+            1. 负责将用户的各种输入(语音输入、视频输入)转换为文本
+            2. 负责将转换后的文本或用户文本输入发送给PromptOptimizer进行优化，并接收返回的结果
+            3. 负责将经过PromptOptimizer优化后的用户输入发送给LLM
+            4. # TODO 负责将本次对话的历史对话概览也发送给LLM
+            5. 将从LLM的输出文本进行语音转换 
+            6. 汇聚LLM的输出文本和语音，一同返回给客户端
+            7. # TODO 将VirtualCharacterModule返回的指令一并回送客户端
     """
     # 定义数据模型
     class Message(BaseModel):

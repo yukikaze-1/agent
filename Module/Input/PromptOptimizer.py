@@ -37,6 +37,8 @@ from Module.Utils.PromptTemplate.PromptOptimizerTemplate import (
 class PromptOptimizer:
     """
         提示词Prompt 优化器
+        
+        接受ChatModule发来的用户输入(文本、语音、)
     """
     class PromptPayload(BaseModel):
         user: str
