@@ -6,7 +6,6 @@ UserAccountDataBaseAgent:
   mysql_user: "root"
   mysql_password: "scgy19971205wq"
   database: "userinfo"
-  table: "account"
   charset: "utf8mb4"
 
 # MySQLAgent配置

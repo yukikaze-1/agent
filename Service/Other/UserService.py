@@ -12,10 +12,11 @@ import uvicorn
 import httpx
 import asyncio
 import concurrent.futures
-from typing import Dict, List, Any, AsyncGenerator
+from typing import Dict, List, Any, AsyncGenerator, Optional
 from fastapi import FastAPI, Form, HTTPException, status
 from dotenv import dotenv_values
 from contextlib import asynccontextmanager
+from pydantic import BaseModel, EmailStr, constr, Field, model_validator
 
 from Module.Utils.Database.UserAccountDataBaseAgent import  UserAccountDataBaseAgent
 from Module.Utils.Logger import setup_logger
@@ -29,6 +30,68 @@ from Module.Utils.FastapiServiceTools import (
 
 # from Service.Other.EnvironmentManagerClient import EnvironmentManagerClient
 
+# 各种请求的格式要求定义
+
+class RegisterRequest(BaseModel):
+    """ 用户注册 request """
+    # TODO 待扩展功能，现只提供基础注册
+    user_name: str = Field(..., description="用户名，不唯一，有数字后缀")
+    account: str = Field(..., min_length=3, max_length=50, description="用户账号，唯一")
+    password: str = Field(..., min_length=6, description="用户密码，最少六位")
+    email: EmailStr = Field(..., description="用户邮箱")
+    
+
+class LoginRequest(BaseModel):
+    """ 用户登陆 request """
+    account: Optional[str] = Field(default=None, min_length=3, max_length=50, description="用户账号")
+    email: Optional[EmailStr] = None
+    password: str = Field(..., min_length=6)
+
+    @model_validator(mode="after")
+    def check_account_or_email(self) -> "LoginRequest":
+        if not self.account and not self.email:
+            raise ValueError("Either 'account' or 'email' must be provided.")
+        return self
+
+
+class LogoutRequest(BaseModel):
+    """ 用户注销账户 request """
+    account: Optional[str] = Field(default=None, min_length=3, max_length=50, description="用户账号")
+    email: Optional[EmailStr] = None
+    password: str = Field(..., min_length=6)
+
+    @model_validator(mode="after")
+    def check_account_or_email(self) -> "LogoutRequest":
+        if not self.account and not self.email:
+            raise ValueError("Either 'account' or 'email' must be provided.")
+        return self
+
+
+class ModifyPasswordRequest(BaseModel):
+    """ 用户修改密码 request"""
+    account: str
+    old_password: str = Field(..., min_length=6, description="旧密码")
+    new_password: str = Field(..., min_length=6, description="新密码")
+    
+    @model_validator(mode='after')
+    def check_passwords_match(self) -> "ModifyPasswordRequest":
+        if self.old_password == self.new_password:
+            raise ValueError("New password must be different from old password.")
+        return self
+    
+
+class ModifyProfileRequest(BaseModel):
+    """ 用户修改个人信息 request"""
+    account: str
+    
+class UploadFileRequest(BaseModel):
+    """ 用户上传文件 request"""
+    account: str
+    
+class ModifySettingRequest(BaseModel):
+    """ 用户修改设置 request"""
+    account: str
+    
 
 class UserService:
     """
@@ -36,8 +99,8 @@ class UserService:
         
             1. 登陆
             2. 注册
-            3. 修改密码
-            4. 登出
+            3. 上传文件
+            4. 修改账户信息
             5. 注销
     """
     def __init__(self):
@@ -180,25 +243,25 @@ class UserService:
             return {"status": "healthy"}
         
         # 用户登录
-        @self.app.post("/usr/login/")
+        @self.app.post("/usr/login")
         async def usr_login(username: str=Form(...), password: str=Form(...)):
             return await self._usr_login(username, password)
 
                 
         # 用户注册
-        @self.app.post("/usr/register/")
+        @self.app.post("/usr/register")
         async def usr_register(username: str=Form(...), password: str=Form(...)):
             return await self._usr_register(username, password)
         
         
         # 用户更改密码
-        @self.app.post("/usr/change_pwd/")
+        @self.app.post("/usr/change_pwd")
         async def usr_change_pwd(username: str=Form(...), password: str=Form(...)):
             return await self._usr_change_pwd(username, password)
         
         
         # 用户登出
-        @self.app.post("/usr/logout/")
+        @self.app.post("/usr/logout")
         async def usr_logout(username: str=Form(...)):
             return await self._usr_logout(username)
         

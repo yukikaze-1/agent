@@ -231,8 +231,6 @@ def is_account_name(identifier: str) -> bool:
 class UserAccountDataBaseAgent():
     """
         数据库:userinfo
-        表:account
-        格式:id, username(PRIMARY KEY), password
         
         配置文件为config.yml,配置文件路径存放在Init/.env中的的INIT_CONFIG_PATH变量中
             配置内容为：
@@ -242,7 +240,6 @@ class UserAccountDataBaseAgent():
                     user
                     password
                     database
-                    table
                     charset
                     
         # TODO 应该让程序自动创建一个数据库，待实现            
@@ -430,37 +427,6 @@ class UserAccountDataBaseAgent():
             self.logger.error(f"Insert error: {str(e)}")
             return None
 
-    
-    # async def insert_user_info(self, username: str,  password: str)->bool:
-    #     """插入用户信息"""
-    #     insert_sql = f"INSERT INTO {self.table} (username, password) VALUES (%s, %s);"
-    #     url = self.mysql_agent_url + "/database/mysql/insert"
-    #     payload = {
-    #         "id": self.connect_id,
-    #         "sql": insert_sql,
-    #         "sql_args": [username, password]
-    #     }
-    #     try:
-    #         response = await self.client.post(url=url, json=payload, timeout=120.0)
-    #         response.raise_for_status()
-    #         response_data :Dict = response.json()
-            
-    #         if response.status_code == 200:
-    #             result = response_data["Result"]
-    #             if result :
-    #                 # TODO 待修改，正式上线时删掉password
-    #                 self.logger.info(f"Insert userinfo success. Username:{username}, Password:{password}")
-    #                 return True
-    #             else:
-    #                 self.logger.warning(f"Insert userinfo failed. Username:{username}")
-    #                 return False
-    #         else:
-    #             self.logger.error(f"Insert userinfo failed! Error:{response}")
-    #             return False
-            
-    #     except Exception as e:
-    #         self.logger.error(f"Insert failed! Error:{str(e)}")
-    #         return False
         
     async def update_user_password_by_identifier(self, identifier: str, new_password_hash: str) -> bool:
         """
@@ -501,37 +467,6 @@ class UserAccountDataBaseAgent():
             self.logger.error(f"Password update failed! Error: {str(e)}")
             return False
   
-    # async def update_user_password(self, username: str, new_password: str)->bool:
-    #     """修改用户密码"""
-    #     update_sql = f"UPDATE {self.table} SET password = %s WHERE username = %s;"
-    #     url = self.mysql_agent_url + "/database/mysql/update"
-    #     payload = {
-    #         "id": self.connect_id,
-    #         "sql": update_sql,
-    #         "sql_args": [new_password, username]
-    #     }
-    #     try:
-    #         response = await self.client.post(url=url, json=payload, timeout=120.0)
-    #         response.raise_for_status()
-    #         response_data :Dict = response.json()
-            
-    #         if response.status_code == 200:
-    #             result = response_data["Result"]
-    #             if result :
-    #                 # TODO 待修改，正式上线时删掉password
-    #                 self.logger.info(f"Update password success. Username:{username}, NewPassword:{new_password}")
-    #                 return True
-    #             else:
-    #                 self.logger.warning(f"Update password failed. Username:{username}")
-    #                 return False
-    #         else:
-    #             self.logger.error(f"Update password failed! Error:{response}")
-    #             return False
-            
-    #     except Exception as e:
-    #         self.logger.error(f"Update password failed! Error:{str(e)}")
-    #         return False
-        
         
     async def soft_delete_user_by_id(self, user_id: int) -> bool:
         """
@@ -601,36 +536,6 @@ class UserAccountDataBaseAgent():
             self.logger.error(f"Delete failed! Error: {str(e)}")
             return False
 
-    # async def delete_usr_info(self, username: str)->bool:
-    #     """删除用户信息"""
-    #     delete_sql = f"DELETE FROM {self.table} WHERE username=%s;" 
-    #     url = self.mysql_agent_url + "/database/mysql/delete"
-    #     payload = {
-    #         "id": self.connect_id,
-    #         "sql": delete_sql,
-    #         "sql_args": [username]
-    #     }
-    #     try:
-    #         response = await self.client.post(url=url, json=payload, timeout=120.0)
-    #         response.raise_for_status()
-    #         response_data :Dict = response.json()
-            
-    #         if response.status_code == 200:
-    #             result = response_data["Result"]
-    #             if result :
-    #                 self.logger.info(f"Delete user success. Username:{username}")
-    #                 return True
-    #             else:
-    #                 self.logger.warning(f"Delete user failed. Username:{username}")
-    #                 return False
-    #         else:
-    #             self.logger.error(f"Delete user failed! Error:{response}")
-    #             return False
-            
-    #     except Exception as e:
-    #         self.logger.error(f"Delete user failed! Error:{str(e)}")
-    #         return False
-        
         
     async def hard_delete_expired_users(self) -> int:
         """
