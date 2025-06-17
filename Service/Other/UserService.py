@@ -13,10 +13,14 @@ import httpx
 import asyncio
 import concurrent.futures
 from typing import Dict, List, Any, AsyncGenerator, Optional
-from fastapi import FastAPI, Form, HTTPException, status
+from fastapi import FastAPI, Form, HTTPException, status, Depends
+from fastapi.security import OAuth2PasswordBearer
 from dotenv import dotenv_values
 from contextlib import asynccontextmanager
 from pydantic import BaseModel, EmailStr, constr, Field, model_validator
+from passlib.context import CryptContext
+from jose import jwt, JWTError
+from datetime import datetime, timedelta
 
 from Module.Utils.Database.UserAccountDataBaseAgent import  UserAccountDataBaseAgent
 from Module.Utils.Logger import setup_logger
@@ -43,41 +47,21 @@ class RegisterRequest(BaseModel):
 
 class LoginRequest(BaseModel):
     """ 用户登陆 request """
-    account: Optional[str] = Field(default=None, min_length=3, max_length=50, description="用户账号")
-    email: Optional[EmailStr] = None
+    identifier: str = Field(min_length=3, max_length=50, description="用户账号或邮箱")
     password: str = Field(..., min_length=6)
-
-    @model_validator(mode="after")
-    def check_account_or_email(self) -> "LoginRequest":
-        if not self.account and not self.email:
-            raise ValueError("Either 'account' or 'email' must be provided.")
-        return self
 
 
 class LogoutRequest(BaseModel):
     """ 用户注销账户 request """
-    account: Optional[str] = Field(default=None, min_length=3, max_length=50, description="用户账号")
-    email: Optional[EmailStr] = None
+    identifier: str = Field(min_length=3, max_length=50, description="用户账号或邮箱")
     password: str = Field(..., min_length=6)
-
-    @model_validator(mode="after")
-    def check_account_or_email(self) -> "LogoutRequest":
-        if not self.account and not self.email:
-            raise ValueError("Either 'account' or 'email' must be provided.")
-        return self
 
 
 class ModifyPasswordRequest(BaseModel):
     """ 用户修改密码 request"""
-    account: str
+    identifier: str = Field(..., description="用户账号或邮箱")
     old_password: str = Field(..., min_length=6, description="旧密码")
     new_password: str = Field(..., min_length=6, description="新密码")
-    
-    @model_validator(mode='after')
-    def check_passwords_match(self) -> "ModifyPasswordRequest":
-        if self.old_password == self.new_password:
-            raise ValueError("New password must be different from old password.")
-        return self
     
 
 class ModifyProfileRequest(BaseModel):
@@ -112,7 +96,7 @@ class UserService:
         self.config = load_config(config_path=self.config_path, config_name='UserService', logger=self.logger)
         
         # 验证配置文件
-        required_keys = ["consul_url", "host", "port", "service_name", "service_id", "health_check_url"]
+        required_keys = ["consul_url", "host", "port", "service_name", "service_id", "health_check_url", "jwt"]
         validate_config(required_keys, self.config, self.logger)
         
         # 用户信息数据库
@@ -135,6 +119,16 @@ class UserService:
         self.service_name = self.config.get("service_name", "UserService")
         self.service_id = self.config.get("service_id", f"{self.service_name}-{self.host}:{self.port}")
         self.health_check_url = self.config.get("health_check_url", f"http://{self.host}:{self.port}/health")
+        
+        # 加密
+        self.pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+        
+        # jwt生成token设置
+        self.jwt_secret_key = self.config.get("jwt", {}).get("secret_key", "your_secret_key")
+        self.jwt_algorithm = self.config.get("jwt", {}).get("algorithm", "HS256")
+        self.jwt_expiration = self.config.get("jwt", {}).get("expiration", 3600)
+        
+        self.oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/usr/login")
         
         # 初始化 httpx.AsyncClient
         self.client = None  # 在lifespan中初始化
@@ -244,8 +238,8 @@ class UserService:
         
         # 用户登录
         @self.app.post("/usr/login")
-        async def usr_login(username: str=Form(...), password: str=Form(...)):
-            return await self._usr_login(username, password)
+        async def usr_login(user: LoginRequest):
+            return await self._usr_login(user.identifier, user.password)
 
                 
         # 用户注册
@@ -256,59 +250,110 @@ class UserService:
         
         # 用户更改密码
         @self.app.post("/usr/change_pwd")
-        async def usr_change_pwd(username: str=Form(...), password: str=Form(...)):
-            return await self._usr_change_pwd(username, password)
-        
-        
-        # 用户登出
-        @self.app.post("/usr/logout")
-        async def usr_logout(username: str=Form(...)):
-            return await self._usr_logout(username)
-        
+        async def usr_change_pwd(user_id: int = self.get_current_user_id(), new_password: str = Form(...)):
+            return await self._usr_change_pwd(user_id, new_password)
+
         
         # 用户注销
-        @self.app.post("/usr/unregister/")
-        async def usr_unregister(username: str=Form(...), password: str=Form(...)):
-            return await self._usr_unregister(username, password)
+        @self.app.post("/usr/unregister")
+        async def usr_unregister(user_id: int = self.get_current_user_id()):
+            return await self._usr_unregister(user_id)
+        
+    
+    # --------------------------------
+    # 工具函数
+    # -------------------------------- 
+    def create_access_token(self, user_id: int) -> str:
+        """ 生成 JWT token """
+        expire = datetime.now() + timedelta(minutes=self.jwt_expiration)
+        payload = {
+            "user_id": user_id,  # 自定义载荷(用户ID)
+            "exp": expire         # 过期时间（必须）
+        }
+        token = jwt.encode(payload, self.jwt_secret_key, algorithm=self.jwt_algorithm)
+        return token    
+    
+    
+    def verify_token(self, token: str) -> int:
+        """ 验证 jwt token """
+        try:
+            payload = jwt.decode(token, self.jwt_secret_key, algorithms=[self.jwt_algorithm])
+            user_id = payload.get("user_id")
+            if user_id is None:
+                raise ValueError("Missing user_id")
+            return user_id
+        except JWTError:
+            raise ValueError("Invalid token")
+    
+    
+    def get_current_user_id(self):
+        """ 返回一个Depends(...) 封装依赖 通过token获得user_id"""
+        async def _get_current_user_id(token: str = Depends(self.oauth2_scheme)) -> int:
+            try:
+                return self.verify_token(token)
+            except JWTError:
+                raise HTTPException(status_code=401, detail="Token 验证失败")
+        return Depends(_get_current_user_id)    
+
         
         
     # --------------------------------
     # 功能函数
     # --------------------------------    
-    async def _usr_login(self, username: str, password: str):
-        """验证用户登录"""
+    async def _usr_login(self, identifier: str, password: str):
+        """ 
+        验证用户登录
+        
+        返回格式:
+            成功:
+                {"result": True, "message": message, "token": access_token}
+            失败:
+                {"result": False, "message": message, "user": identifier}
+        """
+        
         operator = 'usr_login'
+        result = True
+        message = f'Login successfully!'
+        
+        ### 查询数据库
         try:
             # loop = asyncio.get_event_loop()
             # res = await loop.run_in_executor(self.executor, self.usr_account_database.fetch_user_by_name, username)
-            res = await self.usr_account_database.fetch_user_by_name(username)
+            res = await self.usr_account_database.fetch_id_and_password_by_email_or_account(identifier=identifier)
         except Exception as e:
-            self.logger.error(f"Database error during login for user '{username}': {e}")
+            self.logger.error(f"Database error during login for user '{identifier}': {e}")
             # return {"result": False, "message": "Internal server error.", "username": username}
             raise HTTPException(status_code=500, detail="Internal server error.")
-            
-        result = True
-        message = 'Login successfully!'
         
+        self.logger.info(res)
+        
+        ### 验证
         # 检查用户是否已注册
         if not res:
             result = False
-            message = f"Login failed! Username '{username}' does not exist!"
-            self.logger.info(f"Operator:'{operator}', Result:'{result}', Username:'{username}', Message:'{message}'")
-            return {"result": result, "message": message, "username": username}
+            message = f"Login failed! User: '{identifier}' does not exist!"
+            self.logger.info(f"Operator:'{operator}', Result:'{result}', User:'{identifier}', Message:'{message}'")
+            return {"result": result, "message": message, "user": identifier}
 
+        # 计算客户端传来的密码的hash值
+        password_hash = self.pwd_context.hash(password)
         
-        # 验证用户名和密码是否匹配
-        if password != res["password"]:
+        # 用户内部ID 和保存的密码hash
+        user_id, stored_password_hash = res
+        
+        # 密码错误
+        if stored_password_hash != password_hash:
             result = False
-            message = "Login failed! Invalid username or password!"
-            self.logger.info(f"Operator:'{operator}', Result:'{result}', Username:'{username}', Message:'{message}'")
-            return {"result": result, "message": message, "username": username}  
+            message = "Login failed! Invalid account or password!"
+            self.logger.info(f"Operator:'{operator}', Result:'{result}', User:'{identifier}', Message:'{message}'")
+            return {"result": result, "message": message, "user": identifier}
 
-        
-        # 记录登录成功
-        self.logger.info(f"Operator:'{operator}', Result:'{result}', Username:'{username}', Message:'{message}'")
-        return {"result": result, "message": message, "username": username}    
+        ### 生成token
+        access_token = self.create_access_token(user_id=user_id)
+
+        ### 返回token
+        self.logger.info(f"Operator:'{operator}', Result:True, Message:'Login successful!', User ID: {user_id}, Token:'{access_token}'")
+        return {"result": True, "message": "Login successful!", "token": access_token}
             
     
     async def _usr_register(self, username: str, password: str):
@@ -361,7 +406,7 @@ class UserService:
             return {"result": result, "message": message, "username": username}
         
         
-    async def _usr_change_pwd(self, username: str, password: str):
+    async def _usr_change_pwd(self, user_id: int, new_password: str):
         """用户更改密码"""
         operator = 'usr_change_pwd'
         result = True
@@ -386,19 +431,8 @@ class UserService:
             self.logger.info(f"Operator:'{operator}', Result:'{result}', Username:'{username}', Message:'{message}'")
             return {"result": result, "message": message, "username": username}
 
-
-    async def _usr_logout(self, username: str):
-        """用户登出"""
-        # 实现登出逻辑，例如清除用户会话或令牌
-        # TODO 清除用户环境
-        operator = 'usr_logout'
-        result = True
-        message = 'Logout successful.'
-        self.logger.info(f"Operator:'{operator}', Result:'{result}', Username:'{username}', Message:'{message}'")
-        return {"result": result, "message": message, "username": username}
     
-    
-    async def _usr_unregister(self, username: str, password: str):
+    async def _usr_unregister(self, user_id: int):
         """用户注销账户"""
         operator = 'usr_unregister'
         # try:
@@ -416,6 +450,8 @@ class UserService:
         #     message = 'Unregistration failed. Invalid credentials or user does not exist.'
         #     self.logger.info(f"Operator:'{operator}', Result:'False', Username:'{username}', Message:'{message}'")
         #     raise HTTPException(status_code=400, detail=message)
+        
+        
         
     def run(self):
             uvicorn.run(self.app, host=self.host, port=self.port)

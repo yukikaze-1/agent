@@ -17,3 +17,9 @@ UserService:
   # 当前微服务的名称和唯一标识符
   service_name: "UserService"
   service_id: "UserService-127.0.0.1:20010"  # 可选，默认会自动生成
+
+  # jwt加密配置
+  jwt:
+    secret_key: "your_secret_key"
+    algorithm: "HS256"
+    expiration: 3600

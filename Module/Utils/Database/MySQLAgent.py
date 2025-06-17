@@ -26,7 +26,9 @@ from Module.Utils.FastapiServiceTools import (
     unregister_service_from_consul
 )
 
-
+# --------------------------------
+# 请求类 定义
+# --------------------------------
 class SQLRequest(BaseModel):
     id: int
     sql: str
@@ -74,7 +76,9 @@ class MySQLAgent:
         self.service_id = self.config.get("service_id", f"{self.service_name}-{self.host}:{self.port}")
         self.health_check_url = self.config.get("health_check_url", f"http://{self.host}:{self.port}/health")
         
+        # MySQLAgent连接mysql的序号，每连接一个mysql数据库，该ids++
         self.ids = 0
+        
         # 存储 (id, connection) 的列表
         self.connections: Dict[int, pymysql.connections.Connection] = {}
         
@@ -154,7 +158,7 @@ class MySQLAgent:
             return {"status": "healthy"}
         
         
-        @self.app.post("/database/mysql/insert")
+        @self.app.post("/database/mysql/insert", summary="插入接口")
         async def insert(payload: SQLRequest):
             return await self._insert(payload.id, payload.sql, payload.sql_args)
 
@@ -178,11 +182,25 @@ class MySQLAgent:
         async def connect(payload: ConnectRequest):
             return await self._connect(payload.host, payload.port, payload.user, payload.password, payload.database,  payload.charset)
         
+        
     # --------------------------------
     # 功能函数
     # --------------------------------     
-    async def _query(self,id: int, sql: str, sql_args: List[str])-> Dict[str, Any]:
-        """查询"""
+    async def _query(self, id: int, sql: str, sql_args: List[str])-> Dict[str, Any]:
+        """
+        查询
+        
+        :param id: 数据库连接ID
+        :param sql: SQL语句
+        :param sql_args: SQL语句参数
+
+        Returns:
+            成功:
+            {"Operator": "Query", "Message":message, "Result":True, "Query Result":query_result}
+
+            失败:
+            {"Operator": "Query", "Message":message, "Result":False, "Query Result":""}
+        """
         connection=self.connections[id]
         
         operator = "Query"
@@ -193,21 +211,22 @@ class MySQLAgent:
             try:
                 with connection.cursor(pymysql.cursors.DictCursor) as cursor:
                     cursor.execute(sql, sql_args)
-                    result = cursor.fetchone()
-                    self.logger.info(f"Operator: {operator}, Message:{message}, Result: {result}")
-                    return {"Operator": operator, "Message":message, "Result":result}
-                
+                    query_result = cursor.fetchone()
+                    result = True
+                    self.logger.info(f"Operator: {operator}, Message:{message}, Result: {result}, Query Result: {query_result}")
+                    return {"Operator": operator, "Message":message, "Result":result, "Query Result":query_result}
+
             except Exception as e:
                 message = f"Query failed! Error:{str(e)}"
-                self.logger.error(f"Operator: {operator}, Message:{message}, Result: {result}")
-                return {"Operator": operator, "Message":message, "Result":result}
+                self.logger.error(f"Operator: {operator}, Message:{message}, Result: {result}, Query Result: """)
+                return {"Operator": operator, "Message":message, "Result":result, "Query Result":""}
 
         else:
             message = f"ID {id} not exist! Query failed"
-            self.logger.error(f"Operator: {operator}, Message:{message}, Result: {result}")
-            return {"Operator": operator, "Message":message, "Result":result}
-            
-                        
+            self.logger.error(f"Operator: {operator}, Message:{message}, Result: {result}, Query Result: """)
+            return {"Operator": operator, "Message":message, "Result":result, "Query Result":""}
+
+
     async def _insert(self, id: int, sql: str, sql_args: List[str])-> Dict[str, Any]:
         """插入"""
         connection=self.connections[id]
@@ -236,7 +255,20 @@ class MySQLAgent:
         
         
     async def _delete(self, id: int, sql: str, sql_args: List[str])-> Dict[str, Any]:
-        """删除"""
+        """
+        删除
+
+        :param id: 数据库连接ID
+        :param sql: SQL语句
+        :param sql_args: SQL语句参数
+        
+        Returns:
+            成功:
+            {"Operator": Delete, "Message":message, "Result":True}
+            
+            失败:
+            {"Operator": Delete, "Message":message, "Result":False}
+        """
         connection=self.connections[id]
         
         operator = "Delete"
@@ -271,7 +303,19 @@ class MySQLAgent:
         
     
     async def _update(self, id: int, sql: str, sql_args: List[str])-> Dict[str, Any]:
-        """修改"""
+        """
+        更新数据
+        
+        :param id: 数据库连接ID
+        :param sql: SQL语句
+        :param sql_args: SQL语句参数
+
+        Returns:
+            成功:
+                {"Operator": Update, "Message":message, "Result":True}
+            失败:
+                {"Operator": Update, "Message":message, "Result":False}
+        """
         connection=self.connections[id]
         
         operator = "Update"
@@ -332,8 +376,10 @@ class MySQLAgent:
                 database=database,
                 charset=charset
             )
+            # 保存内部序号
             connection_id = self.ids
             self.ids += 1
+            
             self.connections[connection_id] = connection
             message = f"Connect success. ConnectionID: '{connection_id}'"
             result = True
@@ -351,7 +397,7 @@ class MySQLAgent:
         根据连接 ID 关闭对应的数据库连接。
 
         :param id: 要关闭的连接 ID
-        :return: 是否成功关闭
+        :return bool: 是否成功关闭
         """
         if id not in self.connections:
             self.logger.error(f"No such connection ID: {id}")
