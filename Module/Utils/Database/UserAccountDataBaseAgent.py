@@ -19,6 +19,7 @@ from fastapi import HTTPException
 
 from Module.Utils.Logger import setup_logger
 from Module.Utils.ConfigTools import load_config, validate_config
+from Module.Utils.FormatValidate import is_email, is_account_name
 
 """
 ## 用户信息数据库设计
@@ -219,18 +220,6 @@ CREATE TABLE user_files (
 );
 
 """
-
-# --------------------------------
-# 工具函数
-# --------------------------------
-def is_email(identifier: str) -> bool:
-    """验证邮箱格式"""
-    return re.match(r"[^@]+@[^@]+\.[^@]+", identifier) is not None
-
-def is_account_name(identifier: str) -> bool:
-    """验证账号格式"""
-    return re.match(r"^[a-zA-Z0-9_]{3,16}$", identifier) is not None
-
 
 
 class UserAccountDataBaseAgent():
