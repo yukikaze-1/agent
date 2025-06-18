@@ -25,7 +25,7 @@ class MySQLHelper:
     :param logger: 日志记录器
     """
     
-    def __init__(self, mysql_agent_url: str, connect_id: str, client: httpx.AsyncClient, logger: Optional[Logger]=None) -> None:
+    def __init__(self, mysql_agent_url: str, connect_id: int, client: httpx.AsyncClient, logger: Optional[Logger]=None) -> None:
         self.logger = logger or setup_logger(name="MySQLHelper", log_path="InternalModule")
         
         self.mysql_agent_url = mysql_agent_url
@@ -66,6 +66,7 @@ class MySQLHelper:
         :param data: 要更新的字段和值（key=字段名，value=字段值）
         :param where_conditions: 更复杂的 WHERE 条件表达式（如 ["user_id = %s", "status != %s"]）
         :param where_values: 与 where_conditions 一一对应的值
+        
         :return: (sql语句, 参数列表)
         """
         if not data:
@@ -103,6 +104,14 @@ class MySQLHelper:
                         offset: Optional[int] = None) -> tuple[str, List]:
         """
         构造通用 SELECT SQL 语句
+
+        :param table: 表名
+        :param fields: 要查询的字段
+        :param where_conditions: WHERE 条件
+        :param where_values: WHERE 条件对应的值
+        :param order_by: ORDER BY 子句
+        :param limit: LIMIT 子句
+        :param offset: OFFSET 子句
 
         :return: (sql语句, 参数列表)
         """
@@ -151,6 +160,8 @@ class MySQLHelper:
         :param warning_msg: 警告消息
         :param success_msg: 成功消息
         :param error_msg: 错误消息
+
+        :return: 是否执行成功
         """
         
         self.logger.info(f"Executing WRITE SQL: {sql} | Args: {sql_args}")
@@ -183,9 +194,14 @@ class MySQLHelper:
         """
         执行 查询  SQL
 
+        :param url: 请求的URL
+        :param sql: 要执行的SQL语句
+        :param sql_args: SQL语句的参数
         :param warning_msg: 警告消息
         :param success_msg: 成功消息
         :param error_msg: 错误消息
+
+        :return: 查询结果列表，失败时返回 None
         """
         self.logger.info(f"Executing QUERY SQL: {sql} | Args: {sql_args}")
 
@@ -221,6 +237,11 @@ class MySQLHelper:
 
         :param table: 表名
         :param data: 要插入的字段和值（key=字段名，value=字段值）
+        :param success_msg: 成功日志
+        :param warning_msg: 警告日志
+        :param error_msg: 错误日志
+
+        :return: 是否插入成功
         """
         if not data:
             self.logger.warning("尝试插入空数据，已跳过。")
@@ -285,6 +306,16 @@ class MySQLHelper:
         """
         执行 SELECT 查询并返回多条记录
 
+        :param table: 表名
+        :param fields: 要查询的字段
+        :param where_conditions: WHERE 条件
+        :param where_values: WHERE 条件对应的值
+        :param order_by: ORDER BY 子句
+        :param limit: LIMIT 子句
+        :param offset: OFFSET 子句
+        :param success_msg: 成功日志
+        :param warning_msg: 警告日志
+        :param error_msg: 错误日志
         :return: 查询结果列表，失败时返回 None
         """
         sql, sql_args = self.build_query_sql(
@@ -307,13 +338,16 @@ class MySQLHelper:
         }
 
         try:
+            # 发送给MySQLAgent
             response = await self.client.post(url=url, json=payload, timeout=60.0)
             response.raise_for_status()
             response_data = response.json()
+            
+            self.logger.debug(f"In query_many: Response: {response}")
 
             if response.status_code == 200 and response_data.get("Result") is True:
                 self.logger.info(success_msg)
-                return response_data.get("Data") or []
+                return response_data.get("Query Result") or []
             else:
                 self.logger.warning(f"{warning_msg} | Response: {response_data}")
                 return None
@@ -323,7 +357,7 @@ class MySQLHelper:
 
 
     async def query_one(self, table: str,
-                    columns: Optional[List[str]] = None,
+                    fields: Optional[List[str]] = None,
                     where_conditions: Optional[List[str]] = None,
                     where_values: Optional[List] = None,
                     order_by: Optional[str] = None,
@@ -331,10 +365,24 @@ class MySQLHelper:
                     error_msg: str = "Query One Error.") -> Optional[Dict]:
         """
         执行 SELECT 查询并返回一条记录
-        
+
+        :param table: 表名
+        :param fields: 要查询的列
+        :param where_conditions: WHERE 条件
+        :param where_values: WHERE 条件对应的值
+        :param order_by: ORDER BY 子句
+        :param warning_msg: 警告日志
+        :param error_msg: 错误日志
+        :return: 查询结果字典，失败时返回 None
         """
         # 转发
-        result = await self.query_many(table, columns, where_conditions, where_values, limit=1,
-                                       order_by=order_by, warning_msg=warning_msg, error_msg=error_msg)
+        result = await self.query_many(table=table,
+                                       fields=fields,
+                                       where_conditions=where_conditions,
+                                       where_values=where_values,
+                                       limit=1,
+                                       order_by=order_by,
+                                       warning_msg=warning_msg,
+                                       error_msg=error_msg)
         return result[0] if result else None
 

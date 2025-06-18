@@ -20,6 +20,7 @@ from fastapi import HTTPException
 from Module.Utils.Logger import setup_logger
 from Module.Utils.ConfigTools import load_config, validate_config
 from Module.Utils.FormatValidate import is_email, is_account_name
+from Module.Utils.Database.MySQLHelper import MySQLHelper
 
 """
 ## 用户信息数据库设计
@@ -235,9 +236,9 @@ class UserAccountDataBaseAgent():
                     password
                     database
                     charset
-                    
-        # TODO 应该让程序自动创建一个数据库，待实现            
-        需要手动在mysql数据库中创建用户信息数据库
+                                
+        # 需要手动在mysql数据库中创建用户信息数据库 
+          TODO 应该让程序自动创建一个数据库，待实现
         (注：1.要先手动创建一个名为userinfo的database才行 2. 创建表的SQL语句见本文件顶部的注释):    
             1. 用户主表 (`users`)
             2. 用户扩展资料 (`user_profile`)
@@ -276,8 +277,15 @@ class UserAccountDataBaseAgent():
         
         # 向MySQLAgent注册，返回一个链接id
         self.connect_id: int = -1
+
+        # 初始化 MySQLHelper
+        self.mysql_helper = MySQLHelper(
+            mysql_agent_url=self.mysql_agent_url,
+            connect_id=self.connect_id,
+            client=self.client
+        )
         
-        
+
     async def init_connection(self) -> None:
         """
         真正执行连接, 并为 self.connect_id 赋值
@@ -301,85 +309,75 @@ class UserAccountDataBaseAgent():
         通过 email 或 account 在 users 表中查询 用户id 和 密码哈希
 
         :param identifier: 用户的 email 或 account
+
+        :return: (user_id, password_hash) 元组，如果未找到则返回 None
         """
+        fields = ["user_id", "password_hash"]
+        where_conditions = []
+        where_values = []
         
         if is_email(identifier):
-            query_sql = "SELECT user_id, password_hash FROM users WHERE email = %s;"
-            sql_args = [identifier]
+            where_conditions.append("email = %s")
+            where_values.append(identifier)
         elif is_account_name(identifier):
-            query_sql = "SELECT user_id, password_hash FROM users WHERE account = %s;"
-            sql_args = [identifier]
+            where_conditions.append("account = %s")
+            where_values.append(identifier)
         else:
-            self.logger.error(f"Invalid identifier: {identifier}. Need email or valid account.")
+            self.logger.warning(f"Invalid identifier: {identifier}. Need email or valid account.")
             return None
+
+        try:
+            res = await self.mysql_helper.query_one(
+                table="users",
+                fields=fields,
+                where_conditions=where_conditions,
+                where_values=where_values
+            )
+        except Exception as e:
+            self.logger.error(f"{str(e)}")
+            return None
+
+        if res is None:
+            self.logger.warning(f"No user found with identifier: {identifier}")
+            return None
+
+        return res["user_id"], res["password_hash"]
+
+
+    async def fetch_user_id_by_uuid(self, uuid: str) -> Optional[int]:
+        """
+        通过 UUID 在 users 表中查询 user_id
+
+        :param uuid: 用户的 UUID
+
+        :return: user_id ，如果未找到则返回 None
+        """
         
-        url = self.mysql_agent_url + "/database/mysql/query"
-        payload = {
-            "id": self.connect_id,
-            "sql": query_sql,
-            "sql_args": sql_args
-        }
+        fields = ["user_id"]
+        where_conditions = ["user_uuid = %s"]
+        where_values = [uuid]
+        
         try:
-            response = await self.client.post(url=url, json=payload, timeout=120.0)
-            response.raise_for_status()
-            response_data :Dict = response.json()
-            
-            if response.status_code == 200:
-                self.logger.info(f"Query success.")
-                result = response_data["Query Result"]
-                if result:
-                    return result['user_id'] ,result["password_hash"]
-                else:
-                    self.logger.info(f"No user found with identifier: {identifier}")
-                    return None
-            else:
-                self.logger.error(f"Query failed! Error:{response}")
-                return None
-            
+            res = await self.mysql_helper.query_one(
+                table="users",
+                fields=fields,
+                where_conditions=where_conditions,
+                where_values=where_values
+            )
         except Exception as e:
             self.logger.error(f"Query failed! Error:{str(e)}")
             return None
+
+        if res is None:
+            self.logger.warning(f"No user found with UUID: {uuid}")
+            return None
+
+        return res["user_id"]
     
-
-    async def fetch_user_id_by_uuid(self, uuid: str) -> Optional[str]:
-        """
-        通过 UUID 查询 user_id
-        """
-        query_sql = "SELECT user_id FROM users WHERE user_uuid = %s;"
-        sql_args = [uuid]
-
-        url = self.mysql_agent_url + "/database/mysql/query"
-        payload = {
-            "id": self.connect_id,
-            "sql": query_sql,
-            "sql_args": sql_args
-        }
-        try:
-            response = await self.client.post(url=url, json=payload, timeout=120.0)
-            response.raise_for_status()
-            response_data: Dict = response.json()
-
-            if response.status_code == 200:
-                self.logger.info(f"Query success.")
-                result = response_data["Result"]
-
-                if result:
-                    return result['user_id']
-                else:
-                    self.logger.info(f"No user found with UUID: {uuid}")
-                    return None
-            else:
-                self.logger.error(f"Query failed! Error:{response}")
-                return None
-
-        except Exception as e:
-            self.logger.error(f"Query failed! Error:{str(e)}")
-            return None
-
 
     async def insert_users(self, account: str, email: str,
                        password_hash: str, user_name: Optional[str] = None,
-                       signature: Optional[str] = None) -> Optional[str]:
+                       signature: Optional[str] = None) -> Optional[int]:
         """
         插入 users（支持可选字段）
 
@@ -404,7 +402,7 @@ class UserAccountDataBaseAgent():
         if signature is not None:
             data["signature"] = signature
 
-        res = await self.insert_one(table="users", data=data,
+        res = await self.mysql_helper.insert_one(table="users", data=data,
                                      success_msg=f"Inserted user info for account: {account}",
                                      warning_msg=f"User info insert may have failed for account: {account}",
                                      error_msg=f"Insert error for account: {account}")
@@ -451,7 +449,7 @@ class UserAccountDataBaseAgent():
         
         where_values=[user_id, "deleted"]
 
-        return await self.update_one(table="users", data=data,
+        return await self.mysql_helper.update_one(table="users", data=data,
                                         where_conditions=where_conditions,
                                         where_values=where_values,
                                         success_msg=f"Updated user info.",
@@ -477,7 +475,7 @@ class UserAccountDataBaseAgent():
             "signature": signature or ""
         }
 
-        return await self.insert_one(table="user_profile", data=data,
+        return await self.mysql_helper.insert_one(table="user_profile", data=data,
                             success_msg=f"Inserted user profile.User id: {user_id}",
                             warning_msg=f"User profile insert may have failed.User id: {user_id}",
                             error_msg=f"Insert error.User id: {user_id}")
@@ -504,7 +502,7 @@ class UserAccountDataBaseAgent():
             "notification_setting": json.dumps(notification_setting) if notification_setting else "{}"
         }
 
-        return await self.insert_one(table="user_settings", data=data,
+        return await self.mysql_helper.insert_one(table="user_settings", data=data,
                                      success_msg=f"Inserted user settings.User id: {user_id}",
                                      warning_msg=f"User settings insert may have failed.User id: {user_id}",
                                      error_msg=f"Insert error.User id: {user_id}")
@@ -512,7 +510,7 @@ class UserAccountDataBaseAgent():
 
     async def insert_new_user(self, account: str, email: str,
                                    password_hash: str, user_name: Optional[str]= None,
-                                   signature: Optional[str] = None) -> Optional[str]:
+                                   signature: Optional[str] = None) -> Optional[int]:
         """
         插入用户注册信息所有表。
             1. users 表
@@ -605,7 +603,7 @@ class UserAccountDataBaseAgent():
         
         where_values=[user_id]
 
-        return await self.update_one(table="user_login_logs", data=data,
+        return await self.mysql_helper.update_one(table="user_login_logs", data=data,
                                       where_conditions=where_conditions,
                                       where_values=where_values,
                                       success_msg=f"Updated user login logs. User id: {user_id}",
@@ -640,7 +638,7 @@ class UserAccountDataBaseAgent():
 
         where_values = [user_id]
 
-        return await self.update_one(table="users", data=data,
+        return await self.mysql_helper.update_one(table="users", data=data,
                                       where_conditions=where_conditions,
                                       where_values=where_values,
                                       success_msg=f"Updated user settings. User id: {user_id}",
@@ -667,7 +665,7 @@ class UserAccountDataBaseAgent():
         
         where_values = [user_id]
 
-        return await self.update_one(table="user_account_actions", data=data,
+        return await self.mysql_helper.update_one(table="user_account_actions", data=data,
                                       where_conditions=where_conditions,
                                       where_values=where_values,
                                       success_msg=f"Updated user account actions. User id: {user_id}",
@@ -695,7 +693,7 @@ class UserAccountDataBaseAgent():
             "is_read": is_read
         }
 
-        return await self.insert_one(table="user_notifications", data=data,
+        return await self.mysql_helper.insert_one(table="user_notifications", data=data,
                                      success_msg=f"Inserted user notification.User id: {user_id}",
                                      warning_msg=f"User notification insert may have failed.User id: {user_id}",
                                      error_msg=f"Insert error.User id: {user_id}")
@@ -717,7 +715,7 @@ class UserAccountDataBaseAgent():
 
         where_values = [user_id]
 
-        return await self.update_one(table="user_notifications", data=data,
+        return await self.mysql_helper.update_one(table="user_notifications", data=data,
                                       where_conditions=where_conditions,
                                       where_values=where_values,
                                       success_msg=f"Updated user notifications. User id: {user_id}",
@@ -748,7 +746,7 @@ class UserAccountDataBaseAgent():
             "file_size": file_size,
             "is_deleted": is_deleted
         }
-        return await self.insert_one(table="user_files", data=data,
+        return await self.mysql_helper.insert_one(table="user_files", data=data,
                             success_msg=f"Inserted user files.User id: {user_id}",
                             warning_msg=f"User files insert may have failed.User id: {user_id}",
                             error_msg=f"Insert error.User id: {user_id}")
@@ -798,7 +796,7 @@ class UserAccountDataBaseAgent():
             self.logger.warning(f"No fields provided to update for user_id: {user_id}")
             return False
 
-        return await self.update_one(table="user_files", data=data,
+        return await self.mysql_helper.update_one(table="user_files", data=data,
                                       where_conditions=where_conditions,
                                       where_values=where_values,
                                       success_msg=f"Updated user files. User id: {user_id}",
@@ -821,7 +819,7 @@ class UserAccountDataBaseAgent():
             where_values = [user_id]
             
             
-            res =  await self.update_one(table="users", data=data,
+            res =  await self.mysql_helper.update_one(table="users", data=data,
                                         where_conditions=where_conditions,
                                         where_values=where_values, 
                                         success_msg=f"Updated user info.",
@@ -838,7 +836,7 @@ class UserAccountDataBaseAgent():
                 "action_type": "update_password",
                 "action_detail": f"Password updated to {new_password_hash}"
             }
-            res = await self.insert_one(table="user_account_actions",data = data)
+            res = await self.mysql_helper.insert_one(table="user_account_actions",data = data)
             
             if not res:
                 self.logger.error(f"Failed to insert user account action. User id: {user_id}")
