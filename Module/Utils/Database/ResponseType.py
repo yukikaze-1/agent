@@ -52,3 +52,8 @@ class ModifySettingResponse(BaseModel):
     """ 用户修改设置 response """
     message: str = Field(..., description="提示信息")
     result: bool = Field(..., description="操作结果")
+
+class ModifyNotificationSettingsResponse(BaseModel):
+    """ 用户修改通知设置 response """
+    message: str = Field(..., description="提示信息")
+    result: bool = Field(..., description="操作结果")

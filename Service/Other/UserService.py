@@ -37,7 +37,8 @@ from Module.Utils.Database.RequestType import (
     ModifyPasswordRequest,
     ModifyProfileRequest,
     UploadFileRequest,
-    ModifySettingRequest
+    ModifySettingRequest,
+    ModifyNotificationSettingsRequest
 )
 from Module.Utils.Database.ResponseType import (
     RegisterResponse,
@@ -46,7 +47,8 @@ from Module.Utils.Database.ResponseType import (
     ModifyPasswordResponse,
     ModifyProfileResponse,
     UploadFileResponse,
-    ModifySettingResponse
+    ModifySettingResponse,
+    ModifyNotificationSettingsResponse
 )
 
 # from Service.Other.EnvironmentManagerClient import EnvironmentManagerClient
@@ -216,7 +218,6 @@ class UserService:
         @self.app.post("/usr/login")
         async def usr_login(user: LoginRequest):
             return await self._usr_login(user.identifier, user.password, user.agent, user.device, user.os)
-
                 
         # 用户注册
         @self.app.post("/usr/register")
@@ -233,12 +234,26 @@ class UserService:
         async def usr_unregister(data: UnregisterRequest):
             return await self._usr_unregister(data.session_token)
 
-        # # 用户注销
-        # @self.app.post("/usr/unregister")
-        # async def usr_unregister(user_id: int = self.get_current_user_id()):
-        #     return await self._usr_unregister(user_id)
-        
-    
+        # 用户修改个人信息
+        @self.app.post("/usr/modify_profile")
+        async def usr_modify_profile(data: ModifyProfileRequest):
+            return await self._usr_modify_profile(data.session_token, data.user_name, data.profile_picture_url, data.signature)
+
+        # 用户修改通知设置
+        @self.app.post("/usr/modify_notifications")
+        async def usr_modify_notification_settings(data: ModifyNotificationSettingsRequest):
+            return await self._usr_modify_notification_settings(data.session_token, data.notifications_enabled)
+
+        # 用户修改个人设置
+        @self.app.post("/usr/modify_settings")
+        async def usr_modify_settings(data: ModifySettingRequest):
+            return await self._usr_modify_settings(data.session_token, data.account)
+
+        # 用户上传文件
+        @self.app.post("/usr/upload_file")
+        async def usr_upload_file(data: UploadFileRequest):
+            return await self._usr_upload_file(data.session_token, data.file)
+
     # --------------------------------
     # 工具函数
     # -------------------------------- 
@@ -560,7 +575,7 @@ class UserService:
 
         # 2. 删除数据库对应条目(软删除)
         try:
-            await self.usr_account_database.delete_user(user_id=user_id)
+            await self.usr_account_database.soft_delete_user_by_user_id(user_id=user_id)
         except Exception as e:
             self.logger.error(f"Database error during unregistration for user id'{user_id}': {e}")
             return {"result": False, "message": "Internal server error.", "user_id": user_id}
@@ -568,9 +583,9 @@ class UserService:
         # 3. 返回结果
         message = f"Unregistration successful! User ID '{user_id}'"
         self.logger.info(f"Operator:'{operator}', Result:'True', User ID:'{user_id}', Message:'{message}'")
+        
         return {"result": True, "message": message, "user_id": user_id}
     
-        #     raise HTTPException(status_code=500, detail="Internal server error.")
         
         # if res:
         #     message = 'Unregistration successful.'
@@ -582,9 +597,113 @@ class UserService:
         #     raise HTTPException(status_code=400, detail=message)
         
         
-        
+    async def _usr_modify_profile(self, session_token: str, user_name: str,
+                                  profile_picture_url: str, signature: str) -> Dict:
+        """
+        用户修改个人信息
+        """
+        operator = 'usr_modify_profile'
+
+        # 1. 解析出user_id
+        user_id = self.verify_token(token=session_token)
+
+        # 2. 更新数据库对应条目
+        try:
+            await self.usr_account_database.update_user_profile(
+                user_id=user_id,
+                user_name=user_name,
+                profile_picture_url=profile_picture_url,
+                signature=signature
+            )
+        except Exception as e:
+            self.logger.error(f"Database error during profile update for user id'{user_id}': {e}")
+            return {"result": False, "message": "Internal server error.", "user_id": user_id}
+
+        # 3. 返回结果
+        message = f"Profile update successful! User ID '{user_id}'"
+        self.logger.info(f"Operator:'{operator}', Result:'True', User ID:'{user_id}', Message:'{message}'")
+
+        return {"result": True, "message": message, "user_id": user_id}
+
+
+    async def _usr_modify_notification_settings(self, session_token: str, notifications_enabled: bool) -> Dict:
+        """
+        用户修改通知设置
+        """
+        operator = 'usr_modify_notification_settings'
+
+        # 1. 解析出user_id
+        user_id = self.verify_token(token=session_token)
+
+        # 2. 更新数据库对应条目
+        try:
+            await self.usr_account_database.update_user_notification_settings(
+                user_id=user_id,
+                notifications_enabled=notifications_enabled
+            )
+        except Exception as e:
+            self.logger.error(f"Database error during notification settings update for user id'{user_id}': {e}")
+            return {"result": False, "message": "Internal server error.", "user_id": user_id}
+
+        # 3. 返回结果
+        message = f"Notification settings update successful! User ID '{user_id}'"
+        self.logger.info(f"Operator:'{operator}', Result:'True', User ID:'{user_id}', Message:'{message}'")
+
+        return {"result": True, "message": message, "user_id": user_id}
+
+
+    async def _usr_modify_settings(self, session_token: str, account: str) -> Dict:
+        """
+        用户修改设置
+        """
+        operator = 'usr_modify_settings'
+
+        # 1. 解析出user_id
+        user_id = self.verify_token(token=session_token)
+
+        # 2. 更新数据库对应条目
+        try:
+            await self.usr_account_database.update_user_settings(
+                user_id=user_id,
+                account=account
+            )
+        except Exception as e:
+            self.logger.error(f"Database error during settings update for user id'{user_id}': {e}")
+            return {"result": False, "message": "Internal server error.", "user_id": user_id}
+
+        # 3. 返回结果
+        message = f"Settings update successful! User ID '{user_id}'"
+        self.logger.info(f"Operator:'{operator}', Result:'True', User ID:'{user_id}', Message:'{message}'")
+
+        return {"result": True, "message": message, "user_id": user_id}
+
+
+    async def _usr_upload_file(self, session_token: str, file: bytes) -> Dict:
+        """
+        用户上传文件
+        """
+        operator = 'usr_upload_file'
+
+        # 1. 解析出user_id
+        user_id = self.verify_token(token=session_token)
+
+        # 2. 上传文件到云存储
+        try:
+            file_id = await self.file_storage.upload_file(file)
+            await self.usr_account_database.save_user_file(user_id=user_id, file_id=file_id)
+        except Exception as e:
+            self.logger.error(f"File upload error for user id'{user_id}': {e}")
+            return {"result": False, "message": "Internal server error.", "user_id": user_id}
+
+        # 3. 返回结果
+        message = f"File upload successful! User ID '{user_id}', File ID '{file_id}'"
+        self.logger.info(f"Operator:'{operator}', Result:'True', User ID:'{user_id}', File ID:'{file_id}', Message:'{message}'")
+
+        return {"result": True, "message": message, "user_id": user_id, "file_id": file_id}
+    
+    
     def run(self):
-            uvicorn.run(self.app, host=self.host, port=self.port)
+        uvicorn.run(self.app, host=self.host, port=self.port)
             
         
  

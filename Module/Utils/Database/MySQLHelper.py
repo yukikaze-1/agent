@@ -32,7 +32,8 @@ class MySQLHelper:
         self.connect_id = connect_id
         self.client = client
         
-
+    # ---------------------- 生成 sql语句 函数 ----------------------
+    
     def build_insert_sql(self, table: str, data: Dict) -> tuple[str, list]:
         """
         构造通用 INSERT SQL 语句
@@ -149,6 +150,30 @@ class MySQLHelper:
         return sql, args
     
     
+    def build_delete_sql(self, table: str,
+                     where_conditions: Optional[List[str]] = None,
+                     where_values: Optional[List] = None) -> tuple[str, list]:
+        """
+        构造支持复杂 WHERE 条件的 DELETE SQL 语句
+
+        :param table: 表名
+        :param where_conditions: WHERE 条件表达式列表（如 ["user_id = %s", "status = %s"]）
+        :param where_values: 条件对应的值
+        :return: (sql语句, 参数列表)
+        """
+        if  where_conditions is None or where_values is None:
+            raise ValueError("DELETE 操作必须指定 WHERE 条件，防止全表删除")
+
+        if len(where_conditions) != len(where_values):
+            raise ValueError("where_conditions 和 where_values 长度不一致")
+
+        where_clause = " AND ".join(where_conditions)
+        sql = f"DELETE FROM {table} WHERE {where_clause};"
+        self.logger.debug(f"Generated DELETE SQL: {sql} | Values: {where_values}")
+        return sql, where_values
+
+    # ---------------------- 执行 sql语句 函数 ----------------------
+    
     async def execute_write_sql(self, url: str, sql: str, sql_args: List,
                           warning_msg: str, success_msg: str, error_msg: str) -> bool:
         """
@@ -243,7 +268,7 @@ class MySQLHelper:
 
         :return: 是否插入成功
         """
-        if not data:
+        if data is None:
             self.logger.warning("尝试插入空数据，已跳过。")
             return False
 
@@ -386,3 +411,36 @@ class MySQLHelper:
                                        error_msg=error_msg)
         return result[0] if result else None
 
+
+    async def delete_one(self, table: str,
+                     where_conditions: Optional[List[str]] = None,
+                     where_values: Optional[List] = None,
+                     success_msg: str = "Delete success.",
+                     warning_msg: str = "Delete warning.",
+                     error_msg: str = "Delete error.") -> bool:
+        """
+        删除一条记录
+
+        :param table: 表名
+        :param where_conditions: WHERE 条件表达式列表
+        :param where_values: 对应参数值
+        :param success_msg: 成功日志
+        :param warning_msg: 警告日志
+        :param error_msg: 错误日志
+        :return: 是否删除成功
+        """
+        sql, args = self.build_delete_sql(
+            table=table,
+            where_conditions=where_conditions,
+            where_values=where_values
+        )
+
+        url = self.mysql_agent_url + "/database/mysql/delete"
+        return await self.execute_write_sql(
+            url=url,
+            sql=sql,
+            sql_args=args,
+            success_msg=success_msg,
+            warning_msg=warning_msg,
+            error_msg=error_msg
+        )

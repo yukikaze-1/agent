@@ -35,25 +35,27 @@ from Module.Utils.Database.MySQLHelper import MySQLHelper
 | `password_hash`   | `VARCHAR(255) NOT NULL`                                          | 密码哈希值      |
 | `email`           | `VARCHAR(255) NOT NULL UNIQUE`                                   | 用户邮箱       |
 | `last_login_time` | `DATETIME`                                                       | 最后登录时间     |
+| `last_login_ip`   | `VARCHAR(255)`                                                   | 最后登录IP     |
 | `session_token`   | `VARCHAR(2048)`                                                  | Session令牌  |
-| `file_folder_path`| `VARCHAR(512)`                                                   | 用户个人文件夹(默认为UUID为命名)  |
+| `file_folder_path`| `VARCHAR(512) NOT NULL`                                          | 用户个人文件夹(默认为UUID为命名)  |
 | `created_at`      | `DATETIME DEFAULT CURRENT_TIMESTAMP`                             | 创建时间       |
 | `updated_at`      | `DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | 修改时间
-| `deleted_at`      | `DATETIME NULL`                                                  | 删除时间 |
+| `deleted_at`      | `DATETIME DEFAULT NULL`                                          | 删除时间 |
 
 CREATE TABLE users (
   user_id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   user_uuid CHAR(36) NOT NULL UNIQUE,
-  status ENUM('inactive', 'active','deleted') NOT NULL DEFAULT 'active',
+  status ENUM('inactive', 'active', 'deleted') NOT NULL DEFAULT 'active',
   account VARCHAR(255) NOT NULL UNIQUE,
   password_hash VARCHAR(255) NOT NULL,
   email VARCHAR(255) NOT NULL UNIQUE,
   last_login_time DATETIME,
+  last_login_ip VARCHAR(255),
   session_token VARCHAR(2048),
-  file_folder_path VARCHAR(512) DEFAULT (CONCAT('Users/Files/', user_uuid)),
+  file_folder_path VARCHAR(512)  NOT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  deleted_at DATETIME NULL
+  deleted_at DATETIME DEFAULT NULL
 );
 
 ---
@@ -61,7 +63,7 @@ CREATE TABLE users (
 ### 2. 用户扩展资料 (`user_profile`)
 | 字段名                 | 类型                                                             | 描述          |
 | --------------------- | ---------------------------------------------------------------- | ----------- |
-| `user_id`             | `INT UNSIGNED PRIMARY KEY`                                       | 用户ID（主键+外键） |
+| `user_id`             | `INT UNSIGNED PRIMARY KEY FK`                                    | 用户ID（主键+外键） |
 | `user_name`           | `VARCHAR(255)`                                                   | 用户名         |
 | `profile_picture_url` | `VARCHAR(512) DEFAULT 'Resources/img/nahida.jpg'`                | 头像URL地址     |
 | `signature`           | `VARCHAR(255)`                                                   | 用户个性签名      |
@@ -76,7 +78,8 @@ CREATE TABLE user_profile (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   
-  CONSTRAINT fk_user_profile_user_id FOREIGN KEY (user_id) REFERENCES users(user_id)
+  CONSTRAINT fk_user_profile_user_id FOREIGN KEY (user_id) 
+    REFERENCES users(user_id)
     ON DELETE CASCADE ON UPDATE CASCADE
 );
 
@@ -86,9 +89,8 @@ CREATE TABLE user_profile (
 | 字段名           | 类型                                                             | 描述       |
 | --------------- | ---------------------------------------------------------------- | -------- |
 | `login_id`      | `BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY`                     | 日志主键     |
-| `user_id`       | `INT UNSIGNED`                                                   | 用户ID（外键） |
-| `action_type`   | `VARCHAR(255) NOT NULL`                                          | 登录或登出类型  |
-| `action_detail` | `VARCHAR(512)`                                                   | 事件详情     |
+| `user_id`       | `INT UNSIGNED NOT NULL`                                          | 用户ID（外键） |
+| `ip_address`    | `VARCHAR(255) NOT NULL`                                          | 登陆IP  |
 | `agent`         | `VARCHAR(512)`                                                   | 浏览器代理    |
 | `device`        | `VARCHAR(512)`                                                   | 登录设备     |
 | `os`            | `VARCHAR(255)`                                                   | 操作系统     |
@@ -98,9 +100,8 @@ CREATE TABLE user_profile (
 
 CREATE TABLE user_login_logs (
   login_id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  user_id INT UNSIGNED,
-  action_type VARCHAR(255) NOT NULL,
-  action_detail VARCHAR(512),
+  user_id INT UNSIGNED NOT NULL,
+  ip_address VARCHAR(255) NOT NULL,
   agent VARCHAR(512),
   device VARCHAR(512),
   os VARCHAR(255),
@@ -108,7 +109,8 @@ CREATE TABLE user_login_logs (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   
-  CONSTRAINT fk_login_logs_user_id FOREIGN KEY (user_id) REFERENCES users(user_id)
+  CONSTRAINT fk_login_logs_user_id FOREIGN KEY (user_id) 
+    REFERENCES users(user_id)
     ON DELETE CASCADE ON UPDATE CASCADE
 );
 
@@ -117,9 +119,9 @@ CREATE TABLE user_login_logs (
 ### 4. 用户自定义设置 (`user_settings`)
 | 字段名                  | 类型                                                             | 描述          |
 | ---------------------- | ---------------------------------------------------------------- | ----------- |
-| `user_id`              | `INT UNSIGNED PRIMARY KEY`                                       | 用户ID（主键+外键） |
+| `user_id`              | `INT UNSIGNED PRIMARY KEY FK`                                    | 用户ID（主键+外键） |
 | `language`             | `ENUM('zh', 'en', 'jp') NOT NULL DEFAULT 'zh'`                   | 用户语言偏好      |
-| `configure_path`       | `VARCHAR(2048) DEFAULT (CONCAT('Users/Config/', user_uuid))`     | JSON配置路径(不可更改)    |
+| `configure_path`       | `VARCHAR(2048) NOT NULL`                                         | 用户配置文件路径(不可更改)('Users/Config/user_uuid)    |
 | `notification_setting` | `JSON`                                                           | 用户通知设置      |
 | `created_at`           | `DATETIME DEFAULT CURRENT_TIMESTAMP`                             | 创建时间        |
 | `updated_at`           | `DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | 更新时间        |
@@ -127,12 +129,13 @@ CREATE TABLE user_login_logs (
 CREATE TABLE user_settings (
   user_id INT UNSIGNED PRIMARY KEY,
   language ENUM('zh', 'en', 'jp') NOT NULL DEFAULT 'zh',
-  configure_path VARCHAR(2048) DEFAULT (CONCAT('Users/Config/', user_uuid)),
+  configure_path VARCHAR(2048) NOT NULL,
   notification_setting JSON,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   
-  CONSTRAINT fk_user_settings_user_id FOREIGN KEY (user_id) REFERENCES users(user_id)
+  CONSTRAINT fk_user_settings_user_id FOREIGN KEY (user_id) 
+    REFERENCES users(user_id)
     ON DELETE CASCADE ON UPDATE CASCADE
 );
 
@@ -142,7 +145,7 @@ CREATE TABLE user_settings (
 | 字段名                       | 类型                                                             | 描述       |
 | --------------------------- | ---------------------------------------------------------------- | -------- |
 | `action_id`                 | `INT UNSIGNED AUTO_INCREMENT PRIMARY KEY`                        | 主键       |
-| `user_id`                   | `INT UNSIGNED`                                                   | 用户ID（外键） |
+| `user_id`                   | `INT UNSIGNED NOT NULL FK`                                       | 用户ID（外键） |
 | `action_type`               | `VARCHAR(255)`                                                   | 用户账户操作类型   |
 | `action_detail`             | `VARCHAR(512)`                                                   | 用户账户操作细节   |
 | `created_at`                | `DATETIME DEFAULT CURRENT_TIMESTAMP`                             | 创建时间     |
@@ -156,7 +159,8 @@ CREATE TABLE user_account_actions (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   
-  CONSTRAINT fk_user_actions_user_id FOREIGN KEY (user_id) REFERENCES users(user_id)
+  CONSTRAINT fk_user_actions_user_id FOREIGN KEY (user_id) 
+    REFERENCES users(user_id)
     ON DELETE CASCADE ON UPDATE CASCADE
 );
 
@@ -164,27 +168,28 @@ CREATE TABLE user_account_actions (
 
 ### 6. 用户通知与消息 (`user_notifications`)
 | 字段名                | 类型                                                             | 描述       |
-| -------------------- | ---------------------------------------------------------------- | -------- |
-| `notification_id`    | `INT UNSIGNED AUTO_INCREMENT PRIMARY KEY`                        | 通知ID（主键） |
-| `user_id`            | `INT UNSIGNED`                                                   | 用户ID（外键） |
-| `notification_type`  | `ENUM('system', 'security', 'promotion') NOT NULL`               | 通知类型     |
-| `notification_title` | `VARCHAR(255) NOT NULL`                                          | 通知标题     |
-| `message_content`    | `TEXT`                                                           | 通知内容     |
-| `is_read`            | `BOOL DEFAULT FALSE`                                             | 是否已读     |
-| `created_at`         | `DATETIME DEFAULT CURRENT_TIMESTAMP`                             | 创建时间     |
-| `updated_at`         | `DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | 更新时间     |
+| --------------------  | ---------------------------------------------------------------- | -------- |
+| `notification_id`     | `INT UNSIGNED AUTO_INCREMENT PRIMARY KEY`                        | 通知ID（主键） |
+| `user_id`             | `INT UNSIGNED NOT NULL FK`                                       | 用户ID（外键） |
+| `notification_type`   | `ENUM('system', 'security', 'promotion') NOT NULL`               | 通知类型     |
+| `notification_title`  | `VARCHAR(255) NOT NULL`                                          | 通知标题     |
+| `notification_content`| `TEXT`                                                           | 通知内容     |
+| `is_read`             | `BOOL DEFAULT FALSE`                                             | 是否已读     |
+| `created_at`          | `DATETIME DEFAULT CURRENT_TIMESTAMP`                             | 创建时间     |
+| `updated_at`          | `DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | 更新时间     |
 
 CREATE TABLE user_notifications (
   notification_id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  user_id INT UNSIGNED,
+  user_id INT UNSIGNED NOT NULL,
   notification_type ENUM('system', 'security', 'promotion') NOT NULL,
   notification_title VARCHAR(255) NOT NULL,
-  message_content TEXT,
+  notification_content TEXT,
   is_read BOOL DEFAULT FALSE,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   
-  CONSTRAINT fk_user_notifications_user_id FOREIGN KEY (user_id) REFERENCES users(user_id)
+  CONSTRAINT fk_user_notifications_user_id FOREIGN KEY (user_id) 
+    REFERENCES users(user_id)
     ON DELETE CASCADE ON UPDATE CASCADE
 );
 
@@ -194,7 +199,7 @@ CREATE TABLE user_notifications (
 | 字段名            | 类型                                                             | 描述           |
 | ---------------- | ---------------------------------------------------------------- | ------------ |
 | `file_id`        | `INT UNSIGNED AUTO_INCREMENT PRIMARY KEY`                        | 文件ID         |
-| `user_id`        | `INT UNSIGNED`                                                   | 用户ID（外键）     |
+| `user_id`        | `INT UNSIGNED NOT NULL FK`                                       | 用户ID（外键）     |
 | `file_path`      | `VARCHAR(512)`                                                   | 文件相对路径       |
 | `file_name`      | `VARCHAR(255)`                                                   | 原始文件名        |
 | `file_type`      | `VARCHAR(255)`                                                   | 文件类型（如 .png） |
@@ -206,7 +211,7 @@ CREATE TABLE user_notifications (
 
 CREATE TABLE user_files (
   file_id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  user_id INT UNSIGNED,
+  user_id INT UNSIGNED NOT NULL,
   file_path VARCHAR(512),
   file_name VARCHAR(255),
   file_type VARCHAR(255),
@@ -218,6 +223,65 @@ CREATE TABLE user_files (
   
   CONSTRAINT fk_user_files_user_id FOREIGN KEY (user_id) REFERENCES users(user_id)
     ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+### 8. 会话表(`conversations`)
+| 字段名             | 类型                                                             | 说明          |
+| ----------------- | ---------------------------------------------------------------- | ----------- |
+| `conversation_id` | `BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY`                     | 会话 ID       |
+| `user_id`         | `INT UNSIGNED`                                                   | 用户内部 ID（外键） |
+| `title`           | `VARCHAR(255) DEFAULT NULL`                                      | 会话标题        |
+| `created_at`      | `DATETIME DEFAULT CURRENT_TIMESTAMP`                             | 创建时间        |
+| `updated_at`      | `DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | 修改时间        |
+
+CREATE TABLE conversations (
+    conversation_id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id INT UNSIGNED NOT NULL,
+    title VARCHAR(255) DEFAULT NULL,        
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_conversations_user_id FOREIGN KEY (user_id) 
+      REFERENCES users(user_id)
+      ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+
+### 9. 会话消息表(`conversation_messages`)
+| 字段名             | 类型                                                    | 说明        |
+| -----------------  | ------------------------------------------------------- | --------- |
+| `message_id`       | `BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY`            | 消息 ID     |
+| `conversation_id`  | `INT UNSIGNED`                                          | 会话 ID（外键） |
+| `user_id`          | `INT UNSIGNED NOT NULL FK`                              | 用户 ID（外键） |
+| `sender_role`      | `ENUM('user', 'assistant', 'system') NOT NULL`          | 角色        |
+| `message_type`     | `ENUM('text', 'image', 'file', 'audio') DEFAULT 'text'` | 信息类型      |
+| `parent_message_id`| `BIGINT UNSIGNED DEFAULT NULL`                          | 父消息 ID（外键） |
+| `content`          | `TEXT DEFAULT NULL`                                     | 内容        |
+| `token_count`      | `INT UNSIGNED`                                          | 消息 Token 数（用于统计消耗） |
+| `created_at`       | `DATETIME DEFAULT CURRENT_TIMESTAMP`                    | 创建时间      |
+
+CREATE TABLE conversation_messages (
+    message_id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    conversation_id BIGINT UNSIGNED NOT NULL,
+    user_id INT UNSIGNED NOT NULL,
+    sender_role ENUM('user', 'assistant', 'system') NOT NULL,
+    message_type ENUM('text', 'image', 'file', 'audio') DEFAULT 'text',
+    parent_message_id BIGINT UNSIGNED DEFAULT NULL,
+    content TEXT DEFAULT NULL,
+    token_count INT UNSIGNED,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_conversation_messages_conversation_id FOREIGN KEY (conversation_id)
+      REFERENCES conversations(conversation_id)
+      ON DELETE CASCADE ON UPDATE CASCADE,
+      
+    CONSTRAINT fk_conversation_messages_user_id FOREIGN KEY (user_id)
+      REFERENCES users(user_id)
+      ON DELETE CASCADE ON UPDATE CASCADE,  
+
+    CONSTRAINT fk_conversation_messages_parent_message_id FOREIGN KEY (parent_message_id)
+      REFERENCES conversation_messages(message_id)
+      ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 """
@@ -301,80 +365,13 @@ class UserAccountDataBaseAgent():
             self.logger.error(f"Failed to init connection: {e}")
             raise
         
-    # --------------------------------
-    # 功能函数
-    # --------------------------------     
-    async def fetch_user_id_and_password_by_email_or_account(self, identifier: str)-> Optional[tuple[int, str]]:
-        """
-        通过 email 或 account 在 users 表中查询 用户id 和 密码哈希
-
-        :param identifier: 用户的 email 或 account
-
-        :return: (user_id, password_hash) 元组，如果未找到则返回 None
-        """
-        fields = ["user_id", "password_hash"]
-        where_conditions = []
-        where_values = []
-        
-        if is_email(identifier):
-            where_conditions.append("email = %s")
-            where_values.append(identifier)
-        elif is_account_name(identifier):
-            where_conditions.append("account = %s")
-            where_values.append(identifier)
-        else:
-            self.logger.warning(f"Invalid identifier: {identifier}. Need email or valid account.")
-            return None
-
-        try:
-            res = await self.mysql_helper.query_one(
-                table="users",
-                fields=fields,
-                where_conditions=where_conditions,
-                where_values=where_values
-            )
-        except Exception as e:
-            self.logger.error(f"{str(e)}")
-            return None
-
-        if res is None:
-            self.logger.warning(f"No user found with identifier: {identifier}")
-            return None
-
-        return res["user_id"], res["password_hash"]
-
-
-    async def fetch_user_id_by_uuid(self, uuid: str) -> Optional[int]:
-        """
-        通过 UUID 在 users 表中查询 user_id
-
-        :param uuid: 用户的 UUID
-
-        :return: user_id ，如果未找到则返回 None
-        """
-        
-        fields = ["user_id"]
-        where_conditions = ["user_uuid = %s"]
-        where_values = [uuid]
-        
-        try:
-            res = await self.mysql_helper.query_one(
-                table="users",
-                fields=fields,
-                where_conditions=where_conditions,
-                where_values=where_values
-            )
-        except Exception as e:
-            self.logger.error(f"Query failed! Error:{str(e)}")
-            return None
-
-        if res is None:
-            self.logger.warning(f"No user found with UUID: {uuid}")
-            return None
-
-        return res["user_id"]
+    # ------------------------------------------------------------------------------------------------
+    # 功能函数---查询表项目
+    # ------------------------------------------------------------------------------------------------     
     
-
+    # ------------------------------------------------------------------------------------------------
+    # 功能函数---插入表项目
+    # ------------------------------------------------------------------------------------------------
     async def insert_users(self, account: str, email: str,
                        password_hash: str, user_name: str) -> Optional[int]:
         """
@@ -416,51 +413,6 @@ class UserAccountDataBaseAgent():
         return user_id
     
     
-    async def update_users(self, user_id: int,
-                           status: Optional[str] = None,
-                           password_hash: Optional[str] = None,
-                           last_login_time: Optional[str] = None,
-                           session_token: Optional[str] = None) -> bool:
-        """
-        更新 users
-
-        :param user_id: 用户id
-        :param status: 用户状态
-        :param password_hash: 用户密码哈希
-        :param last_login_time: 用户最后登录时间
-        :param session_token: 用户会话令牌
-        """
-        
-        if status is None and password_hash is None and last_login_time is None and session_token is None:
-            self.logger.warning(f"Nothing to update in user_settings for user_id: {user_id}.")
-            return False
-        
-        data = {}
-        
-        if status is not None:
-            data["status"] = status
-
-        if password_hash is not None:
-            data["password_hash"] = password_hash
-
-        if last_login_time is not None:
-            data["last_login_time"] = last_login_time
-
-        if session_token is not None:
-            data["session_token"] = session_token
-        
-        where_conditions = ["user_id = %s", "status != %s"]
-        
-        where_values=[user_id, "deleted"]
-
-        return await self.mysql_helper.update_one(table="users", data=data,
-                                        where_conditions=where_conditions,
-                                        where_values=where_values,
-                                        success_msg=f"Updated user info.",
-                                        warning_msg=f"User info update may have failed.",
-                                        error_msg=f"Update error.")
-
-
     async def insert_user_profile(self, user_id: int, account: str ,user_name: str | None = None,  signature: str | None = None)-> bool:
         """
         插入新用户的个人资料信息到 user_profile 表。
@@ -484,6 +436,28 @@ class UserAccountDataBaseAgent():
                             warning_msg=f"User profile insert may have failed.User id: {user_id}",
                             error_msg=f"Insert error.User id: {user_id}")
 
+
+    async def insert_user_login_logs(self, user_id: int, action_type: str, action_detail: str,
+                                     agent: str, device: str, os: str) -> bool:
+        """
+        插入用户登录日志到 user_login_logs 表
+
+        :param user_id: 用户ID
+        :param login_time: 登录时间
+        :param ip_address: 登录IP地址
+
+        :return: 插入是否成功
+        """
+        data = {
+            "user_id": user_id,
+            "login_time": login_time,
+            "ip_address": ip_address
+        }
+
+        return await self.mysql_helper.insert_one(table="user_login_logs", data=data,
+                                     success_msg=f"Inserted user login log.User id: {user_id}",
+                                     warning_msg=f"User login log insert may have failed.User id: {user_id}",
+                                     error_msg=f"Insert error.User id: {user_id}")
 
     async def insert_user_settings(self, user_id: int, language: str | None = None,
                                        configure_json_path: str | None = None,
@@ -510,69 +484,167 @@ class UserAccountDataBaseAgent():
                                      success_msg=f"Inserted user settings.User id: {user_id}",
                                      warning_msg=f"User settings insert may have failed.User id: {user_id}",
                                      error_msg=f"Insert error.User id: {user_id}")
-        
+   
 
-    async def insert_new_user(self, account: str, email: str,
-                                   password_hash: str, user_name: str) -> Optional[int]:
+    async def insert_user_account_actions(self, user_id: int, action_type: str, action_time: str) -> bool:
         """
-        插入用户注册信息所有表。
-            1. users 表
-            2. user_profile 表
-            3. user_settings 表
+        插入用户账号操作记录到 user_account_actions 表
+
+        :param user_id: 用户ID
+        :param action_type: 操作类型
+        :param action_time: 操作时间
+
+        :return: 插入是否成功
+        """
+        data = {
+            "user_id": user_id,
+            "action_type": action_type,
+            "action_time": action_time
+        }
+
+        return await self.mysql_helper.insert_one(table="user_account_actions", data=data,
+                                     success_msg=f"Inserted user account action.User id: {user_id}",
+                                     warning_msg=f"User account action insert may have failed.User id: {user_id}",
+                                     error_msg=f"Insert error.User id: {user_id}")
+
+
+    async def insert_user_notifications(self, user_id: int,
+                                        notification_type: str, notification_title: str,
+                                        message_content: str, is_read: bool = False) -> bool:
+        """
+        插入 user_notifications
+
+        :param user_id: 用户ID
+        :param notification_type: 通知类型
+        :param notification_title: 通知标题
+        :param message_content: 消息内容
+        :param is_read: 是否已读
+        """
+        data = {
+            "user_id": user_id,
+            "notification_type": notification_type,
+            "notification_title": notification_title,
+            "message_content": message_content,
+            "is_read": is_read
+        }
+
+        return await self.mysql_helper.insert_one(table="user_notifications", data=data,
+                                     success_msg=f"Inserted user notification.User id: {user_id}",
+                                     warning_msg=f"User notification insert may have failed.User id: {user_id}",
+                                     error_msg=f"Insert error.User id: {user_id}")
+
+
+    async def insert_user_files(self, user_id: int, file_path: str, file_name: str,
+                               file_type: str, upload_time: str, file_size: int,
+                               is_deleted: bool = False) -> bool:
+        """
+        插入 user_files
+
+        :param user_id: 用户ID
+        :param file_path: 文件路径
+        :param file_name: 文件名
+        :param file_type: 文件类型
+        :param upload_time: 上传时间
+        :param file_size: 文件大小
+        :param is_deleted: 是否已删除(非必须)
+        """
+        data = {
+            "user_id": user_id,
+            "file_path": file_path,
+            "file_name": file_name,
+            "file_type": file_type,
+            "upload_time": upload_time,
+            "file_size": file_size,
+            "is_deleted": is_deleted
+        }
+        return await self.mysql_helper.insert_one(table="user_files", data=data,
+                            success_msg=f"Inserted user files.User id: {user_id}",
+                            warning_msg=f"User files insert may have failed.User id: {user_id}",
+                            error_msg=f"Insert error.User id: {user_id}")
+     
+    # ------------------------------------------------------------------------------------------------
+    # 功能函数---更新表项目
+    # ------------------------------------------------------------------------------------------------
+    async def update_users(self, user_id: int,
+                           status: Optional[str] = None,
+                           password_hash: Optional[str] = None,
+                           last_login_time: Optional[str] = None,
+                           session_token: Optional[str] = None) -> bool:
+        """
+        更新 users 表
+
+        :param user_id: 用户id
+        :param status: 用户状态
+        :param password_hash: 用户密码哈希
+        :param last_login_time: 用户最后登录时间
+        :param session_token: 用户会话令牌
+
+        :return: 更新是否成功
+        """
+        
+        if status is None and password_hash is None and last_login_time is None and session_token is None:
+            self.logger.warning(f"Nothing to update in user_settings for user_id: {user_id}.")
+            return False
+        
+        data = {}
+        
+        if status is not None:
+            data["status"] = status
+
+        if password_hash is not None:
+            data["password_hash"] = password_hash
+
+        if last_login_time is not None:
+            data["last_login_time"] = last_login_time
+
+        if session_token is not None:
+            data["session_token"] = session_token
+
+        return await self.mysql_helper.update_one(table="users", data=data,
+                                        where_conditions=["user_id = %s", "status != %s"],
+                                        where_values=[user_id, "deleted"],
+                                        success_msg=f"Updated user info.",
+                                        warning_msg=f"User info update may have failed.",
+                                        error_msg=f"Update error.")
+    
+
+    async def update_user_profile(self, user_id: int,
+                                    user_name: Optional[str] = None,
+                                    profile_picture_url: Optional[str] = None,
+                                    signature: Optional[str] = None) -> bool:
+        """
+        更新 user_profile 表
+
+        :param user_id: 用户ID
+        :param user_name: 用户名
+        :param profile_picture_url: 用户头像URL
+        :param signature: 用户签名
+
+        :return: 更新是否成功
+        """
+
+        if user_name is None and profile_picture_url is None and signature is None:
+            self.logger.warning(f"Nothing to update in user_profile for user_id: {user_id}.")
+            return False
+        
+        data = {}
+        
+        if user_name is not None:
+            data["user_name"] = user_name
             
-        :param: account 用户账号(必须)
-        :param: email   用户邮箱(必须)
-        :param: password_hash   用户密码hash值(必须)
-        :param: user_name   用户名(必须)
+        if profile_picture_url is not None:
+            data["profile_picture_url"] = profile_picture_url
+            
+        if signature is not None:
+            data["signature"] = signature
 
-        返回 user_id（成功）或 None（失败）
-        """
-
-        # 1. 插入 users 表
-        try:
-            user_id = await self.insert_users(account=account, email=email,
-                                          password_hash=password_hash,
-                                          user_name=user_name)
-        except Exception as e:
-            self.logger.error(f"Insert users Failed. Error: {e}")
-            return None
-        
-        if user_id is not None:
-            self.logger.info(f"Insert users success. user_id: {user_id}")
-        else:
-            self.logger.warning(f"Insert users Failed. user_id: {user_id}")
-            return None
-        
-        
-        # 2. 插入 user_profile 表（使用默认头像）
-        try:
-            res_insert_user_profile = await self.insert_user_profile(
-                                user_id=user_id, user_name=user_name,
-                                account=account)
-        except Exception as e:
-            self.logger.error(f"Insert user profile Failed. Error: {e}")
-            return None
-        
-        if res_insert_user_profile:
-            self.logger.info(f"Inserted user profile. User ID: {user_id}")
-        else:
-            self.logger.warning(f"User profile insert may have failed. User ID: {user_id}")
-            return None
-        
-        
-        # 3. 插入 user_settings 表 (使用默认配置)
-        try:
-            res_insert_user_settings = await self.insert_user_settings(user_id=user_id)
-        except Exception as e:
-            self.logger.error(f"Insert user settings Failed. Error: {e}")
-            return None
-
-        if res_insert_user_settings:
-            self.logger.info(f"Inserted user settings. User ID: {user_id}")
-        else:
-            self.logger.warning(f"User settings insert may have failed. User ID: {user_id}")
-            return None
-        
+        return await self.mysql_helper.update_one(table="user_profile", data=data,
+                                                   where_conditions=["user_id = %s"],
+                                                   where_values=[user_id],
+                                                   success_msg=f"Updated user profile.User id: {user_id}",
+                                                   warning_msg=f"User profile update may have failed.User id: {user_id}",
+                                                   error_msg=f"Update error.User id: {user_id}")
+   
 
     async def update_user_login_logs(self, user_id: int,
                                      action_type: Optional[str] = None, action_detail: Optional[str] = None,
@@ -615,14 +687,10 @@ class UserAccountDataBaseAgent():
             
         if login_success is not None:
             data["login_success"] = login_success
-            
-        where_conditions = ["user_id = %s"]
-        
-        where_values=[user_id]
 
         return await self.mysql_helper.update_one(table="user_login_logs", data=data,
-                                      where_conditions=where_conditions,
-                                      where_values=where_values,
+                                      where_conditions=["user_id = %s"],
+                                      where_values=[user_id],
                                       success_msg=f"Updated user login logs. User id: {user_id}",
                                       warning_msg=f"User login logs update may have failed. User id: {user_id}",
                                       error_msg=f"Update error. User id: {user_id}")
@@ -650,14 +718,10 @@ class UserAccountDataBaseAgent():
         
         if notification_setting is not None:
             data["notification_setting"] = notification_setting
-        
-        where_conditions = ["user_id = %s"]
-
-        where_values = [user_id]
 
         return await self.mysql_helper.update_one(table="users", data=data,
-                                      where_conditions=where_conditions,
-                                      where_values=where_values,
+                                      where_conditions=["user_id = %s"],
+                                      where_values=[user_id],
                                       success_msg=f"Updated user settings. User id: {user_id}",
                                       warning_msg=f"User settings update may have failed. User id: {user_id}",
                                       error_msg=f"Update error. User id: {user_id}")
@@ -668,7 +732,8 @@ class UserAccountDataBaseAgent():
         更新用户的账户操作记录
 
         :param user_id: 用户ID
-        :param actions: 用户操作记录列表
+        :param action_type: 用户操作类型
+        :param action_detail: 用户操作详情
 
         :return: 更新是否成功
         """
@@ -677,43 +742,13 @@ class UserAccountDataBaseAgent():
             "action_type": action_type,
             "action_detail": action_detail
         }
-        
-        where_conditions = ["user_id = %s"]
-        
-        where_values = [user_id]
 
         return await self.mysql_helper.update_one(table="user_account_actions", data=data,
-                                      where_conditions=where_conditions,
-                                      where_values=where_values,
+                                      where_conditions=["user_id = %s"],
+                                      where_values=[user_id],
                                       success_msg=f"Updated user account actions. User id: {user_id}",
                                       warning_msg=f"User account actions update may have failed. User id: {user_id}",
                                       error_msg=f"Update error. User id: {user_id}")
-
-
-    async def insert_user_notifications(self, user_id: int,
-                                        notification_type: str, notification_title: str,
-                                        message_content: str, is_read: bool = False) -> bool:
-        """
-        插入 user_notifications
-
-        :param user_id: 用户ID
-        :param notification_type: 通知类型
-        :param notification_title: 通知标题
-        :param message_content: 消息内容
-        :param is_read: 是否已读
-        """
-        data = {
-            "user_id": user_id,
-            "notification_type": notification_type,
-            "notification_title": notification_title,
-            "message_content": message_content,
-            "is_read": is_read
-        }
-
-        return await self.mysql_helper.insert_one(table="user_notifications", data=data,
-                                     success_msg=f"Inserted user notification.User id: {user_id}",
-                                     warning_msg=f"User notification insert may have failed.User id: {user_id}",
-                                     error_msg=f"Insert error.User id: {user_id}")
 
 
     async def update_user_notifications(self, user_id: int, is_read: bool) -> bool:
@@ -722,52 +757,19 @@ class UserAccountDataBaseAgent():
 
         :param user_id: 用户ID
         :param is_read: 是否已读
+
+        :return: 更新是否成功
         """
 
-        data = {
-            "is_read": is_read
-        }
-        
-        where_conditions = ["user_id = %s"]
-
-        where_values = [user_id]
+        data = {"is_read": is_read}
 
         return await self.mysql_helper.update_one(table="user_notifications", data=data,
-                                      where_conditions=where_conditions,
-                                      where_values=where_values,
+                                      where_conditions=["user_id = %s"],
+                                      where_values=[user_id],
                                       success_msg=f"Updated user notifications. User id: {user_id}",
                                       warning_msg=f"User notifications update may have failed. User id: {user_id}",
                                       error_msg=f"Update error. User id: {user_id}")
-
-
-    async def insert_user_files(self, user_id: int, file_path: str, file_name: str,
-                               file_type: str, upload_time: str, file_size: int,
-                               is_deleted: bool = False) -> bool:
-        """
-        插入 user_files
-
-        :param user_id: 用户ID
-        :param file_path: 文件路径
-        :param file_name: 文件名
-        :param file_type: 文件类型
-        :param upload_time: 上传时间
-        :param file_size: 文件大小
-        :param is_deleted: 是否已删除(非必须)
-        """
-        data = {
-            "user_id": user_id,
-            "file_path": file_path,
-            "file_name": file_name,
-            "file_type": file_type,
-            "upload_time": upload_time,
-            "file_size": file_size,
-            "is_deleted": is_deleted
-        }
-        return await self.mysql_helper.insert_one(table="user_files", data=data,
-                            success_msg=f"Inserted user files.User id: {user_id}",
-                            warning_msg=f"User files insert may have failed.User id: {user_id}",
-                            error_msg=f"Insert error.User id: {user_id}")
-        
+       
 
     async def update_user_files(self, user_id: int,
                                 file_path: Optional[str] = None,
@@ -784,9 +786,13 @@ class UserAccountDataBaseAgent():
         :param file_type: 文件类型
         :param file_size: 文件大小
         :param is_deleted: 是否已删除
+        
         :return: 更新是否成功
         """
-        
+        if file_path is None and file_name is None and file_type is None and file_size is None and is_deleted is None:
+            self.logger.warning(f"No fields provided to update for user_id: {user_id}")
+            return False
+
         data = {}
         
         if file_path is not None:
@@ -804,65 +810,17 @@ class UserAccountDataBaseAgent():
         if is_deleted is not None:
             data["is_deleted"] = is_deleted
 
-        where_conditions= ["user_id = %s"]
-        
-        where_values = [user_id]
-
-        # 若无字段可更新，直接返回 False
-        if not data:
-            self.logger.warning(f"No fields provided to update for user_id: {user_id}")
-            return False
-
         return await self.mysql_helper.update_one(table="user_files", data=data,
-                                      where_conditions=where_conditions,
-                                      where_values=where_values,
+                                      where_conditions=["user_id = %s"],
+                                      where_values=[user_id],
                                       success_msg=f"Updated user files. User id: {user_id}",
                                       warning_msg=f"User files update may have failed. User id: {user_id}",
                                       error_msg=f"Update error. User id: {user_id}")
 
-
-    async def update_user_password_by_user_id(self, user_id: int, new_password_hash: str) -> bool:
-            """
-            根据 user_id 更新用户密码哈希。
-                1. 先更新 users 表中的 password_hash 字段
-                2. 再向 user_account_actions 表中插入新纪录
-
-            :param user_id: 用户ID
-            :param new_password_hash: 新密码哈希
-            """
-            # 1. 更新 users 表中的 password_hash 字段
-            data = {"password_hash": new_password_hash}
-            where_conditions = ["user_id = %s"]
-            where_values = [user_id]
-            
-            
-            res =  await self.mysql_helper.update_one(table="users", data=data,
-                                        where_conditions=where_conditions,
-                                        where_values=where_values, 
-                                        success_msg=f"Updated user info.",
-                                        warning_msg=f"User info update may have failed.",
-                                        error_msg=f"Update error.")
-            
-            if not res:
-                self.logger.error(f"Failed to update password. User id: {user_id}") 
-                return False
-            
-            # 2. 向 user_account_actions 表中插入新纪录
-            data = {
-                "user_id": user_id,
-                "action_type": "update_password",
-                "action_detail": f"Password updated to {new_password_hash}"
-            }
-            res = await self.mysql_helper.insert_one(table="user_account_actions",data = data)
-            
-            if not res:
-                self.logger.error(f"Failed to insert user account action. User id: {user_id}")
-                return False
-            else:
-                self.logger.info(f"Success to update password. User id: {user_id}")
-                return True
-
-
+    
+    # ------------------------------------------------------------------------------------------------
+    # 功能函数---删除表项目
+    # ------------------------------------------------------------------------------------------------ 
     async def soft_delete_user_by_user_id(self, user_id: int) -> bool:
         """
         软删除用户：设为 'deleted' 并记录删除时间。
@@ -870,66 +828,59 @@ class UserAccountDataBaseAgent():
         :param user_id: 用户ID
             返回: 更新是否成功
         """
-        sql = """
-            UPDATE users
-            SET status = 'deleted', deleted_at = CURRENT_TIMESTAMP
-            WHERE user_id = %s;
-        """
-        url = self.mysql_agent_url + "/database/mysql/update"
-        payload = {
-            "id": self.connect_id,
-            "sql": sql,
-            "sql_args": [user_id]
-        }
-
+        
+        # 1. 将users 表中的 status 设置为 'deleted'
         try:
-            response = await self.client.post( url=url, json=payload, timeout=60.0)
-            response.raise_for_status()
-            response_data = response.json()
-
-            if response.status_code == 200 and response_data.get("Result") is True:
-                self.logger.info(f"Soft-deleted user ID: '{user_id}'.")
-                return True
-            else:
-                self.logger.warning(f"Soft delete may have failed. User ID: '{user_id}'. Response: {response_data}")
-                return False
-
+            res = await self.mysql_helper.update_one(
+                table="users",
+                data={"status": "deleted", "deleted_at": "CURRENT_TIMESTAMP"},
+                where_conditions=["user_id = %s"],
+                where_values=[user_id],
+                success_msg=f"Soft-deleted user ID: {user_id}",
+                warning_msg=f"Soft delete may have failed. User ID: {user_id}",
+                error_msg=f"Soft delete error. User ID: {user_id}"
+            )
         except Exception as e:
             self.logger.error(f"Soft delete failed! Error: {str(e)}")
             return False
         
+        if not res:
+            self.logger.warning(f"Soft delete may have failed. User ID: {user_id}")
+            return False
+        
+        return True
+        
             
-    async def delete_user_by_id(self, user_id: int) -> bool:
+    async def delete_user_by_user_id(self, user_id: int) -> bool:
         """
         根据 user_id 删除用户（包含自动删除 user_profile 中的关联记录）。
-            返回: 删除是否成功
+
+        :param user_id: 用户ID
+        :return: 删除是否成功
         """
-        delete_sql = "DELETE FROM users WHERE user_id = %s;"
-        payload = {
-            "id": self.connect_id,
-            "sql": delete_sql,
-            "sql_args": [user_id]
-        }
-
+        
+        # 1. 删除 users 表中数据(根据user_id)
         try:
-            response = await self.client.post(
-                url=self.mysql_agent_url + "/database/mysql/delete",
-                json=payload,
-                timeout=60.0
-            )
-            response.raise_for_status()
-            response_data = response.json()
-
-            if response.status_code == 200 and response_data.get("Result") is True:
-                self.logger.info(f"Successfully deleted user with ID: '{user_id}'.")
-                return True
-            else:
-                self.logger.warning(f"User deletion might have failed. User ID: '{user_id}'. Response: {response_data}")
-                return False
-
+            success = await self.mysql_helper.delete_one(table="users",
+                                                     where_conditions=["user_id = %s"],
+                                                     where_values=[user_id])
         except Exception as e:
             self.logger.error(f"Delete failed! Error: {str(e)}")
             return False
+
+        # 2. 删除 user_profile 表中数据
+        # 无需手动，因为user_id是 外键，下面的表同理
+        # 3. 删除 user_login_logs 表中数据
+        
+        # 4. 删除 user_settings 表中数据
+        
+        # 5. 删除 user_account_actions 表中数据
+        
+        # 6. 删除 user_notifications 表中数据
+        
+        # 7. 删除 user_files 表中数据
+        
+        return True
 
         
     async def hard_delete_expired_users(self)->bool:
@@ -1008,5 +959,212 @@ class UserAccountDataBaseAgent():
             self.logger.error(f"Connect to database '{self.database}' failed! Unexpected error: {e}")
             raise HTTPException(status_code=500, detail="Internal server error.")
         
+    # ------------------------------------------------------------------------------------------------
+    # 封装的上层功能函数
+    # ------------------------------------------------------------------------------------------------      
+    async def fetch_user_id_by_uuid(self, uuid: str) -> Optional[int]:
+        """
+        通过 UUID 在 users 表中查询 user_id
+
+        :param uuid: 用户的 UUID
+
+        :return: user_id ，如果未找到则返回 None
+        """
         
+        fields = ["user_id"]
+        where_conditions = ["user_uuid = %s"]
+        where_values = [uuid]
+        
+        try:
+            res = await self.mysql_helper.query_one(
+                table="users",
+                fields=fields,
+                where_conditions=where_conditions,
+                where_values=where_values
+            )
+        except Exception as e:
+            self.logger.error(f"Query failed! Error:{str(e)}")
+            return None
+
+        if res is None:
+            self.logger.warning(f"No user found with UUID: {uuid}")
+            return None
+
+        return res["user_id"]
     
+
+    async def fetch_user_id_and_password_by_email_or_account(self, identifier: str)-> Optional[tuple[int, str]]:
+        """
+        通过 email 或 account 在 users 表中查询 用户id 和 密码哈希
+
+        :param identifier: 用户的 email 或 account
+
+        :return: (user_id, password_hash) 元组，如果未找到则返回 None
+        """
+        fields = ["user_id", "password_hash"]
+        where_conditions = []
+        where_values = []
+        
+        if is_email(identifier):
+            where_conditions.append("email = %s")
+            where_values.append(identifier)
+        elif is_account_name(identifier):
+            where_conditions.append("account = %s")
+            where_values.append(identifier)
+        else:
+            self.logger.warning(f"Invalid identifier: {identifier}. Need email or valid account.")
+            return None
+
+        try:
+            res = await self.mysql_helper.query_one(
+                table="users",
+                fields=fields,
+                where_conditions=where_conditions,
+                where_values=where_values
+            )
+        except Exception as e:
+            self.logger.error(f"{str(e)}")
+            return None
+
+        if res is None:
+            self.logger.warning(f"No user found with identifier: {identifier}")
+            return None
+
+        return res["user_id"], res["password_hash"]
+
+    
+    async def update_user_notification_settings(self, user_id: int,
+                                                notifications_enabled: Optional[bool] = None,
+                                                settings_json: Optional[Dict] = None) -> bool:
+        """
+        更新用户通知设定
+
+        :param user_id: 用户ID
+        :param notifications_enabled: 是否启用通知
+        :param settings_json: 通知设定JSON
+        
+        :return: 更新是否成功
+        """
+        
+        if notifications_enabled is None and settings_json is None:
+            self.logger.warning(f"No fields provided to update for user: {user_id}")
+            return False
+        
+        data = {}
+        
+        if notifications_enabled is not None:
+            data["notifications_enabled"] = notifications_enabled
+
+        if settings_json is not None:
+            data["settings_json"] = settings_json
+
+        return await self.mysql_helper.update_one(table="user", data=data, 
+                                                  where_conditions=["user_id = %s"], 
+                                                  where_values=[user_id])
+
+    
+    async def insert_new_user(self, account: str, email: str,
+                                   password_hash: str, user_name: str) -> Optional[int]:
+        """
+        插入用户注册信息所有表。
+            1. users 表
+            2. user_profile 表
+            3. user_settings 表
+            
+        :param: account 用户账号(必须)
+        :param: email   用户邮箱(必须)
+        :param: password_hash   用户密码hash值(必须)
+        :param: user_name   用户名(必须)
+
+        返回 user_id（成功）或 None（失败）
+        """
+
+        # 1. 插入 users 表
+        try:
+            user_id = await self.insert_users(account=account, email=email,
+                                          password_hash=password_hash,
+                                          user_name=user_name)
+        except Exception as e:
+            self.logger.error(f"Insert users Failed. Error: {e}")
+            return None
+        
+        if user_id is not None:
+            self.logger.info(f"Insert users success. user_id: {user_id}")
+        else:
+            self.logger.warning(f"Insert users Failed. user_id: {user_id}")
+            return None
+        
+        
+        # 2. 插入 user_profile 表（使用默认头像）
+        try:
+            res_insert_user_profile = await self.insert_user_profile(
+                                user_id=user_id, user_name=user_name,
+                                account=account)
+        except Exception as e:
+            self.logger.error(f"Insert user profile Failed. Error: {e}")
+            return None
+        
+        if res_insert_user_profile:
+            self.logger.info(f"Inserted user profile. User ID: {user_id}")
+        else:
+            self.logger.warning(f"User profile insert may have failed. User ID: {user_id}")
+            return None
+        
+        
+        # 3. 插入 user_settings 表 (使用默认配置)
+        try:
+            res_insert_user_settings = await self.insert_user_settings(user_id=user_id)
+        except Exception as e:
+            self.logger.error(f"Insert user settings Failed. Error: {e}")
+            return None
+
+        if res_insert_user_settings:
+            self.logger.info(f"Inserted user settings. User ID: {user_id}")
+        else:
+            self.logger.warning(f"User settings insert may have failed. User ID: {user_id}")
+            return None
+ 
+
+    async def update_user_password_by_user_id(self, user_id: int, new_password_hash: str) -> bool:
+            """
+            根据 user_id 更新用户密码哈希。
+                1. 先更新 users 表中的 password_hash 字段
+                2. 再向 user_account_actions 表中插入新纪录
+
+            :param user_id: 用户ID
+            :param new_password_hash: 新密码哈希
+
+            :return: 更新是否成功
+            """
+            # 1. 更新 users 表中的 password_hash 字段
+            data = {"password_hash": new_password_hash}
+            where_conditions = ["user_id = %s"]
+            where_values = [user_id]
+            
+            
+            res =  await self.mysql_helper.update_one(table="users", data=data,
+                                        where_conditions=where_conditions,
+                                        where_values=where_values, 
+                                        success_msg=f"Updated user info.",
+                                        warning_msg=f"User info update may have failed.",
+                                        error_msg=f"Update error.")
+            
+            if not res:
+                self.logger.error(f"Failed to update password. User id: {user_id}") 
+                return False
+            
+            # 2. 向 user_account_actions 表中插入新纪录
+            data = {
+                "user_id": user_id,
+                "action_type": "update_password",
+                "action_detail": f"Password updated to {new_password_hash}"
+            }
+            res = await self.mysql_helper.insert_one(table="user_account_actions",data = data)
+            
+            if not res:
+                self.logger.error(f"Failed to insert user account action. User id: {user_id}")
+                return False
+            else:
+                self.logger.info(f"Success to update password. User id: {user_id}")
+                return True
+     

@@ -8,7 +8,7 @@
 """
     各种请求的格式定义
 """
-
+from typing import Dict
 from pydantic import BaseModel, EmailStr, constr, Field, model_validator
 
 
@@ -44,12 +44,29 @@ class ModifyPasswordRequest(BaseModel):
 
 class ModifyProfileRequest(BaseModel):
     """ 用户修改个人信息 request"""
-    account: str
-    
+    session_token: str = Field(..., description="session token")
+    user_name: str = Field(..., description="用户名")
+    profile_picture_url: str = Field(..., description="头像URL")
+    signature: str = Field(..., description="个性签名")
+
+
 class UploadFileRequest(BaseModel):
     """ 用户上传文件 request"""
-    account: str
+    session_token: str = Field(..., description="session token")
+    file: bytes = Field(..., description="上传的文件")
+    
     
 class ModifySettingRequest(BaseModel):
     """ 用户修改设置 request"""
-    account: str
+    session_token: str = Field(..., description="session token")
+    language: str | None = Field(..., description="语言")
+    configure_json_path: str | None = Field(..., description="配置文件路径")
+    notification_setting: Dict | None = Field(..., description="通知设置")
+
+
+class ModifyNotificationSettingsRequest(BaseModel):
+    """ 用户修改通知设置 request"""
+    session_token: str = Field(..., description="session token")
+    notifications_enabled: bool = Field(..., description="是否启用通知")
+    settings_json: Dict = Field(..., description="通知设定JSON")
+    # TODO 这个setting_json支不支持自定义呢？即pydantic支不支持嵌套？
