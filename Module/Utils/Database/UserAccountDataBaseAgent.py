@@ -1056,42 +1056,50 @@ class UserAccountDataBaseAgent():
         return sql, values
 
 
-    async def execute_sql(self, url: str, sql: str, sql_args: List,
-                          warning_message: str, success_message: str, error_message: str) -> bool:
+    def build_query_sql(self, table: str,
+                        fields: Optional[List[str]] = None,
+                        where_conditions: Optional[List[str]] = None,
+                        where_values: Optional[List] = None,
+                        order_by: Optional[str] = None,
+                        limit: Optional[int] = None,
+                        offset: Optional[int] = None) -> tuple[str, List]:
         """
-            执行sql
+        构造通用 SELECT SQL 语句
 
-        :param url: 请求的URL
-        :param sql: 要执行的SQL语句
-        :param sql_args: SQL语句的参数
-        :param warning_message: 警告消息
-        :param success_message: 成功消息
-        :param error_message: 错误消息
+        :return: (sql语句, 参数列表)
         """
-        
-        self.logger.info(f"Executing SQL: {sql} with args: {sql_args}")
-        
-        payload = {
-            "id": self.connect_id,
-            "sql": sql,
-            "sql_args": sql_args
-        }
-        
-        try:
-            response = await self.client.post(url=url, json=payload, timeout=60.0)
-            response.raise_for_status()
-            response_data = response.json()
+        if fields:
+            field_str = ", ".join(fields)
+        else:
+            field_str = "*"
 
-            if response.status_code == 200 and response_data.get("Result") is True:
-                self.logger.info(success_message)
-                return True
-            else:
-                self.logger.warning(f"{warning_message} | Response: {response_data}")
-                return False
+        sql = f"SELECT {field_str} FROM {table}"
+        args = []
 
-        except Exception as e:
-            self.logger.error(f"{error_message} : {str(e)}")
-            return False
+        where_clause_parts = []
+
+        if where_conditions:
+            where_clause_parts.extend(where_conditions)
+            if where_values:
+                args.extend(where_values)
+
+        if where_clause_parts:
+            sql += " WHERE " + " AND ".join(where_clause_parts)
+
+        if order_by:
+            sql += f" ORDER BY {order_by}"
+
+        if limit is not None:
+            sql += " LIMIT %s"
+            args.append(limit)
+
+        if offset is not None:
+            sql += " OFFSET %s"
+            args.append(offset)
+
+        sql += ";"
+        self.logger.debug(f"Generated Query SQL: {sql} | Args: {args}")
+        return sql, args
         
         
     async def insert_one(self, table: str, data: Dict,
@@ -1147,8 +1155,146 @@ class UserAccountDataBaseAgent():
             url=url,
             sql=sql,
             sql_args=args,
-            success_message=success_msg,
-            warning_message=warning_msg,
-            error_message=error_msg
+            success_msg=success_msg,
+            warning_msg=warning_msg,
+            error_msg=error_msg
         )
 
+
+    async def query_many(self, table: str,
+                        fields: Optional[List[str]] = None,
+                        where_conditions: Optional[List[str]] = None,
+                        where_values: Optional[List] = None,
+                        order_by: Optional[str] = None,
+                        limit: Optional[int] = None,
+                        offset: Optional[int] = None,
+                        success_msg: str = "Query success.",
+                        warning_msg: str = "Query may have failed.",
+                        error_msg: str = "Query error.") -> Optional[List[Dict]]:
+        """
+        执行 SELECT 查询并返回多条记录
+
+        :return: 查询结果列表，失败时返回 None
+        """
+        sql, sql_args = self.build_query_sql(
+            table=table,
+            fields=fields,
+            where_conditions=where_conditions,
+            where_values=where_values,
+            order_by=order_by,
+            limit=limit,
+            offset=offset
+        )
+        url = self.mysql_agent_url + "/database/mysql/query"
+
+        self.logger.info(f"Executing query: {sql} with args: {sql_args}")
+
+        payload = {
+            "id": self.connect_id,
+            "sql": sql,
+            "sql_args": sql_args
+        }
+
+        try:
+            response = await self.client.post(url=url, json=payload, timeout=60.0)
+            response.raise_for_status()
+            response_data = response.json()
+
+            if response.status_code == 200 and response_data.get("Result") is True:
+                self.logger.info(success_msg)
+                return response_data.get("Data") or []
+            else:
+                self.logger.warning(f"{warning_msg} | Response: {response_data}")
+                return None
+        except Exception as e:
+            self.logger.error(f"{error_msg}: {str(e)}")
+            return None
+
+
+    async def query_one(self, table: str,
+                    columns: Optional[List[str]] = None,
+                    where_conditions: Optional[List[str]] = None,
+                    where_values: Optional[List] = None,
+                    order_by: Optional[str] = None,
+                    warning_msg: str = "Query One Warning.",
+                    error_msg: str = "Query One Error.") -> Optional[Dict]:
+        """
+        执行 SELECT 查询并返回一条记录
+        
+        """
+        # 转发
+        result = await self.query_many(table, columns, where_conditions, where_values, limit=1,
+                                       order_by=order_by, warning_msg=warning_msg, error_msg=error_msg)
+        return result[0] if result else None
+
+
+    async def execute_write_sql(self, url: str, sql: str, sql_args: List,
+                          warning_msg: str, success_msg: str, error_msg: str) -> bool:
+        """
+            执行sql
+
+        :param url: 请求的URL
+        :param sql: 要执行的SQL语句
+        :param sql_args: SQL语句的参数
+        :param warning_msg: 警告消息
+        :param success_msg: 成功消息
+        :param error_msg: 错误消息
+        """
+        
+        self.logger.info(f"Executing WRITE SQL: {sql} | Args: {sql_args}")
+        
+        payload = {
+            "id": self.connect_id,
+            "sql": sql,
+            "sql_args": sql_args
+        }
+        
+        try:
+            response = await self.client.post(url=url, json=payload, timeout=60.0)
+            response.raise_for_status()
+            response_data = response.json()
+
+            if response.status_code == 200 and response_data.get("Result") is True:
+                self.logger.info(success_msg)
+                return True
+            else:
+                self.logger.warning(f"{warning_msg} | Response: {response_data}")
+                return False
+
+        except Exception as e:
+            self.logger.error(f"{error_msg} : {str(e)}")
+            return False
+        
+        
+    async def execute_query_sql(self, url: str, sql: str, sql_args: List,
+                            warning_msg: str, success_msg: str, error_msg: str) -> Optional[List[Dict]]:
+        """
+        执行 查询  SQL
+
+        :param warning_msg: 警告消息
+        :param success_msg: 成功消息
+        :param error_msg: 错误消息
+        """
+        self.logger.info(f"Executing QUERY SQL: {sql} | Args: {sql_args}")
+
+        payload = {
+            "id": self.connect_id,
+            "sql": sql,
+            "sql_args": sql_args
+        }
+
+        try:
+            response = await self.client.post(url=url, json=payload, timeout=60.0)
+            response.raise_for_status()
+            response_data = response.json()
+
+            if response.status_code == 200 and response_data.get("Result") is True:
+                self.logger.info(success_msg)
+                return response_data.get("Data") or []
+            else:
+                self.logger.warning(f"{warning_msg} | Response: {response_data}")
+                return None
+
+        except Exception as e:
+            self.logger.error(f"{error_msg} : {str(e)}")
+            return None
