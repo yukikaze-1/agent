@@ -376,16 +376,15 @@ class UserAccountDataBaseAgent():
     
 
     async def insert_users(self, account: str, email: str,
-                       password_hash: str, user_name: Optional[str] = None,
-                       signature: Optional[str] = None) -> Optional[int]:
+                       password_hash: str, user_name: str) -> Optional[int]:
         """
-        插入 users（支持可选字段）
+        插入 users
 
         :param account: 用户账号（必须）
         :param email: 用户邮箱（必须）
         :param password_hash: 用户密码哈希（必须）
-        :param user_name: 用户昵称（可选）
-        :param signature: 用户签名（可选）
+        :param user_name: 用户昵称（必须）
+        
         :return: 成功返回 user_id，失败返回 None
         """
         user_uuid = str(uuid.uuid4())
@@ -394,13 +393,9 @@ class UserAccountDataBaseAgent():
             "user_uuid": user_uuid,
             "account": account,
             "email": email,
-            "password_hash": password_hash
+            "password_hash": password_hash,
+            "user_name": user_name
         }
-        if user_name is not None:
-            data["user_name"] = user_name
-
-        if signature is not None:
-            data["signature"] = signature
 
         res = await self.mysql_helper.insert_one(table="users", data=data,
                                      success_msg=f"Inserted user info for account: {account}",
@@ -410,13 +405,22 @@ class UserAccountDataBaseAgent():
             self.logger.error(f"Failed to insert user info for account: {account}")
             return None
 
-        user_id = await self.fetch_user_id_by_uuid(user_uuid)
+        try:
+            user_id = await self.fetch_user_id_by_uuid(user_uuid)
+        except Exception as e:
+            self.logger.error(f"Failed to fetch user_id for user_uuid: {user_uuid}. Error: {e}")
+            return None
         
+        if user_id is None:
+            self.logger.warning(f"No user found with UUID: {user_uuid}")
         return user_id
     
     
-    async def update_users(self, user_id: int, status: Optional[str] = None, password_hash: Optional[str] = None,
-                           last_login_time: Optional[str] = None, session_token: Optional[str] = None) -> bool:
+    async def update_users(self, user_id: int,
+                           status: Optional[str] = None,
+                           password_hash: Optional[str] = None,
+                           last_login_time: Optional[str] = None,
+                           session_token: Optional[str] = None) -> bool:
         """
         更新 users
 
@@ -509,8 +513,7 @@ class UserAccountDataBaseAgent():
         
 
     async def insert_new_user(self, account: str, email: str,
-                                   password_hash: str, user_name: Optional[str]= None,
-                                   signature: Optional[str] = None) -> Optional[int]:
+                                   password_hash: str, user_name: str) -> Optional[int]:
         """
         插入用户注册信息所有表。
             1. users 表
@@ -520,41 +523,55 @@ class UserAccountDataBaseAgent():
         :param: account 用户账号(必须)
         :param: email   用户邮箱(必须)
         :param: password_hash   用户密码hash值(必须)
-        :param: user_name   用户名(非必须)
-        :param: signature   用户签名(非必须)
+        :param: user_name   用户名(必须)
 
         返回 user_id（成功）或 None（失败）
         """
 
         # 1. 插入 users 表
-        user_id = await self.insert_users(account=account, email=email,
+        try:
+            user_id = await self.insert_users(account=account, email=email,
                                           password_hash=password_hash,
-                                          user_name=user_name, signature=signature)
+                                          user_name=user_name)
+        except Exception as e:
+            self.logger.error(f"Insert users Failed. Error: {e}")
+            return None
+        
         if user_id is not None:
             self.logger.info(f"Insert users success. user_id: {user_id}")
         else:
             self.logger.warning(f"Insert users Failed. user_id: {user_id}")
-            raise ValueError(f"Insert users Failed. user_id: {user_id}")
+            return None
         
         
         # 2. 插入 user_profile 表（使用默认头像）
-        res_insert_user_profile = await self.insert_user_profile(
-                            user_id=user_id, user_name=user_name,
-                            account=account, signature=signature)
+        try:
+            res_insert_user_profile = await self.insert_user_profile(
+                                user_id=user_id, user_name=user_name,
+                                account=account)
+        except Exception as e:
+            self.logger.error(f"Insert user profile Failed. Error: {e}")
+            return None
+        
         if res_insert_user_profile:
             self.logger.info(f"Inserted user profile. User ID: {user_id}")
         else:
             self.logger.warning(f"User profile insert may have failed. User ID: {user_id}")
-            raise ValueError(f"Failed to insert user profile. User ID: {user_id}")
+            return None
         
         
         # 3. 插入 user_settings 表 (使用默认配置)
-        res_insert_user_settings = await self.insert_user_settings(user_id=user_id)
+        try:
+            res_insert_user_settings = await self.insert_user_settings(user_id=user_id)
+        except Exception as e:
+            self.logger.error(f"Insert user settings Failed. Error: {e}")
+            return None
+
         if res_insert_user_settings:
             self.logger.info(f"Inserted user settings. User ID: {user_id}")
         else:
             self.logger.warning(f"User settings insert may have failed. User ID: {user_id}")
-            raise ValueError(f"Failed to insert user settings. User ID: {user_id}")
+            return None
         
 
     async def update_user_login_logs(self, user_id: int,
@@ -846,9 +863,11 @@ class UserAccountDataBaseAgent():
                 return True
 
 
-    async def soft_delete_user_by_id(self, user_id: int) -> bool:
+    async def soft_delete_user_by_user_id(self, user_id: int) -> bool:
         """
         软删除用户：设为 'deleted' 并记录删除时间。
+
+        :param user_id: 用户ID
             返回: 更新是否成功
         """
         sql = """
