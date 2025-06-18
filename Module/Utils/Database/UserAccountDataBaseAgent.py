@@ -417,7 +417,7 @@ class UserAccountDataBaseAgent():
         return user_id
     
     
-    async def update_users(self, user_id: str, status: Optional[str] = None, password_hash: Optional[str] = None,
+    async def update_users(self, user_id: int, status: Optional[str] = None, password_hash: Optional[str] = None,
                            last_login_time: Optional[str] = None, session_token: Optional[str] = None) -> bool:
         """
         更新 users
@@ -459,7 +459,7 @@ class UserAccountDataBaseAgent():
                                         error_msg=f"Update error.")
 
 
-    async def insert_user_profile(self, user_id: str, account: str ,user_name: str | None = None,  signature: str | None = None)-> bool:
+    async def insert_user_profile(self, user_id: int, account: str ,user_name: str | None = None,  signature: str | None = None)-> bool:
         """
         插入新用户的个人资料信息到 user_profile 表。
 
@@ -483,7 +483,7 @@ class UserAccountDataBaseAgent():
                             error_msg=f"Insert error.User id: {user_id}")
 
 
-    async def insert_user_settings(self, user_id: str, language: str | None = None,
+    async def insert_user_settings(self, user_id: int, language: str | None = None,
                                        configure_json_path: str | None = None,
                                        notification_setting: Dict | None = None)-> bool:
         """ 
@@ -559,7 +559,7 @@ class UserAccountDataBaseAgent():
             raise ValueError(f"Failed to insert user settings. User ID: {user_id}")
         
 
-    async def update_user_login_logs(self, user_id: str,
+    async def update_user_login_logs(self, user_id: int,
                                      action_type: Optional[str] = None, action_detail: Optional[str] = None,
                                      agent: Optional[str] = None, device: Optional[str] = None, 
                                      os: Optional[str] = None, login_success: bool = False) -> bool:
@@ -613,7 +613,7 @@ class UserAccountDataBaseAgent():
                                       error_msg=f"Update error. User id: {user_id}")
    
    
-    async def update_user_settings(self, user_id: str, language: Optional[str] = None,
+    async def update_user_settings(self, user_id: int, language: Optional[str] = None,
                                    notification_setting: Optional[Dict] = None) -> bool:
         """
         更新 user_settings（仅更新传入的字段）
@@ -648,7 +648,7 @@ class UserAccountDataBaseAgent():
                                       error_msg=f"Update error. User id: {user_id}")
 
 
-    async def update_user_account_actions(self, user_id: str, action_type: str, action_detail: str) -> bool:
+    async def update_user_account_actions(self, user_id: int, action_type: str, action_detail: str) -> bool:
         """
         更新用户的账户操作记录
 
@@ -675,7 +675,7 @@ class UserAccountDataBaseAgent():
                                       error_msg=f"Update error. User id: {user_id}")
 
 
-    async def insert_user_notifications(self, user_id: str,
+    async def insert_user_notifications(self, user_id: int,
                                         notification_type: str, notification_title: str,
                                         message_content: str, is_read: bool = False) -> bool:
         """
@@ -701,7 +701,7 @@ class UserAccountDataBaseAgent():
                                      error_msg=f"Insert error.User id: {user_id}")
 
 
-    async def update_user_notifications(self, user_id: str, is_read: bool) -> bool:
+    async def update_user_notifications(self, user_id: int, is_read: bool) -> bool:
         """
         更新用户的通知状态
 
@@ -725,7 +725,7 @@ class UserAccountDataBaseAgent():
                                       error_msg=f"Update error. User id: {user_id}")
 
 
-    async def insert_user_files(self, user_id: str, file_path: str, file_name: str,
+    async def insert_user_files(self, user_id: int, file_path: str, file_name: str,
                                file_type: str, upload_time: str, file_size: int,
                                is_deleted: bool = False) -> bool:
         """
@@ -754,7 +754,7 @@ class UserAccountDataBaseAgent():
                             error_msg=f"Insert error.User id: {user_id}")
         
 
-    async def update_user_files(self, user_id: str,
+    async def update_user_files(self, user_id: int,
                                 file_path: Optional[str] = None,
                                 file_name: Optional[str] = None,
                                 file_type: Optional[str] = None,
@@ -848,7 +848,7 @@ class UserAccountDataBaseAgent():
                 return True
 
 
-    async def soft_delete_user_by_id(self, user_id: str) -> bool:
+    async def soft_delete_user_by_id(self, user_id: int) -> bool:
         """
         软删除用户：设为 'deleted' 并记录删除时间。
             返回: 更新是否成功
@@ -882,7 +882,7 @@ class UserAccountDataBaseAgent():
             return False
         
             
-    async def delete_user_by_id(self, user_id: str) -> bool:
+    async def delete_user_by_id(self, user_id: int) -> bool:
         """
         根据 user_id 删除用户（包含自动删除 user_profile 中的关联记录）。
             返回: 删除是否成功
@@ -991,6 +991,7 @@ class UserAccountDataBaseAgent():
             self.logger.error(f"Connect to database '{self.database}' failed! Unexpected error: {e}")
             raise HTTPException(status_code=500, detail="Internal server error.")
         
+        
     # --------------------------------
     # 工具函数
     # --------------------------------    
@@ -1013,6 +1014,7 @@ class UserAccountDataBaseAgent():
         columns_str = ", ".join(columns)
 
         sql = f"INSERT INTO {table} ({columns_str}) VALUES ({placeholders});"
+        self.logger.debug(f"Generated SQL: {sql} | Values: {values}")
         return sql, values
     
     
