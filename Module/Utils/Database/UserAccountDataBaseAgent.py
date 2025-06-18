@@ -806,7 +806,7 @@ class UserAccountDataBaseAgent():
                                       error_msg=f"Update error. User id: {user_id}")
 
 
-    async def update_user_password_by_user_id(self, user_id: str, new_password_hash: str) -> bool:
+    async def update_user_password_by_user_id(self, user_id: int, new_password_hash: str) -> bool:
             """
             根据 user_id 更新用户密码哈希。
                 1. 先更新 users 表中的 password_hash 字段

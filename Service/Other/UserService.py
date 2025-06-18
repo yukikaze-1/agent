@@ -48,7 +48,10 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     """ 用户登陆 request """
     identifier: str = Field(min_length=3, max_length=50, description="用户账号或邮箱")
-    password: str = Field(..., min_length=6)
+    password: str = Field(..., min_length=6, description="用户密码")
+    agent: str = Field(..., description="用户客户端版本")
+    device: str = Field(..., description="设备信息")
+    os: str = Field(..., description="操作系统信息")
 
 
 class LogoutRequest(BaseModel):
@@ -239,7 +242,7 @@ class UserService:
         # 用户登录
         @self.app.post("/usr/login")
         async def usr_login(user: LoginRequest):
-            return await self._usr_login(user.identifier, user.password)
+            return await self._usr_login(user.identifier, user.password, user.agent, user.device, user.os)
 
                 
         # 用户注册
@@ -271,9 +274,9 @@ class UserService:
             "exp": expire         # 过期时间（必须）
         }
         token = jwt.encode(payload, self.jwt_secret_key, algorithm=self.jwt_algorithm)
-        return token    
+        return token
     
-    
+
     def verify_token(self, token: str) -> int:
         """ 验证 jwt token """
         try:
@@ -300,10 +303,16 @@ class UserService:
     # --------------------------------
     # 功能函数
     # --------------------------------    
-    async def _usr_login(self, identifier: str, password: str):
+    async def _usr_login(self, identifier: str, password: str, agent: str, device: str, os: str) -> Dict:
         """ 
         验证用户登录
-        
+
+        :param identifier: 用户名或邮箱
+        :param password: 密码
+        :param agent: 用户客户端版本
+        :param device: 设备信息
+        :param os: 操作系统信息
+
         返回格式:
             成功:
                 {"result": True, "message": message, "token": access_token}
@@ -315,44 +324,93 @@ class UserService:
         result = True
         message = f'Login successfully!'
         
-        ### 查询数据库
+        # 1. 查询数据库
         try:
             # loop = asyncio.get_event_loop()
             # res = await loop.run_in_executor(self.executor, self.usr_account_database.fetch_user_by_name, username)
-            res = await self.usr_account_database.fetch_id_and_password_by_email_or_account(identifier=identifier)
+            res = await self.usr_account_database.fetch_user_id_and_password_by_email_or_account(identifier=identifier)
+               
         except Exception as e:
             self.logger.error(f"Database error during login for user '{identifier}': {e}")
             # return {"result": False, "message": "Internal server error.", "username": username}
             raise HTTPException(status_code=500, detail="Internal server error.")
-        
+
         self.logger.info(res)
-        
-        ### 验证
+
+        # 2. 验证
         # 检查用户是否已注册
         if not res:
             result = False
             message = f"Login failed! User: '{identifier}' does not exist!"
             self.logger.info(f"Operator:'{operator}', Result:'{result}', User:'{identifier}', Message:'{message}'")
             return {"result": result, "message": message, "user": identifier}
-
-        # 计算客户端传来的密码的hash值
-        password_hash = self.pwd_context.hash(password)
         
         # 用户内部ID 和保存的密码hash
         user_id, stored_password_hash = res
         
         # 密码错误
-        if stored_password_hash != password_hash:
+        if not self.pwd_context.verify(password, stored_password_hash):
+            # 登录失败log插入
             result = False
-            message = "Login failed! Invalid account or password!"
+            message = f"Login failed! Invalid account or password!"
+            insert_data = {
+                "user_id": user_id,  
+                "action_type": "login",
+                "action_detail": message,
+                "agent": agent,
+                "device": device,
+                "os": os,
+                "login_success": False
+            }
+            try:
+                await self.usr_account_database.insert_one(table="user_login_logs", data=insert_data)
+            except Exception as e:
+                self.logger.error(f"Failed to insert login log for user {user_id}: {e}")
+
             self.logger.info(f"Operator:'{operator}', Result:'{result}', User:'{identifier}', Message:'{message}'")
             return {"result": result, "message": message, "user": identifier}
 
-        ### 生成token
+        # 3. 生成token
         access_token = self.create_access_token(user_id=user_id)
+        
+        # 4. 将token更新到 users 表
+        update_data = {"access_token": access_token}
+        where_conditions =["user_id = %s"]
+        where_values = [user_id]
+        try:
+            res_update = await self.usr_account_database.update_one(table="users", data=update_data,
+                                                         where_conditions=where_conditions,
+                                                         where_values=where_values)
+        except Exception as e:
+            self.logger.error(f"Token update error for user {user_id}: {e}")
+        
+        if res_update:
+            self.logger.info(f"Operator:'{operator}', Result:True, Message:'Token updated successfully!', User ID: {user_id}")
+        else:
+            self.logger.warning(f"Operator:'{operator}', Result:False, Message:'Token update failed!', User ID: {user_id}")
 
-        ### 返回token
-        self.logger.info(f"Operator:'{operator}', Result:True, Message:'Login successful!', User ID: {user_id}, Token:'{access_token}'")
+        # 5. 生成登入log，插入user_login_logs 表中
+        insert_data = {
+            "user_id": user_id,
+            "action_type": "login",
+            "action_detail": "User logged in successfully.",
+            "agent": agent,
+            "device": device,
+            "os": os,
+            "login_success": True
+        }
+        try:
+            res_insert = await self.usr_account_database.insert_one(table="user_login_logs", data=insert_data)
+        except Exception as e:
+            self.logger.error(f"Failed to insert login log for user {user_id}: {e}")
+            
+        if res_insert:
+            self.logger.info(f"Operator:'{operator}', Result:True, Message:'Login log inserted successfully!', User ID: {user_id}")
+        else:
+            self.logger.warning(f"Operator:'{operator}', Result:False, Message:'Login log insertion failed!', User ID: {user_id}")
+
+        # 6. 返回token
+        self.logger.info(f"Operator:'{operator}', Result:True, Message:'Login successful!', User ID: {user_id}")
         return {"result": True, "message": "Login successful!", "token": access_token}
             
     
@@ -406,30 +464,44 @@ class UserService:
             return {"result": result, "message": message, "username": username}
         
         
-    async def _usr_change_pwd(self, user_id: int, new_password: str):
-        """用户更改密码"""
-        operator = 'usr_change_pwd'
-        result = True
-        message = 'Change password successful!'
+    async def _usr_change_pwd(self, user_id: int, new_password: str) -> Dict:
+        """
+        用户更改密码
+
+        :param user_id: 用户ID
+        :param new_password: 新密码
         
+        返回格式:
+            成功:
+                {"result": True, "message": message, "user_id": user_id}
+            失败:
+                {"result": False, "message": message, "user_id": user_id}
+        """
+        operator = 'usr_change_pwd'
+        result = False
+        
+        # 计算password hash
+        new_password_hash = self.pwd_context.hash(new_password)
+
         # 更新密码
         try:
             # loop = asyncio.get_event_loop()
             # res = await loop.run_in_executor(self.executor, self.usr_account_database.update_user_password, username, password)
-            res = await self.usr_account_database.update_user_password(username, password)
+            result = await self.usr_account_database.update_user_password_by_user_id(
+                user_id=user_id, new_password_hash=new_password_hash
+            )
         except Exception as e:
-            self.logger.error(f"Database error during password update for user '{username}': {e}")
-            return {"result": False, "message": "Internal server error.", "username": username}
-        
-        # 成功更新密码
-        if res:
-            self.logger.info(f"Operator:'{operator}', Result:'{result}', Username:'{username}', Message:'{message}'")
-            return {"result": result, "message": message, "username": username}
+            self.logger.error(f"Database error during password update for user id'{user_id}': {e}")
+            return {"result": False, "message": "Internal server error.", "user_id": user_id}
+
+        if result:
+            message = f"Change password successful! User ID '{user_id}'"
+            self.logger.info(f"Operator:'{operator}', Result:'{result}', User ID:'{user_id}', Message:'{message}'")
+            return {"result": result, "message": message, "user_id": user_id}
         else:
-            result = False
-            message = f"Change password failed! Username '{username}' update in database failed!"
-            self.logger.info(f"Operator:'{operator}', Result:'{result}', Username:'{username}', Message:'{message}'")
-            return {"result": result, "message": message, "username": username}
+            message = f"Change password failed! User ID '{user_id}' update in database failed!"
+            self.logger.warning(f"Operator:'{operator}', Result:'{result}', User ID:'{user_id}', Message:'{message}'")
+            return {"result": result, "message": message, "user_id": user_id}
 
     
     async def _usr_unregister(self, user_id: int):
