@@ -28,7 +28,8 @@ from Module.Utils.FastapiServiceTools import (
     get_service_instances,
     update_service_instances_periodically,
     register_service_to_consul,
-    unregister_service_from_consul
+    unregister_service_from_consul,
+    get_client_ip
 )
 from Module.Utils.Database.RequestType import (
     RegisterRequest,
@@ -217,38 +218,55 @@ class UserService:
         # 用户登录
         @self.app.post("/usr/login")
         async def usr_login(user: LoginRequest, request: Request):
-            ip_address = request.
-            return await self._usr_login(user.identifier, user.password, user.agent, user.device, user.os)
-                
+            ip_address = get_client_ip(request)
+            return await self._usr_login(identifier=user.identifier, password=user.password, 
+                                         agent=user.agent, device=user.device,
+                                         os=user.os, ip_address=ip_address)
+
         # 用户注册
         @self.app.post("/usr/register")
         async def usr_register(user: RegisterRequest, request: Request):
-            return await self._usr_register(user.user_name, user.account, user.password, user.email)
+            return await self._usr_register(user_name=user.user_name, account=user.account, 
+                                            password=user.password, email=user.email)
+
 
         # 用户更改密码
         @self.app.post("/usr/change_pwd")
         async def usr_change_pwd(data: ModifyPasswordRequest, request: Request):
-            return await self._usr_change_pwd(data.session_token, data.new_password)
+            return await self._usr_change_pwd(session_token=data.session_token,
+                                              new_password=data.new_password)
+
 
         # 用户注销
         @self.app.post("/usr/unregister")
         async def usr_unregister(data: UnregisterRequest, request: Request):
-            return await self._usr_unregister(data.session_token)
+            return await self._usr_unregister(session_token=data.session_token)
+
 
         # 用户修改个人信息
         @self.app.post("/usr/modify_profile")
         async def usr_modify_profile(data: ModifyProfileRequest, request: Request):
-            return await self._usr_modify_profile(data.session_token, data.user_name, data.profile_picture_url, data.signature)
+            return await self._usr_modify_profile(session_token=data.session_token, 
+                                                  user_name=data.user_name, 
+                                                  profile_picture_url=data.profile_picture_url,
+                                                  signature=data.signature)
+
 
         # 用户修改通知设置
         @self.app.post("/usr/modify_notifications")
         async def usr_modify_notification_settings(data: ModifyNotificationSettingsRequest, request: Request):
-            return await self._usr_modify_notification_settings(data.session_token, data.notifications_enabled)
+            return await self._usr_modify_notification_settings(session_token=data.session_token, 
+                                                                notifications_enabled=data.notifications_enabled)
+
 
         # 用户修改个人设置
         @self.app.post("/usr/modify_settings")
         async def usr_modify_settings(data: ModifySettingRequest, request: Request):
-            return await self._usr_modify_settings(data.session_token, data.account)
+            return await self._usr_modify_settings(session_token=data.session_token,
+                                                   language=data.language,
+                                                   configure=data.configure,
+                                                   notification_setting=data.notification_setting)
+
 
         # 用户上传文件
         @self.app.post("/usr/upload_file")
@@ -299,7 +317,18 @@ class UserService:
 
 
     def get_client_ip(self, request: Request) -> str:
-        return request.headers.get("x-forwarded-for", "unknown").split(",")[0].strip()
+        """ 从Request 中获取注入的头部中包含的IP地址 """
+        # 优先从 X-Forwarded-For 中取
+        forwarded_for = request.headers.get("x-forwarded-for")
+        if forwarded_for:
+            return forwarded_for.split(",")[0].strip()
+
+        # 退而求其次取 request.client
+        if request.client:
+            return request.client.host
+
+        # 无法获取时返回默认
+        return "0.0.0.0"
     
         
     # --------------------------------
@@ -605,8 +634,10 @@ class UserService:
         #     raise HTTPException(status_code=400, detail=message)
         
         
-    async def _usr_modify_profile(self, session_token: str, user_name: str,
-                                  profile_picture_url: str, signature: str) -> Dict:
+    async def _usr_modify_profile(self, session_token: str,
+                                  user_name: str | None = None,
+                                  profile_picture_url: str | None = None, 
+                                  signature: str | None = None) -> Dict:
         """
         用户修改个人信息
         """
@@ -617,7 +648,7 @@ class UserService:
 
         # 2. 更新数据库对应条目
         try:
-            await self.usr_account_database.update_user_profile(
+            res = await self.usr_account_database.update_user_profile(
                 user_id=user_id,
                 user_name=user_name,
                 profile_picture_url=profile_picture_url,
@@ -627,6 +658,10 @@ class UserService:
             self.logger.error(f"Database error during profile update for user id'{user_id}': {e}")
             return {"result": False, "message": "Internal server error.", "user_id": user_id}
 
+        # 更新失败
+        if not res:
+            return {"result": False, "message": "Internal server error.", "user_id": user_id}
+                    
         # 3. 返回结果
         message = f"Profile update successful! User ID '{user_id}'"
         self.logger.info(f"Operator:'{operator}', Result:'True', User ID:'{user_id}', Message:'{message}'")
@@ -634,9 +669,14 @@ class UserService:
         return {"result": True, "message": message, "user_id": user_id}
 
 
-    async def _usr_modify_notification_settings(self, session_token: str, notifications_enabled: bool) -> Dict:
+    async def _usr_modify_notification_settings(self, session_token: str,
+                                                notifications_enabled: bool | None = None,
+                                                settings_json: Dict | None = None) -> Dict:
         """
         用户修改通知设置
+
+        :param notifications_enabled: 是否启用通知
+        :param settings_json: 设置JSON
         """
         operator = 'usr_modify_notification_settings'
 
@@ -647,7 +687,8 @@ class UserService:
         try:
             await self.usr_account_database.update_user_notification_settings(
                 user_id=user_id,
-                notifications_enabled=notifications_enabled
+                notifications_enabled=notifications_enabled,
+                settings_json=settings_json
             )
         except Exception as e:
             self.logger.error(f"Database error during notification settings update for user id'{user_id}': {e}")
@@ -660,9 +701,16 @@ class UserService:
         return {"result": True, "message": message, "user_id": user_id}
 
 
-    async def _usr_modify_settings(self, session_token: str, account: str) -> Dict:
+    async def _usr_modify_settings(self, session_token: str,
+                                   language: str | None = None,
+                                   configure: Dict | None = None,
+                                   notification_setting: Dict | None = None) -> Dict:
         """
         用户修改设置
+
+        :param language: 语言设置
+        :param configure: 用户配置
+        :param notification_setting: 通知设置
         """
         operator = 'usr_modify_settings'
 
@@ -673,7 +721,9 @@ class UserService:
         try:
             await self.usr_account_database.update_user_settings(
                 user_id=user_id,
-                account=account
+                language=language,
+                configure=configure,
+                notification_setting=notification_setting
             )
         except Exception as e:
             self.logger.error(f"Database error during settings update for user id'{user_id}': {e}")

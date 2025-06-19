@@ -1053,7 +1053,7 @@ class UserAccountDataBaseAgent():
         if settings_json is not None:
             data["settings_json"] = settings_json
 
-        return await self.mysql_helper.update_one(table="user", data=data, 
+        return await self.mysql_helper.update_one(table="user_settings", data=data, 
                                                   where_conditions=["user_id = %s"], 
                                                   where_values=[user_id])
 

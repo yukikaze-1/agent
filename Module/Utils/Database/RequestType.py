@@ -45,9 +45,9 @@ class ModifyPasswordRequest(BaseModel):
 class ModifyProfileRequest(BaseModel):
     """ 用户修改个人信息 request"""
     session_token: str = Field(..., description="session token")
-    user_name: str = Field(..., description="用户名")
-    profile_picture_url: str = Field(..., description="头像URL")
-    signature: str = Field(..., description="个性签名")
+    user_name: str | None = Field(..., description="用户名")
+    profile_picture_url: str | None = Field(..., description="头像URL")
+    signature: str | None = Field(..., description="个性签名")
 
 
 class UploadFileRequest(BaseModel):
@@ -60,13 +60,12 @@ class ModifySettingRequest(BaseModel):
     """ 用户修改设置 request"""
     session_token: str = Field(..., description="session token")
     language: str | None = Field(..., description="语言")
-    configure_json_path: str | None = Field(..., description="配置文件路径")
+    configure: Dict | None = Field(..., description="用户配置")
     notification_setting: Dict | None = Field(..., description="通知设置")
 
 
 class ModifyNotificationSettingsRequest(BaseModel):
     """ 用户修改通知设置 request"""
     session_token: str = Field(..., description="session token")
-    notifications_enabled: bool = Field(..., description="是否启用通知")
-    settings_json: Dict = Field(..., description="通知设定JSON")
-    # TODO 这个setting_json支不支持自定义呢？即pydantic支不支持嵌套？
+    notifications_enabled: bool | None = Field(..., description="是否启用通知")
+    settings_json: Dict | None = Field(..., description="通知设定JSON")
