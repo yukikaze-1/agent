@@ -31,11 +31,11 @@ from Module.Utils.Database.MySQLHelper import MySQLHelper
 | `user_id`         | `INT UNSIGNED AUTO_INCREMENT PRIMARY KEY`                        | 用户内部ID（主键） |
 | `user_uuid`       | `CHAR(36) NOT NULL UNIQUE`                                       | 用户UUID     |
 | `status`          | `ENUM('inactive', 'active','deleted') NOT NULL DEFAULT 'active'` | 用户状态       |
-| `account`         | `VARCHAR(255) NOT NULL UNIQUE`                                   | 用户账号       |
-| `password_hash`   | `VARCHAR(255) NOT NULL`                                          | 密码哈希值      |
-| `email`           | `VARCHAR(255) NOT NULL UNIQUE`                                   | 用户邮箱       |
+| `account`         | `VARCHAR(256) NOT NULL UNIQUE`                                   | 用户账号       |
+| `password_hash`   | `VARCHAR(256) NOT NULL`                                          | 密码哈希值      |
+| `email`           | `VARCHAR(256) NOT NULL UNIQUE`                                   | 用户邮箱       |
 | `last_login_time` | `DATETIME`                                                       | 最后登录时间     |
-| `last_login_ip`   | `VARCHAR(255)`                                                   | 最后登录IP     |
+| `last_login_ip`   | `VARCHAR(256)`                                                   | 最后登录IP     |
 | `session_token`   | `VARCHAR(2048)`                                                  | Session令牌  |
 | `file_folder_path`| `VARCHAR(512) NOT NULL`                                          | 用户个人文件夹(默认为UUID为命名)  |
 | `created_at`      | `DATETIME DEFAULT CURRENT_TIMESTAMP`                             | 创建时间       |
@@ -46,11 +46,11 @@ CREATE TABLE users (
   user_id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   user_uuid CHAR(36) NOT NULL UNIQUE,
   status ENUM('inactive', 'active', 'deleted') NOT NULL DEFAULT 'active',
-  account VARCHAR(255) NOT NULL UNIQUE,
-  password_hash VARCHAR(255) NOT NULL,
-  email VARCHAR(255) NOT NULL UNIQUE,
+  account VARCHAR(256) NOT NULL UNIQUE,
+  password_hash VARCHAR(256) NOT NULL,
+  email VARCHAR(256) NOT NULL UNIQUE,
   last_login_time DATETIME,
-  last_login_ip VARCHAR(255),
+  last_login_ip VARCHAR(256),
   session_token VARCHAR(2048),
   file_folder_path VARCHAR(512)  NOT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -64,17 +64,17 @@ CREATE TABLE users (
 | 字段名                 | 类型                                                             | 描述          |
 | --------------------- | ---------------------------------------------------------------- | ----------- |
 | `user_id`             | `INT UNSIGNED PRIMARY KEY FK`                                    | 用户ID（主键+外键） |
-| `user_name`           | `VARCHAR(255)`                                                   | 用户名         |
-| `profile_picture_url` | `VARCHAR(512) DEFAULT 'Resources/img/nahida.jpg'`                | 头像URL地址     |
-| `signature`           | `VARCHAR(255)`                                                   | 用户个性签名      |
+| `user_name`           | `VARCHAR(256) NOT NULL`                                          | 用户名         |
+| `profile_picture_url` | `VARCHAR(512) NOT NULL DEFAULT 'Resources/img/nahida.jpg'`                | 头像URL地址     |
+| `signature`           | `VARCHAR(256) DEFAULT NULL`                                      | 用户个性签名      |
 | `created_at`          | `DATETIME DEFAULT CURRENT_TIMESTAMP`                             | 创建时间        |
 | `updated_at`          | `DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | 修改时间        |
 
 CREATE TABLE user_profile (
   user_id INT UNSIGNED PRIMARY KEY,
-  user_name VARCHAR(255),
-  profile_picture_url VARCHAR(512) DEFAULT 'Resources/img/nahida.jpg',
-  signature VARCHAR(255),
+  user_name VARCHAR(256) NOT NULL,
+  profile_picture_url VARCHAR(512) NOT NULL DEFAULT 'Resources/img/nahida.jpg',
+  signature VARCHAR(256) DEFAULT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   
@@ -85,27 +85,30 @@ CREATE TABLE user_profile (
 
 ---
 
+# TODO 将该表修改为只读
 ### 3. 用户登录认证 (`user_login_logs`)
 | 字段名           | 类型                                                             | 描述       |
 | --------------- | ---------------------------------------------------------------- | -------- |
 | `login_id`      | `BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY`                     | 日志主键     |
 | `user_id`       | `INT UNSIGNED NOT NULL`                                          | 用户ID（外键） |
-| `ip_address`    | `VARCHAR(255) NOT NULL`                                          | 登陆IP  |
-| `agent`         | `VARCHAR(512)`                                                   | 浏览器代理    |
-| `device`        | `VARCHAR(512)`                                                   | 登录设备     |
-| `os`            | `VARCHAR(255)`                                                   | 操作系统     |
-| `login_success` | `BOOL DEFAULT FALSE`                                             | 是否成功登录   |
+| `login_time`    | `DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL`                    | 登陆时间     |
+| `ip_address`    | `VARCHAR(256) NOT NULL`                                          | 登陆IP      |
+| `agent`         | `VARCHAR(512) NOT NULL`                                          | 浏览器代理    |
+| `device`        | `VARCHAR(512) NOT NULL`                                          | 登录设备     |
+| `os`            | `VARCHAR(512) NOT NULL`                                          | 操作系统     |
+| `login_success` | `BOOL DEFAULT FALSE NOT NULL`                                    | 是否成功登录   |
 | `created_at`    | `DATETIME DEFAULT CURRENT_TIMESTAMP`                             | 创建时间     |
 | `updated_at`    | `DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | 更新时间     |
 
 CREATE TABLE user_login_logs (
   login_id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   user_id INT UNSIGNED NOT NULL,
-  ip_address VARCHAR(255) NOT NULL,
-  agent VARCHAR(512),
-  device VARCHAR(512),
-  os VARCHAR(255),
-  login_success BOOL DEFAULT FALSE,
+  login_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+  ip_address VARCHAR(256) NOT NULL,
+  agent VARCHAR(512) NOT NULL,
+  device VARCHAR(512) NOT NULL,
+  os VARCHAR(512) NOT NULL,
+  login_success BOOL DEFAULT FALSE NOT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   
@@ -121,16 +124,16 @@ CREATE TABLE user_login_logs (
 | ---------------------- | ---------------------------------------------------------------- | ----------- |
 | `user_id`              | `INT UNSIGNED PRIMARY KEY FK`                                    | 用户ID（主键+外键） |
 | `language`             | `ENUM('zh', 'en', 'jp') NOT NULL DEFAULT 'zh'`                   | 用户语言偏好      |
-| `configure_path`       | `VARCHAR(2048) NOT NULL`                                         | 用户配置文件路径(不可更改)('Users/Config/user_uuid)    |
-| `notification_setting` | `JSON`                                                           | 用户通知设置      |
+| `configure`            | `JSON NOT NULL`                                                  | 用户配置    |
+| `notification_setting` | `JSON NOT NULL`                                                  | 用户通知设置      |
 | `created_at`           | `DATETIME DEFAULT CURRENT_TIMESTAMP`                             | 创建时间        |
 | `updated_at`           | `DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | 更新时间        |
 
 CREATE TABLE user_settings (
   user_id INT UNSIGNED PRIMARY KEY,
   language ENUM('zh', 'en', 'jp') NOT NULL DEFAULT 'zh',
-  configure_path VARCHAR(2048) NOT NULL,
-  notification_setting JSON,
+  configure JSON NOT NULL,
+  notification_setting JSON NOT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   
@@ -141,21 +144,22 @@ CREATE TABLE user_settings (
 
 ---
 
+# TODO 将该表修改为只读
 ### 5. 用户账户行为 (`user_account_actions`)
 | 字段名                       | 类型                                                             | 描述       |
 | --------------------------- | ---------------------------------------------------------------- | -------- |
 | `action_id`                 | `INT UNSIGNED AUTO_INCREMENT PRIMARY KEY`                        | 主键       |
 | `user_id`                   | `INT UNSIGNED NOT NULL FK`                                       | 用户ID（外键） |
-| `action_type`               | `VARCHAR(255)`                                                   | 用户账户操作类型   |
-| `action_detail`             | `VARCHAR(512)`                                                   | 用户账户操作细节   |
+| `action_type`               | `VARCHAR(256) NOT NULL`                                          | 用户账户操作类型   |
+| `action_detail`             | `VARCHAR(512) NOT NULL`                                          | 用户账户操作细节   |
 | `created_at`                | `DATETIME DEFAULT CURRENT_TIMESTAMP`                             | 创建时间     |
 | `updated_at`                | `DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | 更新时间     |
 
 CREATE TABLE user_account_actions (
   action_id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  user_id INT UNSIGNED,
-  action_type VARCHAR(255),
-  action_detail VARCHAR(512),
+  user_id INT UNSIGNED NOT NULL,
+  action_type VARCHAR(256) NOT NULL,
+  action_detail VARCHAR(512) NOT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   
@@ -172,7 +176,7 @@ CREATE TABLE user_account_actions (
 | `notification_id`     | `INT UNSIGNED AUTO_INCREMENT PRIMARY KEY`                        | 通知ID（主键） |
 | `user_id`             | `INT UNSIGNED NOT NULL FK`                                       | 用户ID（外键） |
 | `notification_type`   | `ENUM('system', 'security', 'promotion') NOT NULL`               | 通知类型     |
-| `notification_title`  | `VARCHAR(255) NOT NULL`                                          | 通知标题     |
+| `notification_title`  | `VARCHAR(256) NOT NULL`                                          | 通知标题     |
 | `notification_content`| `TEXT`                                                           | 通知内容     |
 | `is_read`             | `BOOL DEFAULT FALSE`                                             | 是否已读     |
 | `created_at`          | `DATETIME DEFAULT CURRENT_TIMESTAMP`                             | 创建时间     |
@@ -182,7 +186,7 @@ CREATE TABLE user_notifications (
   notification_id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   user_id INT UNSIGNED NOT NULL,
   notification_type ENUM('system', 'security', 'promotion') NOT NULL,
-  notification_title VARCHAR(255) NOT NULL,
+  notification_title VARCHAR(256) NOT NULL,
   notification_content TEXT,
   is_read BOOL DEFAULT FALSE,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -200,24 +204,24 @@ CREATE TABLE user_notifications (
 | ---------------- | ---------------------------------------------------------------- | ------------ |
 | `file_id`        | `INT UNSIGNED AUTO_INCREMENT PRIMARY KEY`                        | 文件ID         |
 | `user_id`        | `INT UNSIGNED NOT NULL FK`                                       | 用户ID（外键）     |
-| `file_path`      | `VARCHAR(512)`                                                   | 文件相对路径       |
-| `file_name`      | `VARCHAR(255)`                                                   | 原始文件名        |
-| `file_type`      | `VARCHAR(255)`                                                   | 文件类型（如 .png） |
-| `upload_time`    | `DATETIME`                                                       | 上传时间         |
-| `file_size`      | `BIGINT UNSIGNED`                                                | 文件大小         |
-| `is_deleted`     | `BOOL DEFAULT FALSE`                                             | 是否删除         |
+| `file_path`      | `VARCHAR(512) NOT NULL`                                          | 文件相对路径       |
+| `file_name`      | `VARCHAR(256) NOT NULL`                                          | 原始文件名        |
+| `file_type`      | `VARCHAR(256) NOT NULL`                                          | 文件类型（如 .png） |
+| `upload_time`    | `DATETIME DEFAULT CURRENT_TIMESTAMP`                             | 上传时间         |
+| `file_size`      | `BIGINT UNSIGNED NOT NULL`                                       | 文件大小         |
+| `is_deleted`     | `BOOL DEFAULT FALSE NOT NULL`                                    | 是否删除         |
 | `created_at`     | `DATETIME DEFAULT CURRENT_TIMESTAMP`                             | 创建时间         |
 | `updated_at`     | `DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | 更新时间         |
 
 CREATE TABLE user_files (
   file_id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   user_id INT UNSIGNED NOT NULL,
-  file_path VARCHAR(512),
-  file_name VARCHAR(255),
-  file_type VARCHAR(255),
-  upload_time DATETIME,
-  file_size BIGINT UNSIGNED,
-  is_deleted BOOL DEFAULT FALSE,
+  file_path VARCHAR(512) NOT NULL,
+  file_name VARCHAR(256) NOT NULL,
+  file_type VARCHAR(256) NOT NULL,
+  upload_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  file_size BIGINT UNSIGNED NOT NULL,
+  is_deleted BOOL DEFAULT FALSE NOT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   
@@ -225,19 +229,20 @@ CREATE TABLE user_files (
     ON DELETE CASCADE ON UPDATE CASCADE
 );
 
+# TODO 将conversations 和conversations_messages 抽离出来放在一个单独的数据库，并且单独写一个封装类来操作
 ### 8. 会话表(`conversations`)
 | 字段名             | 类型                                                             | 说明          |
 | ----------------- | ---------------------------------------------------------------- | ----------- |
 | `conversation_id` | `BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY`                     | 会话 ID       |
-| `user_id`         | `INT UNSIGNED`                                                   | 用户内部 ID（外键） |
-| `title`           | `VARCHAR(255) DEFAULT NULL`                                      | 会话标题        |
+| `user_id`         | `INT UNSIGNED NOT NULL FK`                                       | 用户内部 ID（外键） |
+| `title`           | `VARCHAR(256) NOT NULL`                                          | 会话标题        |
 | `created_at`      | `DATETIME DEFAULT CURRENT_TIMESTAMP`                             | 创建时间        |
 | `updated_at`      | `DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | 修改时间        |
 
 CREATE TABLE conversations (
     conversation_id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     user_id INT UNSIGNED NOT NULL,
-    title VARCHAR(255) DEFAULT NULL,        
+    title VARCHAR(256) NOT NULL,        
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
@@ -251,7 +256,7 @@ CREATE TABLE conversations (
 | 字段名             | 类型                                                    | 说明        |
 | -----------------  | ------------------------------------------------------- | --------- |
 | `message_id`       | `BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY`            | 消息 ID     |
-| `conversation_id`  | `INT UNSIGNED`                                          | 会话 ID（外键） |
+| `conversation_id`  | `INT UNSIGNED NOT NULL FK`                              | 会话 ID（外键） |
 | `user_id`          | `INT UNSIGNED NOT NULL FK`                              | 用户 ID（外键） |
 | `sender_role`      | `ENUM('user', 'assistant', 'system') NOT NULL`          | 角色        |
 | `message_type`     | `ENUM('text', 'image', 'file', 'audio') DEFAULT 'text'` | 信息类型      |
@@ -368,30 +373,35 @@ class UserAccountDataBaseAgent():
     # ------------------------------------------------------------------------------------------------
     # 功能函数---查询表项目
     # ------------------------------------------------------------------------------------------------     
-    
+    """
+        查询函数封装在了MySQLHelper中的query_one和query_many中
+    """
     # ------------------------------------------------------------------------------------------------
     # 功能函数---插入表项目
     # ------------------------------------------------------------------------------------------------
-    async def insert_users(self, account: str, email: str,
-                       password_hash: str, user_name: str) -> Optional[int]:
+    async def insert_users(self, user_uuid: str, 
+                            account: str, email: str,
+                            password_hash: str, user_name: str,
+                            file_folder_path: str) -> Optional[int]:
         """
-        插入 users
+        插入 users 表项目
 
         :param account: 用户账号（必须）
         :param email: 用户邮箱（必须）
         :param password_hash: 用户密码哈希（必须）
         :param user_name: 用户昵称（必须）
-        
+        :param file_folder_path: 用户文件夹路径（必须）
+
         :return: 成功返回 user_id，失败返回 None
         """
-        user_uuid = str(uuid.uuid4())
         
         data = {
             "user_uuid": user_uuid,
             "account": account,
             "email": email,
             "password_hash": password_hash,
-            "user_name": user_name
+            "user_name": user_name,
+            "file_folder_path": file_folder_path
         }
 
         res = await self.mysql_helper.insert_one(table="users", data=data,
@@ -410,25 +420,24 @@ class UserAccountDataBaseAgent():
         
         if user_id is None:
             self.logger.warning(f"No user found with UUID: {user_uuid}")
+            return None
         return user_id
     
     
-    async def insert_user_profile(self, user_id: int, account: str ,user_name: str | None = None,  signature: str | None = None)-> bool:
+    async def insert_user_profile(self, user_id: int,
+                                  user_name: str)-> bool:
         """
         插入新用户的个人资料信息到 user_profile 表。
 
         :param user_id: 用户ID
-        :param account: 用户账号
-        :param user_name: 用户名(非必须)
-        :param signature: 用户签名(非必须)
+        :param user_name: 用户名
 
         :return: 插入是否成功
         """
         
         data = {
             "user_id": user_id,
-            "user_name": user_name or account,
-            "signature": signature or ""
+            "user_name": user_name 
         }
 
         return await self.mysql_helper.insert_one(table="user_profile", data=data,
@@ -437,21 +446,34 @@ class UserAccountDataBaseAgent():
                             error_msg=f"Insert error.User id: {user_id}")
 
 
-    async def insert_user_login_logs(self, user_id: int, action_type: str, action_detail: str,
-                                     agent: str, device: str, os: str) -> bool:
+    async def insert_user_login_logs(self, user_id: int, 
+                                     login_time: str,
+                                     ip_address: str,
+                                     agent: str,
+                                     device: str,
+                                     os: str,
+                                     login_success: bool) -> bool:
         """
         插入用户登录日志到 user_login_logs 表
 
         :param user_id: 用户ID
         :param login_time: 登录时间
         :param ip_address: 登录IP地址
+        :param agent: 浏览器代理
+        :param device: 登录设备
+        :param os: 操作系统
+        :param login_success: 登录是否成功
 
         :return: 插入是否成功
         """
         data = {
             "user_id": user_id,
             "login_time": login_time,
-            "ip_address": ip_address
+            "ip_address": ip_address,
+            "agent": agent,
+            "device": device,
+            "os": os,
+            "login_success": login_success
         }
 
         return await self.mysql_helper.insert_one(table="user_login_logs", data=data,
@@ -459,15 +481,17 @@ class UserAccountDataBaseAgent():
                                      warning_msg=f"User login log insert may have failed.User id: {user_id}",
                                      error_msg=f"Insert error.User id: {user_id}")
 
-    async def insert_user_settings(self, user_id: int, language: str | None = None,
-                                       configure_json_path: str | None = None,
-                                       notification_setting: Dict | None = None)-> bool:
+
+    async def insert_user_settings(self, user_id: int, 
+                                   language: str | None = None,
+                                   configure : Dict | None = None,
+                                   notification_setting: Dict | None = None)-> bool:
         """ 
         插入新用户的个人设置到 user_settings 表
 
         :param user_id: 用户ID
         :param language: 语言
-        :param configure_json_path: 配置文件路径
+        :param configure: 用户配置
         :param notification_setting: 通知设置
 
         :return: 插入是否成功
@@ -476,7 +500,7 @@ class UserAccountDataBaseAgent():
         data = {
             "user_id": user_id,
             "language": language or "zh",
-            "configure_json_path": configure_json_path or "",
+            "configure": json.dumps(configure) if configure else "{}",
             "notification_setting": json.dumps(notification_setting) if notification_setting else "{}"
         }
 
@@ -486,7 +510,9 @@ class UserAccountDataBaseAgent():
                                      error_msg=f"Insert error.User id: {user_id}")
    
 
-    async def insert_user_account_actions(self, user_id: int, action_type: str, action_time: str) -> bool:
+    async def insert_user_account_actions(self, user_id: int, 
+                                          action_type: str, 
+                                          action_time: str) -> bool:
         """
         插入用户账号操作记录到 user_account_actions 表
 
@@ -509,22 +535,25 @@ class UserAccountDataBaseAgent():
 
 
     async def insert_user_notifications(self, user_id: int,
-                                        notification_type: str, notification_title: str,
-                                        message_content: str, is_read: bool = False) -> bool:
+                                        notification_type: str, 
+                                        notification_title: str,
+                                        notification_content: str,
+                                        is_read: bool = False) -> bool:
         """
-        插入 user_notifications
+        插入 user_notifications 表
 
         :param user_id: 用户ID
         :param notification_type: 通知类型
         :param notification_title: 通知标题
-        :param message_content: 消息内容
+        :param notification_content: 通知内容
+        
         :param is_read: 是否已读
         """
         data = {
             "user_id": user_id,
             "notification_type": notification_type,
             "notification_title": notification_title,
-            "message_content": message_content,
+            "notification_content": notification_content,
             "is_read": is_read
         }
 
@@ -534,9 +563,13 @@ class UserAccountDataBaseAgent():
                                      error_msg=f"Insert error.User id: {user_id}")
 
 
-    async def insert_user_files(self, user_id: int, file_path: str, file_name: str,
-                               file_type: str, upload_time: str, file_size: int,
-                               is_deleted: bool = False) -> bool:
+    async def insert_user_files(self, user_id: int, 
+                                file_path: str, 
+                                file_name: str,
+                                file_type: str, 
+                                file_size: int,
+                                upload_time: str, 
+                                is_deleted: bool = False) -> bool:
         """
         插入 user_files
 
@@ -544,10 +577,13 @@ class UserAccountDataBaseAgent():
         :param file_path: 文件路径
         :param file_name: 文件名
         :param file_type: 文件类型
-        :param upload_time: 上传时间
         :param file_size: 文件大小
+        :param upload_time: 上传时间        
         :param is_deleted: 是否已删除(非必须)
+
+        :return: 插入是否成功
         """
+        
         data = {
             "user_id": user_id,
             "file_path": file_path,
@@ -569,6 +605,7 @@ class UserAccountDataBaseAgent():
                            status: Optional[str] = None,
                            password_hash: Optional[str] = None,
                            last_login_time: Optional[str] = None,
+                           last_login_ip: Optional[str] = None,
                            session_token: Optional[str] = None) -> bool:
         """
         更新 users 表
@@ -577,12 +614,13 @@ class UserAccountDataBaseAgent():
         :param status: 用户状态
         :param password_hash: 用户密码哈希
         :param last_login_time: 用户最后登录时间
+        :param last_login_ip: 用户最后登录IP
         :param session_token: 用户会话令牌
 
         :return: 更新是否成功
         """
-        
-        if status is None and password_hash is None and last_login_time is None and session_token is None:
+
+        if status is None and password_hash is None and last_login_time is None and last_login_ip is None and session_token is None:
             self.logger.warning(f"Nothing to update in user_settings for user_id: {user_id}.")
             return False
         
@@ -596,6 +634,9 @@ class UserAccountDataBaseAgent():
 
         if last_login_time is not None:
             data["last_login_time"] = last_login_time
+
+        if last_login_ip is not None:
+            data["last_login_ip"] = last_login_ip
 
         if session_token is not None:
             data["session_token"] = session_token
@@ -645,69 +686,25 @@ class UserAccountDataBaseAgent():
                                                    warning_msg=f"User profile update may have failed.User id: {user_id}",
                                                    error_msg=f"Update error.User id: {user_id}")
    
-
-    async def update_user_login_logs(self, user_id: int,
-                                     action_type: Optional[str] = None, action_detail: Optional[str] = None,
-                                     agent: Optional[str] = None, device: Optional[str] = None, 
-                                     os: Optional[str] = None, login_success: bool = False) -> bool:
-        """
-        更新 user_login_logs 表
-
-        :param user_id: 用户ID
-        :param action_type: 操作类型
-        :param action_detail: 操作详情
-        :param agent: 代理信息
-        :param device: 设备信息
-        :param os: 操作系统信息
-        :param login_success: 登录是否成功
-
-        :return: 更新是否成功
-        """
-        
-        if action_type is None and action_detail is None and agent is None and device is None and os is None and login_success is None:
-            self.logger.warning(f"Nothing to update in user_login_logs for user_id: {user_id}.")
-            return False
-        
-        data = {}
-
-        if action_type is not None:
-            data["action_type"] = action_type
-            
-        if action_detail is not None:
-            data["action_detail"] = action_detail
-            
-        if agent is not None:
-            data["agent"] = agent
-            
-        if device is not None:
-            data["device"] = device
-            
-        if os is not None:
-            data["os"] = os
-            
-        if login_success is not None:
-            data["login_success"] = login_success
-
-        return await self.mysql_helper.update_one(table="user_login_logs", data=data,
-                                      where_conditions=["user_id = %s"],
-                                      where_values=[user_id],
-                                      success_msg=f"Updated user login logs. User id: {user_id}",
-                                      warning_msg=f"User login logs update may have failed. User id: {user_id}",
-                                      error_msg=f"Update error. User id: {user_id}")
    
+    # user_login_logs不应该修改
+    
    
-    async def update_user_settings(self, user_id: int, language: Optional[str] = None,
-                                   notification_setting: Optional[Dict] = None) -> bool:
+    async def update_user_settings(self, user_id: int, 
+                                   language: str | None = None,
+                                   configure : Dict | None = None,
+                                   notification_setting: Dict | None = None) -> bool:
         """
         更新 user_settings（仅更新传入的字段）
 
         :param user_id: 用户ID
         :param language: 语言设置
+        :param configure: 用户配置
         :param notification_setting: 通知设置
 
         :return: 更新是否成功
         """
-        if language is None and notification_setting is None:
+        if language is None and notification_setting is None and configure is None:
             self.logger.warning(f"Nothing to update in user_settings for user_id: {user_id}.")
             return False
         
@@ -719,6 +716,9 @@ class UserAccountDataBaseAgent():
         if notification_setting is not None:
             data["notification_setting"] = notification_setting
 
+        if configure is not None:
+            data["configure"] = configure
+
         return await self.mysql_helper.update_one(table="users", data=data,
                                       where_conditions=["user_id = %s"],
                                       where_values=[user_id],
@@ -727,7 +727,9 @@ class UserAccountDataBaseAgent():
                                       error_msg=f"Update error. User id: {user_id}")
 
 
-    async def update_user_account_actions(self, user_id: int, action_type: str, action_detail: str) -> bool:
+    async def update_user_account_actions(self, user_id: int,
+                                          action_type: str,
+                                          action_detail: str) -> bool:
         """
         更新用户的账户操作记录
 
@@ -970,17 +972,13 @@ class UserAccountDataBaseAgent():
 
         :return: user_id ，如果未找到则返回 None
         """
-        
-        fields = ["user_id"]
-        where_conditions = ["user_uuid = %s"]
-        where_values = [uuid]
-        
+
         try:
             res = await self.mysql_helper.query_one(
                 table="users",
-                fields=fields,
-                where_conditions=where_conditions,
-                where_values=where_values
+                fields=["user_id"],
+                where_conditions=["user_uuid = %s"],
+                where_values=[uuid]
             )
         except Exception as e:
             self.logger.error(f"Query failed! Error:{str(e)}")
@@ -1078,12 +1076,20 @@ class UserAccountDataBaseAgent():
 
         返回 user_id（成功）或 None（失败）
         """
-
+        # 默认用户文件夹路径
+        file_folder_path = f"Users/Files/{account}/"
+        
+        # 生成用户UUID
+        user_uuid = str(uuid.uuid4())
+        
         # 1. 插入 users 表
         try:
-            user_id = await self.insert_users(account=account, email=email,
-                                          password_hash=password_hash,
-                                          user_name=user_name)
+            user_id = await self.insert_users(user_uuid=user_uuid, 
+                                              account=account, 
+                                              email=email,
+                                              password_hash=password_hash,
+                                              user_name=user_name,
+                                              file_folder_path=file_folder_path)
         except Exception as e:
             self.logger.error(f"Insert users Failed. Error: {e}")
             return None
@@ -1098,8 +1104,8 @@ class UserAccountDataBaseAgent():
         # 2. 插入 user_profile 表（使用默认头像）
         try:
             res_insert_user_profile = await self.insert_user_profile(
-                                user_id=user_id, user_name=user_name,
-                                account=account)
+                                user_id=user_id, 
+                                user_name=user_name)
         except Exception as e:
             self.logger.error(f"Insert user profile Failed. Error: {e}")
             return None
