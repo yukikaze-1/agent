@@ -216,42 +216,43 @@ class UserService:
         
         # 用户登录
         @self.app.post("/usr/login")
-        async def usr_login(user: LoginRequest):
+        async def usr_login(user: LoginRequest, request: Request):
+            ip_address = request.
             return await self._usr_login(user.identifier, user.password, user.agent, user.device, user.os)
                 
         # 用户注册
         @self.app.post("/usr/register")
-        async def usr_register(user: RegisterRequest):
+        async def usr_register(user: RegisterRequest, request: Request):
             return await self._usr_register(user.user_name, user.account, user.password, user.email)
 
         # 用户更改密码
         @self.app.post("/usr/change_pwd")
-        async def usr_change_pwd(data: ModifyPasswordRequest):
+        async def usr_change_pwd(data: ModifyPasswordRequest, request: Request):
             return await self._usr_change_pwd(data.session_token, data.new_password)
 
         # 用户注销
         @self.app.post("/usr/unregister")
-        async def usr_unregister(data: UnregisterRequest):
+        async def usr_unregister(data: UnregisterRequest, request: Request):
             return await self._usr_unregister(data.session_token)
 
         # 用户修改个人信息
         @self.app.post("/usr/modify_profile")
-        async def usr_modify_profile(data: ModifyProfileRequest):
+        async def usr_modify_profile(data: ModifyProfileRequest, request: Request):
             return await self._usr_modify_profile(data.session_token, data.user_name, data.profile_picture_url, data.signature)
 
         # 用户修改通知设置
         @self.app.post("/usr/modify_notifications")
-        async def usr_modify_notification_settings(data: ModifyNotificationSettingsRequest):
+        async def usr_modify_notification_settings(data: ModifyNotificationSettingsRequest, request: Request):
             return await self._usr_modify_notification_settings(data.session_token, data.notifications_enabled)
 
         # 用户修改个人设置
         @self.app.post("/usr/modify_settings")
-        async def usr_modify_settings(data: ModifySettingRequest):
+        async def usr_modify_settings(data: ModifySettingRequest, request: Request):
             return await self._usr_modify_settings(data.session_token, data.account)
 
         # 用户上传文件
         @self.app.post("/usr/upload_file")
-        async def usr_upload_file(data: UploadFileRequest):
+        async def usr_upload_file(data: UploadFileRequest, request: Request):
             return await self._usr_upload_file(data.session_token, data.file)
 
     # --------------------------------
@@ -304,12 +305,18 @@ class UserService:
     # --------------------------------
     # 功能函数
     # --------------------------------    
-    async def _usr_login(self, identifier: str, password: str, agent: str, device: str, os: str) -> Dict:
+    async def _usr_login(self, identifier: str,
+                         password: str,
+                         ip_address: str,
+                         agent: str,
+                         device: str,
+                         os: str) -> Dict:
         """ 
         验证用户登录
 
         :param identifier: 用户名或邮箱
         :param password: 密码
+        :param ip_address: 用户IP地址
         :param agent: 用户客户端版本
         :param device: 设备信息
         :param os: 操作系统信息
@@ -357,7 +364,7 @@ class UserService:
             try:
                 res_insert_user_login_logs = await self.usr_account_database.insert_user_login_logs(
                     user_id=user_id,
-                    ip_address=self.get_client_ip(),
+                    ip_address=ip_address,
                     agent=agent,
                     device=device,
                     os=os,
@@ -372,7 +379,7 @@ class UserService:
 
         # 3. 生成token
         access_token = self.create_access_token(user_id=user_id)
-        
+
         # 4. 将token更新到 users 表
         update_data = {"access_token": access_token}
         where_conditions =["user_id = %s"]
@@ -390,17 +397,15 @@ class UserService:
             self.logger.warning(f"Operator:'{operator}', Result:False, Message:'Token update failed!', User ID: {user_id}")
 
         # 5. 生成登入log，插入user_login_logs 表中
-        insert_data = {
-            "user_id": user_id,
-            "action_type": "login",
-            "action_detail": "User logged in successfully.",
-            "agent": agent,
-            "device": device,
-            "os": os,
-            "login_success": True
-        }
         try:
-            res_insert = await self.usr_account_database.mysql_helper.insert_one(table="user_login_logs", data=insert_data)
+            res_insert = await self.usr_account_database.insert_user_login_logs(
+                user_id=user_id,
+                ip_address=ip_address,
+                agent=agent,
+                device=device,
+                os=os,
+                login_success=True
+            )
         except Exception as e:
             self.logger.error(f"Failed to insert login log for user {user_id}: {e}")
             

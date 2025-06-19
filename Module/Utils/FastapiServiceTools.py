@@ -14,6 +14,7 @@ from logging import Logger
 from fastapi import HTTPException
 from typing import List, Dict, TypedDict, Optional
 from pydantic import BaseModel
+from fastapi import Request
 from fastapi_limiter import FastAPILimiter
 from fastapi_limiter.depends import RateLimiter
 import redis.asyncio as redis  # 使用异步 Redis 客户端
@@ -235,3 +236,17 @@ async def setup_redis_limiter(config: Dict, logger: Logger):
     # 测试连接
     await redis_client.ping()
     logger.info("Redis connection successful.")
+
+
+# --------------------------------
+# 工具函数
+# --------------------------------
+def get_client_ip(request: Request) -> str:
+    """
+        从request中获取客户端的IP地址
+    """
+    forwarded_for = request.headers.get("x-forwarded-for")
+    if forwarded_for:
+        # 如果多个IP（中间有代理），取第一个
+        return forwarded_for.split(",")[0].strip()
+    return request.client.host if request.client else "0.0.0.0"
