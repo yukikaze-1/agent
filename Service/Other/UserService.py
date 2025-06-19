@@ -13,7 +13,7 @@ import httpx
 import asyncio
 import concurrent.futures
 from typing import Dict, List, Any, AsyncGenerator, Optional
-from fastapi import FastAPI, Form, HTTPException, status, Depends
+from fastapi import FastAPI, Form, HTTPException, status, Depends, Request
 from fastapi.security import OAuth2PasswordBearer
 from dotenv import dotenv_values
 from contextlib import asynccontextmanager
@@ -296,7 +296,10 @@ class UserService:
                 raise HTTPException(status_code=401, detail="Token 验证失败")
         return Depends(_get_current_user_id)    
 
-        
+
+    def get_client_ip(self, request: Request) -> str:
+        return request.headers.get("x-forwarded-for", "unknown").split(",")[0].strip()
+    
         
     # --------------------------------
     # 功能函数
@@ -350,22 +353,22 @@ class UserService:
             # 登录失败log插入
             result = False
             message = f"Login failed! Invalid account or password!"
-            insert_data = {
-                "user_id": user_id,  
-                "action_type": "login",
-                "action_detail": message,
-                "agent": agent,
-                "device": device,
-                "os": os,
-                "login_success": False
-            }
+            self.logger.info(f"Operator:'{operator}', Result:'{result}', User:'{identifier}', Message:'{message}'")
             try:
-                await self.usr_account_database.mysql_helper.insert_one(table="user_login_logs", data=insert_data)
+                res_insert_user_login_logs = await self.usr_account_database.insert_user_login_logs(
+                    user_id=user_id,
+                    ip_address=self.get_client_ip(),
+                    agent=agent,
+                    device=device,
+                    os=os,
+                    login_success=False
+                )
             except Exception as e:
                 self.logger.error(f"Failed to insert login log for user {user_id}: {e}")
-
+                return {"result": False, "message": message, "user": identifier}
+            
             self.logger.info(f"Operator:'{operator}', Result:'{result}', User:'{identifier}', Message:'{message}'")
-            return {"result": result, "message": message, "user": identifier}
+            return {"result": False, "message": message, "user": identifier}
 
         # 3. 生成token
         access_token = self.create_access_token(user_id=user_id)

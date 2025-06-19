@@ -193,7 +193,7 @@ class APIGateway:
         async def usr_service_proxy(request: Request, path: str):
             """路由到UserService"""
             prefix = "/usr"
-            return await self._usr_service_proxy(request, prefix ,path)
+            return await self._usr_service_proxy(request, prefix, path)
 
 
         # TODO 这个usr_ping_serve函数名字要改下，转发给微服务网关
@@ -269,8 +269,23 @@ class APIGateway:
     
     # 用户相关服务
     async def _usr_service_proxy(self, request: Request, prefix: str, path: str):
-            server = "UserService"
-            return await self.forward(request, prefix, path, server)
+        """
+            提取客户端IP并注入到头部 x-forwarded-for 
+            随后转发给UserService
+        """
+        # 获取客户端 IP
+        client_ip = request.client.host if request.client else "unknown"
+        
+        # 拷贝原始 headers，插入/覆盖 x-forwarded-for
+        modified_headers = dict(request.headers)
+        modified_headers["x-forwarded-for"] = client_ip
+        
+        # 创建新的 request 对象（httpx 不会自动识别 FastAPI 的 request.headers 修改）
+        request.scope["headers"] = [
+            (k.encode("latin-1"), v.encode("latin-1")) for k, v in modified_headers.items()
+        ]
+        server = "UserService"
+        return await self.forward(request, prefix, path, server)
     
     
     # 用户ping服务器，转发给微服务网关

@@ -447,7 +447,6 @@ class UserAccountDataBaseAgent():
 
 
     async def insert_user_login_logs(self, user_id: int, 
-                                     login_time: str,
                                      ip_address: str,
                                      agent: str,
                                      device: str,
@@ -457,7 +456,6 @@ class UserAccountDataBaseAgent():
         插入用户登录日志到 user_login_logs 表
 
         :param user_id: 用户ID
-        :param login_time: 登录时间
         :param ip_address: 登录IP地址
         :param agent: 浏览器代理
         :param device: 登录设备
@@ -468,7 +466,6 @@ class UserAccountDataBaseAgent():
         """
         data = {
             "user_id": user_id,
-            "login_time": login_time,
             "ip_address": ip_address,
             "agent": agent,
             "device": device,
