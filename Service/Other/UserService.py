@@ -12,14 +12,16 @@ import uvicorn
 import httpx
 import asyncio
 import concurrent.futures
+import os
 from typing import Dict, List, Any, AsyncGenerator, Optional
-from fastapi import FastAPI, Form, HTTPException, status, Depends, Request
+from fastapi import FastAPI, Form, HTTPException, status, Depends, Request, UploadFile, File
 from fastapi.security import OAuth2PasswordBearer
 from dotenv import dotenv_values
 from contextlib import asynccontextmanager
 from passlib.context import CryptContext
 from jose import jwt, JWTError
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from Module.Utils.Database.UserAccountDataBaseAgent import  UserAccountDataBaseAgent
 from Module.Utils.Logger import setup_logger
@@ -37,7 +39,7 @@ from Module.Utils.Database.RequestType import (
     UnregisterRequest,
     ModifyPasswordRequest,
     ModifyProfileRequest,
-    UploadFileRequest,
+    # UploadFileRequest,
     ModifySettingRequest,
     ModifyNotificationSettingsRequest
 )
@@ -80,6 +82,9 @@ class UserService:
         
         # 用户信息数据库
         self.usr_account_database = UserAccountDataBaseAgent()
+        
+        # 限制用户上传的文件的大小1GB
+        self.upload_file_max_size = 1 * 1024 * 1024 * 1024 
         
         # 存储服务实例
         self.service_instances: Dict[str, List[Dict]] = {}  # 存储从 Consul 获取的服务实例信息
@@ -270,8 +275,10 @@ class UserService:
 
         # 用户上传文件
         @self.app.post("/usr/upload_file")
-        async def usr_upload_file(data: UploadFileRequest, request: Request):
-            return await self._usr_upload_file(data.session_token, data.file)
+        async def usr_upload_file(session_token: str = Form(...), 
+                                  file: UploadFile = File(...), 
+                                  request: Request | None = None):
+            return await self._usr_upload_file(session_token=session_token, file=file)
 
     # --------------------------------
     # 工具函数
@@ -736,30 +743,69 @@ class UserService:
         return {"result": True, "message": message, "user_id": user_id}
 
 
-    async def _usr_upload_file(self, session_token: str, file: bytes) -> Dict:
+    async def _usr_upload_file(self, session_token: str, file: UploadFile) -> Dict:
         """
         用户上传文件
+
+        :param session_token: 用户会话token
+        :param file: 文件内容
         """
         operator = 'usr_upload_file'
 
-        # 1. 解析出user_id
+        # 1. 解析出user_id 和 UUID
         user_id = self.verify_token(token=session_token)
+        user_uuid = await self.usr_account_database.fetch_uuid_by_user_id(user_id=user_id)
+        
+        if user_uuid is None:
+            self.logger.error(f"User UUID not found for user id: {user_id}")
+            return {"result": False, "message": "User uuid not found.", "user_id": user_id}
+        
+        # 2. 读取文件内容
+        contents = await file.read()
+        
+        # 3. 获取文件元数据
+        filename = os.path.basename(file.filename or "")
+        filename = filename.replace("\x00", "")  # 移除 null 字符
+        timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+        filename = f"{timestamp}_{filename}"       
+        
+        content_type: str = file.content_type or ""
+        size = len(contents)
+        
+        if size > self.upload_file_max_size:
+            return {"result": False, "message": f"File too large. Size: {size}, Max Size: {self.upload_file_max_size}", "user_id": user_id}
 
-        # 2. 上传文件到云存储
+        # 4. 生成保存路径（user_uuid）
+        save_dir = f"Users/Files/{user_uuid}/"
+        os.makedirs(save_dir, exist_ok=True)
+        save_path = os.path.join(save_dir, filename)
+        
+        # 5. 写入文件
         try:
-            file_id = await self.file_storage.upload_file(file)
-            await self.usr_account_database.save_user_file(user_id=user_id, file_id=file_id)
+            with open(save_path, "wb") as f:
+                f.write(contents)
         except Exception as e:
-            self.logger.error(f"File upload error for user id'{user_id}': {e}")
-            return {"result": False, "message": "Internal server error.", "user_id": user_id}
+            self.logger.exception("File write failed")
+            return {"result": False, "message": "Failed to write file.", "user_id": user_id}
 
-        # 3. 返回结果
-        message = f"File upload successful! User ID '{user_id}', File ID '{file_id}'"
-        self.logger.info(f"Operator:'{operator}', Result:'True', User ID:'{user_id}', File ID:'{file_id}', Message:'{message}'")
+        self.logger.info(f"File uploaded: user_id={user_id}, file_name={filename}, size={size}, save_path={save_path}")
 
-        return {"result": True, "message": message, "user_id": user_id, "file_id": file_id}
+
+        # 6. 插入数据库记录
+        res = await self.usr_account_database.insert_user_files(user_id=user_id,
+                                                        file_path=save_path,
+                                                        file_name=filename,
+                                                        file_type=content_type,
+                                                        file_size=size,
+                                                        upload_time=datetime.now(),
+                                                        is_deleted=False)
+        if not res:
+            self.logger.error(f"Failed to insert file record for user id: {user_id}")
+            return {"result": False, "message": "File upload failed.", "user_id": user_id}
+
+        return {"result": True, "message": "File upload successful.", "user_id": user_id}
     
-    
+
     def run(self):
         uvicorn.run(self.app, host=self.host, port=self.port)
             

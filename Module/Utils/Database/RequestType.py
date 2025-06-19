@@ -50,10 +50,10 @@ class ModifyProfileRequest(BaseModel):
     signature: str | None = Field(..., description="个性签名")
 
 
-class UploadFileRequest(BaseModel):
-    """ 用户上传文件 request"""
-    session_token: str = Field(..., description="session token")
-    file: bytes = Field(..., description="上传的文件")
+# class UploadFileRequest(BaseModel):
+#     """ 用户上传文件 request"""
+#     session_token: str = Field(..., description="session token")
+#     file: bytes = Field(..., description="上传的文件")
     
     
 class ModifySettingRequest(BaseModel):

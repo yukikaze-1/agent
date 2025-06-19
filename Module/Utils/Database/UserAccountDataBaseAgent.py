@@ -15,6 +15,7 @@ from typing import Tuple, Optional, Dict, List, Any
 from dotenv import dotenv_values
 from logging import Logger
 from fastapi import HTTPException
+from datetime import datetime
 
 
 from Module.Utils.Logger import setup_logger
@@ -565,7 +566,7 @@ class UserAccountDataBaseAgent():
                                 file_name: str,
                                 file_type: str, 
                                 file_size: int,
-                                upload_time: str, 
+                                upload_time: datetime, 
                                 is_deleted: bool = False) -> bool:
         """
         插入 user_files
@@ -1027,7 +1028,33 @@ class UserAccountDataBaseAgent():
 
         return res["user_id"], res["password_hash"]
 
-    
+
+    async def fetch_uuid_by_user_id(self, user_id: int) -> str | None:
+        """
+        通过 user_id 查询用户的 UUID
+
+        :param user_id: 用户ID
+
+        :return: 用户UUID，如果未找到则返回 None
+        """
+        try:
+            res = await self.mysql_helper.query_one(
+                table="users",
+                fields=["user_uuid"],
+                where_conditions=["user_id = %s"],
+                where_values=[user_id]
+            )
+        except Exception as e:
+            self.logger.error(f"Query failed! Error:{str(e)}")
+            return None
+
+        if res is None:
+            self.logger.warning(f"No user found with user_id: {user_id}")
+            return None
+
+        return res["user_uuid"]
+
+
     async def update_user_notification_settings(self, user_id: int,
                                                 notifications_enabled: Optional[bool] = None,
                                                 settings_json: Optional[Dict] = None) -> bool:
@@ -1073,11 +1100,12 @@ class UserAccountDataBaseAgent():
 
         返回 user_id（成功）或 None（失败）
         """
-        # 默认用户文件夹路径
-        file_folder_path = f"Users/Files/{account}/"
         
         # 生成用户UUID
         user_uuid = str(uuid.uuid4())
+        
+        # 默认用户文件夹路径
+        file_folder_path = f"Users/Files/{user_uuid}/"
         
         # 1. 插入 users 表
         try:
