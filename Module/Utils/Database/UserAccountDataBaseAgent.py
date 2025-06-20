@@ -62,14 +62,15 @@ CREATE TABLE users (
 ---
 
 ### 2. 用户扩展资料 (`user_profile`)
-| 字段名                 | 类型                                                             | 描述          |
-| --------------------- | ---------------------------------------------------------------- | ----------- |
-| `user_id`             | `INT UNSIGNED PRIMARY KEY FK`                                    | 用户ID（主键+外键） |
-| `user_name`           | `VARCHAR(256) NOT NULL`                                          | 用户名         |
-| `profile_picture_url` | `VARCHAR(512) NOT NULL DEFAULT 'Resources/img/nahida.jpg'`                | 头像URL地址     |
-| `signature`           | `VARCHAR(256) DEFAULT NULL`                                      | 用户个性签名      |
-| `created_at`          | `DATETIME DEFAULT CURRENT_TIMESTAMP`                             | 创建时间        |
-| `updated_at`          | `DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | 修改时间        |
+| 字段名                        | 类型                                                             | 描述          |
+| ---------------------        | ---------------------------------------------------------------- | ----------- |
+| `user_id`                    | `INT UNSIGNED PRIMARY KEY FK`                                    | 用户ID（主键+外键） |
+| `user_name`                  | `VARCHAR(256) NOT NULL`                                          | 用户名         |
+| `profile_picture_url`        | `VARCHAR(512) NOT NULL DEFAULT 'Resources/img/nahida.jpg'`       | 头像URL地址     |
+| `signature`                  | `VARCHAR(256) DEFAULT NULL`                                      | 用户个性签名      |
+| `created_at`                 | `DATETIME DEFAULT CURRENT_TIMESTAMP`                             | 创建时间        |
+| `updated_at`                 | `DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | 修改时间        |
+| `profile_picture_updated_at` | `DATETIME DEFAULT CURRENT_TIMESTAMP `                            | 头像URL地址修改时间   |
 
 CREATE TABLE user_profile (
   user_id INT UNSIGNED PRIMARY KEY,
@@ -78,10 +79,24 @@ CREATE TABLE user_profile (
   signature VARCHAR(256) DEFAULT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  
+  profile_picture_updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
   CONSTRAINT fk_user_profile_user_id FOREIGN KEY (user_id) 
     REFERENCES users(user_id)
     ON DELETE CASCADE ON UPDATE CASCADE
+    
+  DELIMITER $$
+
+  CREATE TRIGGER trg_update_profile_picture_time
+  BEFORE UPDATE ON user_profile
+  FOR EACH ROW
+  BEGIN
+    -- 如果头像字段发生了变化
+    IF NOT (NEW.profile_picture_url <=> OLD.profile_picture_url) THEN
+        SET NEW.profile_picture_updated_at = CURRENT_TIMESTAMP;
+    END IF;
+  END$$  
+  DELIMITER ;
 );
 
 ---

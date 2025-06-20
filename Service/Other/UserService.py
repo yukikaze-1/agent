@@ -766,7 +766,7 @@ class UserService:
         # 3. 获取文件元数据
         filename = os.path.basename(file.filename or "")
         filename = filename.replace("\x00", "")  # 移除 null 字符
-        timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
         filename = f"{timestamp}_{filename}"       
         
         content_type: str = file.content_type or ""
