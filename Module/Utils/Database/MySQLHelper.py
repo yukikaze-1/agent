@@ -14,22 +14,23 @@ from logging import Logger
 from typing import Dict, List, Any, Optional
 
 from Module.Utils.Logger import setup_logger
+from Module.Utils.ToolFunctions import retry
 
 class MySQLHelper:
     """
     MySQL的各种工具函数
 
     :param mysql_agent_url: MySQL代理的URL
-    :param connect_id: MySQL连接ID(eg.存放于UserAccountDatabase中为connect_id)
+    :param db_connect_id: MySQL连接ID(eg.存放于UserAccountDatabase中为connect_id)
     :param client: httpx.AsyncClient实例
     :param logger: 日志记录器
     """
     
-    def __init__(self, mysql_agent_url: str, connect_id: int, client: httpx.AsyncClient, logger: Optional[Logger]=None) -> None:
+    def __init__(self, mysql_agent_url: str, db_connect_id: int, client: httpx.AsyncClient, logger: Optional[Logger]=None) -> None:
         self.logger = logger or setup_logger(name="MySQLHelper", log_path="InternalModule")
         
         self.mysql_agent_url = mysql_agent_url
-        self.connect_id = connect_id
+        self.db_connect_id = db_connect_id
         self.client = client
         
     # ---------------------- 生成 sql语句 函数 ----------------------
@@ -192,7 +193,7 @@ class MySQLHelper:
         self.logger.info(f"Executing WRITE SQL: {sql} | Args: {sql_args}")
         
         payload = {
-            "id": self.connect_id,
+            "id": self.db_connect_id,
             "sql": sql,
             "sql_args": sql_args
         }
@@ -231,7 +232,7 @@ class MySQLHelper:
         self.logger.info(f"Executing QUERY SQL: {sql} | Args: {sql_args}")
 
         payload = {
-            "id": self.connect_id,
+            "id": self.db_connect_id,
             "sql": sql,
             "sql_args": sql_args
         }
@@ -357,7 +358,7 @@ class MySQLHelper:
         self.logger.info(f"Executing query: {sql} with args: {sql_args}")
 
         payload = {
-            "id": self.connect_id,
+            "id": self.db_connect_id,
             "sql": sql,
             "sql_args": sql_args
         }

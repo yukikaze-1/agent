@@ -22,6 +22,7 @@ from Module.Utils.Logger import setup_logger
 from Module.Utils.ConfigTools import load_config, validate_config
 from Module.Utils.FormatValidate import is_email, is_account_name
 from Module.Utils.Database.MySQLHelper import MySQLHelper
+from Module.Utils.ToolFunctions import retry
 
 """
 ## 用户信息数据库设计
@@ -360,28 +361,29 @@ class UserAccountDataBaseAgent():
             timeout=httpx.Timeout(10.0, read=60.0)
         )
         
-        # 向MySQLAgent注册，返回一个链接id
-        self.connect_id: int = -1
+        # 向MySQLAgent注册，返回一个MySQL数据库链接id，在MySQLAgent中存放着
+        # 一个(id, mysql数据库连接对象)的映射
+        self.db_connect_id: int = -1
 
         # 初始化 MySQLHelper
         self.mysql_helper = MySQLHelper(
             mysql_agent_url=self.mysql_agent_url,
-            connect_id=self.connect_id,
+            db_connect_id=self.db_connect_id,
             client=self.client
         )
         
 
     async def init_connection(self) -> None:
         """
-        真正执行连接, 并为 self.connect_id 赋值
+        真正执行连接, 并为 self.db_connect_id 赋值
         """
         try:
-            self.connect_id = await self.connect_to_database()
-            if self.connect_id == -1:
+            self.db_connect_id = await self.connect_to_database()
+            if self.db_connect_id == -1:
                 self.logger.error("Failed to connect to database,connect id == -1")
                 raise ValueError("Failed to connect to database,connect id == -1")
             else:
-                self.logger.info(f"connect_id = {self.connect_id}")
+                self.logger.info(f"db_connect_id = {self.db_connect_id}")
         except Exception as e:
             self.logger.error(f"Failed to init connection: {e}")
             raise
@@ -907,7 +909,7 @@ class UserAccountDataBaseAgent():
             WHERE status = 'deleted' AND deleted_at < (NOW() - INTERVAL 30 DAY);
         """
         payload = {
-            "id": self.connect_id,
+            "id": self.db_connect_id,
             "sql": sql,
             "sql_args": []
         }

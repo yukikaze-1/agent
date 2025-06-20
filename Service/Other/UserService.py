@@ -26,6 +26,7 @@ from pathlib import Path
 from Module.Utils.Database.UserAccountDataBaseAgent import  UserAccountDataBaseAgent
 from Module.Utils.Logger import setup_logger
 from Module.Utils.ConfigTools import load_config, validate_config
+from Module.Utils.ToolFunctions import retry
 from Module.Utils.FastapiServiceTools import (
     get_service_instances,
     update_service_instances_periodically,
@@ -33,7 +34,7 @@ from Module.Utils.FastapiServiceTools import (
     unregister_service_from_consul,
     get_client_ip
 )
-from Module.Utils.Database.RequestType import (
+from Module.Utils.Database.UserServiceRequestType import (
     RegisterRequest,
     LoginRequest,
     UnregisterRequest,
@@ -43,14 +44,23 @@ from Module.Utils.Database.RequestType import (
     ModifySettingRequest,
     ModifyNotificationSettingsRequest
 )
-from Module.Utils.Database.ResponseType import (
+from Module.Utils.Database.UserServiceResponseType import (
+    UserServiceResponseErrorCode,
+    UserServiceErrorDetail,
+    RegisterData,
     RegisterResponse,
+    UserInfo,
     LoginResponse,
-    LogoutResponse,
+    UnregisterData,
+    UnregisterResponse,
+    ModifyPasswordData,
     ModifyPasswordResponse,
+    ModifyProfileData,
     ModifyProfileResponse,
     UploadFileResponse,
+    ModifySettingData,
     ModifySettingResponse,
+    ModifyNotificationSettingsData,
     ModifyNotificationSettingsResponse
 )
 
@@ -81,7 +91,7 @@ class UserService:
         validate_config(required_keys, self.config, self.logger)
         
         # 用户信息数据库
-        self.usr_account_database = UserAccountDataBaseAgent()
+        self.db_user_account = UserAccountDataBaseAgent()
         
         # 限制用户上传的文件的大小1GB
         self.upload_file_max_size = 1 * 1024 * 1024 * 1024 
@@ -159,8 +169,8 @@ class UserService:
                                              port=self.port,
                                              tags=tags,
                                              health_check_url=self.health_check_url)
-            # 异步调用 init_connection，让 usr_account_database 拿到 connect_id
-            await self.usr_account_database.init_connection()
+            # 异步调用 init_connection，让 db_user_account 拿到 connect_id
+            await self.db_user_account.init_connection()
             # 启动后台任务
             task = asyncio.create_task(update_service_instances_periodically(
                                             consul_url=self.consul_url,
@@ -186,7 +196,7 @@ class UserService:
                     self.logger.info("Background task cancelled successfully.")
                 
             # 关闭UserAccountDataBaseAgent中的httpx
-            await self.usr_account_database.client.aclose()
+            await self.db_user_account.client.aclose()
             
             # 注销服务从 Consul
             try:
@@ -346,7 +356,7 @@ class UserService:
                          ip_address: str,
                          agent: str,
                          device: str,
-                         os: str) -> Dict:
+                         os: str) -> LoginResponse:
         """ 
         验证用户登录
 
@@ -357,48 +367,53 @@ class UserService:
         :param device: 设备信息
         :param os: 操作系统信息
 
-        返回格式:
-            成功:
-                {"operator": "usr_login", "result": True, "message": message, "token": access_token}
-            失败:
-                {"operator": "usr_login", "result": False, "message": message, "user": identifier}
+        :retruns:
+            LoginResponse
         """
-        
         operator = 'usr_login'
-        result = True
-        message = f'Login successfully!'
         
         # 1. 查询数据库
         try:
-            # loop = asyncio.get_event_loop()
-            # res = await loop.run_in_executor(self.executor, self.usr_account_database.fetch_user_by_name, username)
-            res = await self.usr_account_database.fetch_user_id_and_password_by_email_or_account(identifier=identifier)
-               
+            res = await self.db_user_account.fetch_user_id_and_password_by_email_or_account(identifier=identifier)
         except Exception as e:
-            self.logger.error(f"Database error during login for user '{identifier}': {e}")
-            raise HTTPException(status_code=500, detail="Internal server error.")
+            self.logger.error(f"Function:'fetch_user_id_and_password_by_email_or_account' occurr exception.for user '{identifier}': {e}")
+            erros = UserServiceErrorDetail(
+                code=UserServiceResponseErrorCode.DATABASE_ERROR,
+                message="Internal Database error."
+            )
+            return LoginResponse(
+                operator=operator,
+                result=False,
+                message="Database error occurred.",
+                err_code=UserServiceResponseErrorCode.DATABASE_ERROR,
+                errors=[erros],
+                data=None
+            )
 
-        self.logger.info(res)
+        self.logger.debug(res)
 
         # 2. 验证
         # 检查用户是否已注册
         if res is None:
-            result = False
             message = f"Login failed! User: '{identifier}' does not exist!"
-            self.logger.info(f"Operator:'{operator}', Result:'{result}', User:'{identifier}', Message:'{message}'")
-            return {"result": result, "message": message, "user": identifier}
-        
+            self.logger.info(message)
+            return LoginResponse(
+                operator=operator,
+                result=False,
+                message=message,
+                data=None
+            )
+
         # 用户内部ID 和保存的密码hash
         user_id, stored_password_hash = res
         
         # 密码错误
         if not self.pwd_context.verify(password, stored_password_hash):
             # 登录失败log插入
-            result = False
             message = f"Login failed! Invalid account or password!"
-            self.logger.info(f"Operator:'{operator}', Result:'{result}', User:'{identifier}', Message:'{message}'")
+            self.logger.info(message)
             try:
-                res_insert_user_login_logs = await self.usr_account_database.insert_user_login_logs(
+                success = await self.db_user_account.insert_user_login_logs(
                     user_id=user_id,
                     ip_address=ip_address,
                     agent=agent,
@@ -408,10 +423,14 @@ class UserService:
                 )
             except Exception as e:
                 self.logger.error(f"Failed to insert login log for user {user_id}: {e}")
-                return {"result": False, "message": message, "user": identifier}
-            
-            self.logger.info(f"Operator:'{operator}', Result:'{result}', User:'{identifier}', Message:'{message}'")
-            return {"result": False, "message": message, "user": identifier}
+
+
+            return LoginResponse(
+                operator=operator,
+                result=False,
+                message=message,
+                data=None
+            )
 
         # 3. 生成token
         access_token = self.create_access_token(user_id=user_id)
@@ -421,7 +440,7 @@ class UserService:
         where_conditions =["user_id = %s"]
         where_values = [user_id]
         try:
-            res_update = await self.usr_account_database.mysql_helper.update_one(table="users", data=update_data,
+            res_update = await self.db_user_account.mysql_helper.update_one(table="users", data=update_data,
                                                          where_conditions=where_conditions,
                                                          where_values=where_values)
         except Exception as e:
@@ -434,7 +453,7 @@ class UserService:
 
         # 5. 生成登入log，插入user_login_logs 表中
         try:
-            res_insert = await self.usr_account_database.insert_user_login_logs(
+            res_insert = await self.db_user_account.insert_user_login_logs(
                 user_id=user_id,
                 ip_address=ip_address,
                 agent=agent,
@@ -452,10 +471,15 @@ class UserService:
 
         # 6. 返回token
         self.logger.info(f"Operator:'{operator}', Result:True, Message:'Login successful!', User ID: {user_id}")
-        return {"result": True, "message": "Login successful!", "token": access_token}
+        return LoginResponse(
+            operator=operator,
+            result=True,
+            message="Login successful!",
+            data=None
+        )
 
 
-    async def _usr_register(self, user_name: str, account: str, password: str, email: str):
+    async def _usr_register(self, user_name: str, account: str, password: str, email: str) -> RegisterResponse:
         """
         用户注册
 
@@ -464,57 +488,66 @@ class UserService:
         :param password: 用户密码
         :param email: 用户邮箱
 
-        :返回格式: {
-            "operator": "usr_register",
-            "result": bool,
-            "message": str,
-            "data": Any
-        }
+        :return: RegisterResponse
         """
         
         operator = 'usr_register'
-        
+        # TODO 将下面的操作集成到MySQL事务中一起完成
         # 1. 检查是否已被注册        
         # 先通过email查询
         try:
-            # loop = asyncio.get_event_loop()
-            # res = await loop.run_in_executor(self.executor, self.usr_account_database.fetch_user_by_name, username)
-            res_email = await self.usr_account_database.fetch_user_id_and_password_by_email_or_account(
+            res_email = await self.db_user_account.fetch_user_id_and_password_by_email_or_account(
                 identifier=email
             )
         except Exception as e:
-            self.logger.error(f"Database error during registration for user '{email}': {e}")
-            return {"result": False, "message": "Internal server error.", "username": user_name}
-        
+            self.logger.error(f"Database error during registration for user email'{email}': {e}")
+            return RegisterResponse(
+                operator=operator,
+                result=False,
+                message="Internal server error.",
+                data=None
+            )
+
         # 如果已注册
         if res_email:
-            result = False
             message = f"Register failed! Email '{email}' already exists!"
-            self.logger.info(f"Operator:'{operator}', Result:'{result}', Email:'{email}', Message:'{message}'")
-            return {"result": result, "message": message, "email": email}
+            self.logger.info(f"Operator:'{operator}', Result:'False', Email:'{email}', Message:'{message}'")
+            # 返回注册失败的Response
+            return RegisterResponse(
+                operator=operator,
+                result=False,
+                message=message,
+                data=RegisterData(email=email)
+            )
 
         # 再通过account查询
         try:
-            # loop = asyncio.get_event_loop()
-            # res = await loop.run_in_executor(self.executor, self.usr_account_database.fetch_user_by_name, username)
-            res_account = await self.usr_account_database.fetch_user_id_and_password_by_email_or_account(
+            res_account = await self.db_user_account.fetch_user_id_and_password_by_email_or_account(
                 identifier=account
             )
         except Exception as e:
             self.logger.error(f"Database error during registration for user '{account}': {e}")
-            return {"result": False, "message": "Internal server error.", "username": user_name}
-        
+            return RegisterResponse(
+                operator=operator,
+                result=False,
+                message="Internal server error.",
+                data=RegisterData(account=account)
+            )
+
         # 如果已注册
         if res_account:
-            result = False
             message = f"Register failed! Account '{account}' already exists!"
-            self.logger.info(f"Operator:'{operator}', Result:'{result}', Account:'{account}', Message:'{message}'")
-            return {"result": result, "message": message, "account": account}
+            self.logger.info(f"Operator:'{operator}', Result:'False', Account:'{account}', Message:'{message}'")
+            return RegisterResponse(
+                operator=operator,
+                result=False,
+                message=message,
+                data=RegisterData(account=account)
+            )
 
         # 2. 注册
         try:
-            # res = await loop.run_in_executor(self.executor, self.usr_account_database.insert_user_info, username, password)
-            res_insert_new_user = await self.usr_account_database.insert_new_user(
+            res_insert_new_user = await self.db_user_account.insert_new_user(
                 user_name=user_name,
                 account=account,
                 password_hash=self.pwd_context.hash(password),
@@ -522,25 +555,34 @@ class UserService:
             )
         except Exception as e:
             self.logger.error(f"Database error during inserting user '{user_name}': {e}")
-            return {"result": False, "message": "Internal server error.", "username": user_name}
+            return RegisterResponse(
+                operator=operator,
+                result=False,
+                message="Internal server error.",
+                data=RegisterData()
+            )
 
         # 注册成功
         if res_insert_new_user:
             self.logger.info(f"Operator:'{operator}', Result: True, Username:'{user_name}', Message:")
-            return {"result": True, "message": "User registered successfully.", "username": user_name} 
+            return RegisterResponse(
+                operator=operator,
+                result=True,
+                message="User registered successfully.",
+                data=RegisterData()
+            )
             # TODO 将来调用 EnvironmentManager
-            # env_data = {"username": username}
-            # try:
-            #     env_response = await environment_manager_client.call_endpoint("initialize_environment", env_data)
-            #     print(env_response)
-            # except Exception as e:
-            #     raise HTTPException(status_code=500, detail="Failed to initialize user environment.")
         
         else:
             result = False
             message = f"Register failed! Inserting user '<{user_name}> <{account}> <{email}>' to database failed!"
             self.logger.info(f"Operator:'{operator}', Result:'{result}', Username:'{user_name}', Message:'{message}'")
-            return {"result": result, "message": message, "username": user_name}
+            return RegisterResponse(
+                operator=operator,
+                result=result,
+                message=message,
+                data=RegisterData()
+            )
 
         
     async def _usr_change_pwd(self, session_token: str, new_password: str) -> Dict:
@@ -568,8 +610,8 @@ class UserService:
         # 3. 更新密码hash到 users表中
         try:
             # loop = asyncio.get_event_loop()
-            # res = await loop.run_in_executor(self.executor, self.usr_account_database.update_user_password, username, password)
-            result = await self.usr_account_database.update_user_password_by_user_id(
+            # res = await loop.run_in_executor(self.executor, self.db_user_account.update_user_password, username, password)
+            result = await self.db_user_account.update_user_password_by_user_id(
                 user_id=user_id, new_password_hash=new_password_hash
             )
         except Exception as e:
@@ -591,7 +633,7 @@ class UserService:
             "action_detail": "Changed password.",
         }
         try:
-            await self.usr_account_database.mysql_helper.insert_one(table="user_account_actions", data=action_data)
+            await self.db_user_account.mysql_helper.insert_one(table="user_account_actions", data=action_data)
         except Exception as e:
             self.logger.error(f"Database error during action log insert for user id'{user_id}': {e}")
 
@@ -619,7 +661,7 @@ class UserService:
 
         # 2. 删除数据库对应条目(软删除)
         try:
-            await self.usr_account_database.soft_delete_user_by_user_id(user_id=user_id)
+            await self.db_user_account.soft_delete_user_by_user_id(user_id=user_id)
         except Exception as e:
             self.logger.error(f"Database error during unregistration for user id'{user_id}': {e}")
             return {"result": False, "message": "Internal server error.", "user_id": user_id}
@@ -655,7 +697,7 @@ class UserService:
 
         # 2. 更新数据库对应条目
         try:
-            res = await self.usr_account_database.update_user_profile(
+            res = await self.db_user_account.update_user_profile(
                 user_id=user_id,
                 user_name=user_name,
                 profile_picture_url=profile_picture_url,
@@ -692,7 +734,7 @@ class UserService:
 
         # 2. 更新数据库对应条目
         try:
-            await self.usr_account_database.update_user_notification_settings(
+            await self.db_user_account.update_user_notification_settings(
                 user_id=user_id,
                 notifications_enabled=notifications_enabled,
                 settings_json=settings_json
@@ -726,7 +768,7 @@ class UserService:
 
         # 2. 更新数据库对应条目
         try:
-            await self.usr_account_database.update_user_settings(
+            await self.db_user_account.update_user_settings(
                 user_id=user_id,
                 language=language,
                 configure=configure,
@@ -754,7 +796,7 @@ class UserService:
 
         # 1. 解析出user_id 和 UUID
         user_id = self.verify_token(token=session_token)
-        user_uuid = await self.usr_account_database.fetch_uuid_by_user_id(user_id=user_id)
+        user_uuid = await self.db_user_account.fetch_uuid_by_user_id(user_id=user_id)
         
         if user_uuid is None:
             self.logger.error(f"User UUID not found for user id: {user_id}")
@@ -792,7 +834,7 @@ class UserService:
 
 
         # 6. 插入数据库记录
-        res = await self.usr_account_database.insert_user_files(user_id=user_id,
+        res = await self.db_user_account.insert_user_files(user_id=user_id,
                                                         file_path=save_path,
                                                         file_name=filename,
                                                         file_type=content_type,

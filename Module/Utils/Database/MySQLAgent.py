@@ -8,6 +8,8 @@ import uvicorn
 import httpx
 import asyncio
 import pymysql
+from pymysql import Connection
+from pymysql.cursors import Cursor
 from logging import Logger
 from typing import List, Optional, Tuple, Dict, Any, AsyncGenerator
 from dotenv import dotenv_values
@@ -19,11 +21,20 @@ import pymysql.cursors
 
 from Module.Utils.Logger import setup_logger
 from Module.Utils.ConfigTools import load_config, validate_config
+from Module.Utils.ToolFunctions import retry
 from Module.Utils.FastapiServiceTools import (
     get_service_instances,
     update_service_instances_periodically,
     register_service_to_consul,
     unregister_service_from_consul
+)
+
+from Module.Utils.Database.MySQLAgentResponseType import (
+    MySQLAgentResponseErrorCode,
+    MySQLAgentErrorDetail,
+    ConnectDatabaseData,
+    ConnectDatabaseResponse,
+    
 )
 
 # --------------------------------
@@ -349,8 +360,9 @@ class MySQLAgent:
             self.logger.error(f"Operator: {operator}, Message:{message}, Result: {result}")
             return {"Operator": operator, "Message":message, "Result":result}
         
+        
     
-    async def _connect(self, host: str, port: int, user: str, password: str, database: str, charset: str)-> Dict[str, Any]:
+    async def _connect(self, host: str, port: int, user: str, password: str, database: str, charset: str) -> ConnectDatabaseResponse:
         """
         创建一个新的 MySQL 数据库连接，并返回其 ID。
 
@@ -360,13 +372,55 @@ class MySQLAgent:
         :param database: 数据库名称
         :param port: 数据库端口，默认为 3306
         :param charset: 字符集，默认为 'utf8mb4'
-        :return: 新建连接的 ID
+        :return: 
         """
         
-        operator = "Connect"
-        message=f"Connect success."
-        result = False
+        operator: str = "Connect Database"
         
+        try:
+            # 获取链接ID 和 链接对象
+            connection_id, connection = await self._connect_database(
+                host=host, port=port, user=user, password=password, 
+                database=database, charset=charset
+            )
+            
+            # 存储
+            self.connections[connection_id] = connection
+            
+            # 返回结果
+            return ConnectDatabaseResponse(
+                operator=operator,
+                result=True,
+                message=f"成功连接MySQL数据库'{database}'",
+                data=ConnectDatabaseData(connection_id=connection_id)
+            )
+        
+        except Exception as e:
+            self.logger.error(f"数据库'{database}'连接失败，已重试3次。")
+            return ConnectDatabaseResponse(
+                operator=operator,
+                result=False,
+                message=f"数据库'{database}'连接失败，已重试3次。",
+                level="error",
+                err_code=MySQLAgentResponseErrorCode.CONNECT_DATABASE_FAILED
+            )
+    
+    
+    @retry(retries=3, delay=1.0, backoff=2.0, exceptions=(pymysql.MySQLError,), on_failure=lambda e: print(f"[ERROR] 最终重试失败: {e}"))  
+    async def _connect_database(self, host: str, port: int,
+                                user: str, password: str,
+                                database: str, charset: str) -> Tuple[int, Connection]:
+        """
+        创建一个新的 MySQL 数据库连接，并返回其 (ID, Connection)。
+
+        :param host: 数据库主机名
+        :param user: 数据库用户名
+        :param password: 数据库密码
+        :param database: 数据库名称
+        :param port: 数据库端口，默认为 3306
+        :param charset: 字符集，默认为 'utf8mb4'
+        :return: 新建连接的 (ID, Connection)
+        """
         try:
             connection = pymysql.connect(
                 host=host,
@@ -379,18 +433,13 @@ class MySQLAgent:
             # 保存内部序号
             connection_id = self.ids
             self.ids += 1
-            
-            self.connections[connection_id] = connection
-            message = f"Connect success. ConnectionID: '{connection_id}'"
-            result = True
-            self.logger.info(f"Operator: {operator}, Message:{message}, Result: {result}")
-            return {"Operator": operator, "Message":message, "Result":result, "ConnectionID": connection_id}
+            return connection_id, connection
         
+        # 捕获可能产生的所有异常。 pymysql.MySQLError是所有 PyMySQL 异常的基类
         except pymysql.MySQLError as e:
-            message = f"Failed to connect with mysql databse : {e}"
-            self.logger.error(message)
-            return {"Operator": operator, "Message":message, "Result":result, "ConnectionID": -1}
-        
+            self.logger.warning(f"In function: '_connect_database': MySQL connection failed (attempt will be retried): {e}")
+            raise  # 必须抛出让 @retry 机制知道要重试
+            
 
     def close(self, id: int) -> bool:
         """

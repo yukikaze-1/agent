@@ -2,23 +2,25 @@
 # Author:       yomu
 # Time:         2025/6/18
 # Version:      0.1
-# Description:  Response Type Definitions
+# Description:  UserService Response Type Definitions
 
 
 """
-    各种回复的格式定义
+    Uservice 各种回复的格式定义
 """
+
 from datetime import datetime
 from enum import Enum, IntEnum
 from typing import Dict, List, Optional, Any
 from pydantic import BaseModel, EmailStr, constr, Field, model_validator
 
+
 # ******************************************************************************
 # ******************************** 错误相关 ************************************
 # ******************************************************************************
 
-class ResponseErrorCode(IntEnum):
-    """  Response 的错误代码类 """
+class UserServiceResponseErrorCode(IntEnum):
+    """  UserService Response 的错误代码类 """
     ACCOUNT_NOT_FOUND = 1001    # 账户未注册
     PASSWORD_INCORRECT = 1002    # 密码不正确
     INVALID_EMAIL = 1003         # 邮箱格式不正确
@@ -33,57 +35,57 @@ class ResponseErrorCode(IntEnum):
     # TODO 待完善
     
 
-class ErrorDetail(BaseModel):
-    """ 详细错误类 """
-    code: ResponseErrorCode = Field(..., description="错误代码")
+class UserServiceErrorDetail(BaseModel):
+    """ UserService详细错误类 """
+    code: UserServiceResponseErrorCode = Field(..., description="错误代码")
     message: str = Field(..., description="错误信息")
-    field: str | None = None  # 出错字段，比如 "email"
-    hint: str | None = None   # 帮助提示
+    field: str | None = Field(default=None, description="出错字段，比如 'email'")
+    hint: str | None = Field(default=None, description="帮助提示")
 
 
 # ******************************************************************************
 # ******************************** Response相关 ********************************
 # ******************************************************************************
 
-class BaseResponse(BaseModel):
+class UserServiceBaseResponse(BaseModel):
     """ 基础回复格式 """
     operator: str = Field(..., description="操作")
     result: bool = Field(..., description="操作结果")
     message: str = Field(..., description="提示信息")
-    err_code: ResponseErrorCode | None = Field(None, description="错误代码")
-    errors: List[ErrorDetail] | None = Field(None, description="详细错误列表")
-    trace_id: str | None = Field(None, description="链路追踪ID")
-    elapsed_ms: int | None = Field(None, description="服务端处理耗时（毫秒）")
+    err_code: UserServiceResponseErrorCode | None = Field(default=None, description="错误代码")
+    errors: List[UserServiceErrorDetail] | None = Field(default=None, description="详细错误列表")
+    trace_id: str | None = Field(default=None, description="链路追踪ID")
+    elapsed_ms: int | None = Field(default=None, description="服务端处理耗时（毫秒）")
     timestamp: datetime = Field(default_factory=datetime.now, description="响应生成时间")
-    lang: str | None = Field("zh", description="返回语言（国际化支持）")
-    level: str | None = Field(None, description="提示等级: info / warning / error")
+    lang: str | None = Field(default="zh", description="返回语言（国际化支持）")
+    level: str | None = Field(default=None, description="提示等级: info / warning / error")
 
-# -------------------------------- 用户注册相关 --------------------------------
+# -------------------------------- 用户注册相关 ----------------------------
 
 class RegisterData(BaseModel):
     """ 用户注册返回给客户端的信息 """
-    account: str = Field(..., description="用户账号")
-    email: str = Field(..., description="用户邮箱")
-    user_name: str = Field(..., description="用户昵称")
+    account: str | None = Field(default=None, description="用户账号")
+    email: str | None = Field(default=None, description="用户邮箱")
+    user_name: str | None = Field(default=None, description="用户昵称")
 
-class RegisterResponse(BaseResponse):
+class RegisterResponse(UserServiceBaseResponse):
     """ 用户注册 response """
-    data: RegisterData | None = Field(None, description="用户注册附加数据")
+    data: RegisterData | None = Field(default=None, description="用户注册附加数据")
 
 
 # -------------------------------- 用户登陆相关 --------------------------------
 class UserInfo(BaseModel):
     """ 用户信息 response (返回给客户端使用) """
-    session_token: str = Field(..., description="会话令牌")
-    status: str = Field(..., description="用户状态")
-    last_login_time: datetime | None = Field(None, description="最后登录时间")
-    last_login_ip: str | None = Field(None, description="最后登录IP")
-    profile_picture_url: str | None = Field(None, description="头像URL")
-    profile_picture_updated_at: datetime | None = Field(None, description="头像更新时间")
-    signature: str | None = Field(None, description="用户签名")
+    session_token: str | None = Field(default=None, description="会话令牌")
+    status: str  | None = Field(default=None, description="用户状态")
+    last_login_time: datetime | None = Field(default=None, description="最后登录时间")
+    last_login_ip: str | None = Field(default=None, description="最后登录IP")
+    profile_picture_url: str | None = Field(default=None, description="头像URL")
+    profile_picture_updated_at: datetime | None = Field(default=None, description="头像更新时间")
+    signature: str | None = Field(default=None, description="用户签名")
 
 
-class LoginResponse(BaseResponse):
+class LoginResponse(UserServiceBaseResponse):
     """ 用户登陆 response """
     data: UserInfo | None = Field(None, description="用户信息")
 
@@ -97,7 +99,7 @@ class UnregisterData(BaseModel):
     unregister_time: datetime = Field(..., description="用户注销时间")
 
 
-class UnregisterResponse(BaseResponse):
+class UnregisterResponse(UserServiceBaseResponse):
     """ 用户注销账户 response """
     data: UnregisterData | None = Field(None, description="用户注销附加数据")
 
@@ -112,7 +114,7 @@ class ModifyPasswordData(BaseModel):
     password_update_time: datetime = Field(..., description="用户密码更新时间")
 
 
-class ModifyPasswordResponse(BaseResponse):
+class ModifyPasswordResponse(UserServiceBaseResponse):
     """ 用户修改密码 response """
     data: ModifyPasswordData | None = Field(None, description="用户修改密码附加数据")
 
@@ -126,7 +128,7 @@ class ModifyProfileData(BaseModel):
     signature: str | None = Field(None, description="用户签名")
 
 
-class ModifyProfileResponse(BaseResponse):
+class ModifyProfileResponse(UserServiceBaseResponse):
     """ 用户修改个人信息 response """
     data: ModifyProfileData | None = Field(None, description="用户修改个人信息附加数据")
 
@@ -139,7 +141,7 @@ class ModifySettingData(BaseModel):
     configure: Dict[str, Any] | None = Field(None, description="用户配置")
     notification_settings: Dict[str, Any] | None = Field(None, description="用户通知设置")
 
-class ModifySettingResponse(BaseResponse):
+class ModifySettingResponse(UserServiceBaseResponse):
     """ 用户修改设置 response """
     data: ModifySettingData | None = Field(None, description="用户修改设置附加数据")
 
@@ -154,7 +156,7 @@ class ModifyNotificationSettingsData(BaseModel):
     notification_settings: Dict[str, Any] | None = Field(None, description="用户通知设置")
 
 
-class ModifyNotificationSettingsResponse(BaseResponse):
+class ModifyNotificationSettingsResponse(UserServiceBaseResponse):
     """ 用户修改通知设置 response """
     data: ModifyNotificationSettingsData | None = Field(None, description="用户修改通知设置附加数据")
 
@@ -169,7 +171,7 @@ class UploadFileData(BaseModel):
     file_size: int = Field(..., description="文件大小")
     upload_time: datetime = Field(..., description="上传时间")
 
-class UploadFileResponse(BaseResponse):
+class UploadFileResponse(UserServiceBaseResponse):
     """ 用户上传文件 response """
     data: UploadFileData | None = Field(None, description="用户上传文件附加数据")
 
