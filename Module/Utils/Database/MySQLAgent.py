@@ -8,13 +8,14 @@ import uvicorn
 import httpx
 import asyncio
 import pymysql
+import traceback
 from pymysql import Connection
 from pymysql.cursors import Cursor
 from logging import Logger
 from typing import List, Optional, Tuple, Dict, Any, AsyncGenerator
 from dotenv import dotenv_values
 from fastapi import FastAPI, Form, Body, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
 from contextlib import asynccontextmanager
 
 import pymysql.cursors
@@ -34,26 +35,19 @@ from Module.Utils.Database.MySQLAgentResponseType import (
     MySQLAgentErrorDetail,
     ConnectDatabaseData,
     ConnectDatabaseResponse,
-    
+    QueryResult,
+    QueryResponse,
+    InsertData,
+    InsertResponse,
+    DeleteData,
+    DeleteResponse,
+    UpdateData,
+    UpdateResponse
 )
-
-# --------------------------------
-# 请求类 定义
-# --------------------------------
-class SQLRequest(BaseModel):
-    id: int
-    sql: str
-    sql_args: List[str]
-    
-    
-class ConnectRequest(BaseModel):
-    host: str
-    port: int
-    user: str
-    password: str
-    database: str
-    charset: str
-    
+from Module.Utils.Database.MySQLAgentRequestType import (
+    SQLRequest, 
+    ConnectRequest
+)
 
 class MySQLAgent:
     """
@@ -90,7 +84,7 @@ class MySQLAgent:
         # MySQLAgent连接mysql的序号，每连接一个mysql数据库，该ids++
         self.ids = 0
         
-        # 存储 (id, connection) 的列表
+        # 存储 (connection_id, connection) 的列表
         self.connections: Dict[int, pymysql.connections.Connection] = {}
         
         # 初始化 httpx.AsyncClient
@@ -171,198 +165,382 @@ class MySQLAgent:
         
         @self.app.post("/database/mysql/insert", summary="插入接口")
         async def insert(payload: SQLRequest):
-            return await self._insert(payload.id, payload.sql, payload.sql_args)
+            return await self._insert(payload.connection_id, payload.sql, payload.sql_args)
 
         
         @self.app.post("/database/mysql/update", summary="更新接口")
         async def update(payload: SQLRequest):
-            return await self._update(payload.id, payload.sql, payload.sql_args)
-        
-        
+            return await self._update(payload.connection_id, payload.sql, payload.sql_args)
+
+
         @self.app.post("/database/mysql/delete", summary= "删除接口")
         async def delete(payload: SQLRequest):
-            return await self._delete(payload.id, payload.sql, payload.sql_args)
-        
-        
+            return await self._delete(payload.connection_id, payload.sql, payload.sql_args)
+
+
         @self.app.post("/database/mysql/query", summary= "查询接口")
         async def query(payload: SQLRequest):
-            return await self._query(payload.id, payload.sql, payload.sql_args)
-        
-        
+            return await self._query(payload.connection_id, payload.sql, payload.sql_args)
+
+
         @self.app.post("/database/mysql/connect", summary= "连接接口")
         async def connect(payload: ConnectRequest):
-            return await self._connect(payload.host, payload.port, payload.user, payload.password, payload.database,  payload.charset)
+            return await self._connect_database(payload.host, payload.port, payload.user, payload.password, payload.database,  payload.charset)
         
         
     # --------------------------------
     # 功能函数
     # --------------------------------     
-    async def _query(self, id: int, sql: str, sql_args: List[str])-> Dict[str, Any]:
+    async def _query(self, connection_id: int, sql: str, sql_args: List[Any]) -> QueryResponse:
         """
         查询
         
-        :param id: 数据库连接ID
+        :param connection_id: 数据库连接ID
         :param sql: SQL语句
         :param sql_args: SQL语句参数
 
-        Returns:
-            成功:
-            {"Operator": "Query", "Message":message, "Result":True, "Query Result":query_result}
-
-            失败:
-            {"Operator": "Query", "Message":message, "Result":False, "Query Result":""}
+        Returns: QueryResponse
         """
-        connection=self.connections[id]
-        
         operator = "Query"
-        message=f"Query success."
-        result = False
         
-        if connection:
-            try:
-                with connection.cursor(pymysql.cursors.DictCursor) as cursor:
-                    cursor.execute(sql, sql_args)
-                    query_result = cursor.fetchone()
-                    result = True
-                    self.logger.info(f"Operator: {operator}, Message:{message}, Result: {result}, Query Result: {query_result}")
-                    return {"Operator": operator, "Message":message, "Result":result, "Query Result":query_result}
+        # 获取链接ID
+        connection=self.connections.get(connection_id)
 
-            except Exception as e:
-                message = f"Query failed! Error:{str(e)}"
-                self.logger.error(f"Operator: {operator}, Message:{message}, Result: {result}, Query Result: """)
-                return {"Operator": operator, "Message":message, "Result":result, "Query Result":""}
+        # 链接ID不存在
+        if connection is None:
+            return QueryResponse(
+                operator=operator,
+                message=f"Query failed",
+                result=False,
+                err_code=MySQLAgentResponseErrorCode.CONNECT_ID_NOT_EXISTED,
+                errors=[MySQLAgentErrorDetail(
+                    code=MySQLAgentResponseErrorCode.CONNECT_ID_NOT_EXISTED,
+                    message=f"Connection ID '{connection_id}' does not exist.",
+                    field="connection_id",
+                    hint="Please check if the connection ID is correct."
+                )]
+            )
 
-        else:
-            message = f"ID {id} not exist! Query failed"
-            self.logger.error(f"Operator: {operator}, Message:{message}, Result: {result}, Query Result: """)
-            return {"Operator": operator, "Message":message, "Result":result, "Query Result":""}
+        try:
+            # 查询
+            query_data: List[QueryResult] = await self._query_with_retry(connection=connection, sql=sql, sql_args=sql_args)
+            self.logger.debug(f"Query success. sql: '{sql}', sql_args:'{sql_args}'")
+            
+            return QueryResponse(
+                operator=operator,
+                message="Query success.",
+                result=True,
+                data=query_data
+            )
+        except Exception as e:
+            message = f"Query failed after 3 retries! Error:{str(e)}"
+            self.logger.error(message)
+            
+            return QueryResponse(
+                operator=operator,
+                message=message,
+                result=False,
+                err_code=MySQLAgentResponseErrorCode.QUERY_DATABASE_FAILED,
+                errors=[MySQLAgentErrorDetail(
+                    code=MySQLAgentResponseErrorCode.QUERY_DATABASE_FAILED,
+                    message=message,
+                    field="sql",
+                    hint="Please check the SQL syntax and parameters or try again later."
+                )]
+            )
+                
+
+    @retry(retries=3, delay=1.0, backoff=2.0, exceptions=(pymysql.MySQLError,), on_failure=lambda e: print(f"[ERROR] 最终重试失败: {e}"))  
+    async def _query_with_retry(self, connection: Connection, sql: str, sql_args: List[Any]) -> List[QueryResult]:
+        """
+        查询 (附带重试机制)
+        
+        :param connection: 数据库连接对象
+        :param sql: SQL语句
+        :param sql_args: SQL语句参数
+
+        Returns: List[QueryResult]
+        """
+
+        try:
+            with connection.cursor(pymysql.cursors.DictCursor) as cursor:
+                cursor.execute(sql, sql_args)
+                query_result = cursor.fetchall()
+                return [
+                    QueryResult(
+                        column_names=list(query_result[0].keys()),
+                        rows=[list(row.values()) for row in query_result],
+                        row_count=len(query_result)
+                    )
+                ]
+        except Exception as e:
+            self.logger.error(f"Query failed!：{e}\n{traceback.format_exc()}")
+            raise
 
 
-    async def _insert(self, id: int, sql: str, sql_args: List[str])-> Dict[str, Any]:
-        """插入"""
-        connection=self.connections[id]
+    async def _insert(self, connection_id: int, sql: str, sql_args: List[Any])-> InsertResponse:
+        """
+        插入
+        
+        :param connection_id: 数据库连接ID
+        :param sql: SQL语句
+        :param sql_args: SQL语句参数
+
+        Returns: InsertResponse
+        """
         
         operator = "Insert"
-        message=f"Insert success."
-        result = False
         
-        if connection:
-            try:
-                with connection.cursor(pymysql.cursors.DictCursor) as cursor:
-                    cursor.execute(sql, sql_args)
-                    connection.commit()
-                    result = True
-                    self.logger.info(f"Operator: {operator}, Message:{message}, Result: {result}")
-                    return {"Operator": operator, "Message": message, "Result": result}
-                
-            except Exception as e:
-                message= f"Insert failed,Error:{str(e)}"
-                self.logger.error(f"Operator: {operator}, Message:{message}, Result: {result}")
-                return {"Operator": operator, "Message":message, "Result":result}
-        else:
-            message = f"ID {id} not exist! Insert failed"
-            self.logger.error(message)    
-            return {"Operator": operator, "Message":message, "Result":result}
+        # 获取链接ID
+        connection=self.connections.get(connection_id)
         
+        # 链接ID不存在
+        if connection is None:
+            return InsertResponse(
+                operator=operator,
+                message=f"Insert failed",
+                result=False,
+                err_code=MySQLAgentResponseErrorCode.CONNECT_ID_NOT_EXISTED,
+                errors=[MySQLAgentErrorDetail(
+                    code=MySQLAgentResponseErrorCode.CONNECT_ID_NOT_EXISTED,
+                    message=f"Connection ID '{connection_id}' does not exist.",
+                    field="connection_id",
+                    hint="Please check if the connection ID is correct."
+                )]
+            )
         
-    async def _delete(self, id: int, sql: str, sql_args: List[str])-> Dict[str, Any]:
-        """
-        删除
 
-        :param id: 数据库连接ID
+        try:
+            affect_rows =  await self._insert_with_retry(connection=connection, sql=sql, sql_args=sql_args)
+            self.logger.info(f"Insert success. sql: '{sql}', sql_args:'{sql_args}'")
+            
+            #插入成功 返回Response
+            return InsertResponse(
+                    operator=operator,
+                    message=f"Insert success.",
+                    result=True,
+                    data=InsertData(affect_rows=affect_rows)
+            )
+        except Exception as e:
+                message= f"Insert failed after 3 retries! Error:{str(e)}"
+                self.logger.error(message)
+                
+                # 插入失败，且已重试三次，返回Response
+                return InsertResponse(
+                    operator=operator,
+                    message=message,
+                    result=False,
+                    err_code=MySQLAgentResponseErrorCode.INSERT_DATABASE_FAILED,
+                    errors=[MySQLAgentErrorDetail(
+                        code=MySQLAgentResponseErrorCode.INSERT_DATABASE_FAILED,
+                        message=message,
+                        field="database",
+                        hint="Unknown error in database, please check the paramters or try again later."
+                    )]
+                )
+
+
+    @retry(retries=3, delay=1.0, backoff=2.0, exceptions=(pymysql.MySQLError,), on_failure=lambda e: print(f"[ERROR] 最终重试失败: {e}"))
+    async def _insert_with_retry(self, connection: Connection, sql: str, sql_args: List[Any]) -> int:
+        """
+        插入
+        
+        :param connection: 数据库连接
+        :param sql: SQL语句
+        :param sql_args: SQL语句参数
+
+        Returns: None
+        """
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(sql, sql_args)
+                connection.commit()
+                return cursor.rowcount
+        except Exception as e:
+            self.logger.error(f"insert failed!：{e}\n{traceback.format_exc()}")
+            raise
+        
+        
+    async def _delete(self, connection_id: int, sql: str, sql_args: List[Any])-> DeleteResponse:
+        """
+        删除数据
+
+        :param connection_id: 数据库连接ID
         :param sql: SQL语句
         :param sql_args: SQL语句参数
         
         Returns:
-            成功:
-            {"Operator": Delete, "Message":message, "Result":True}
-            
-            失败:
-            {"Operator": Delete, "Message":message, "Result":False}
         """
-        connection=self.connections[id]
         
         operator = "Delete"
-        message=f"Delete success."
-        result = False
-        
-        if connection:
-            try:
-                with connection.cursor(pymysql.cursors.DictCursor) as cursor:
-                    cursor.execute(sql, sql_args)
-                    connection.commit()
-                    result = True
-                    
-                    # 检查是否删除了记录
-                    if cursor.rowcount > 0:
-                        message = f"Delete success, {cursor.rowcount} rows affected"
-                        self.logger.info(f"Operator: {operator}, Message:{message}, Result: {result}")
-                        return {"Operator": operator, "Message":message, "Result":result}
-                    else:
-                        message = f"Delete success, but no rows were affected"
-                        self.logger.warning(f"Operator: {operator}, Message:{message}, Result: {result}")
-                        return {"Operator": operator, "Message":message, "Result":result}
-                    
-            except Exception as e:
-                message = f"Delete failed,Error:{str(e)}"
-                self.logger.error(f"Operator: {operator}, Message:{message}, Result: {result}")
-                return {"Operator": operator, "Message":message, "Result":result}
-        else:
-            message = f"ID {id} not exist! Delete failed"
-            self.logger.error(f"Operator: {operator}, Message:{message}, Result: {result}")
-            return {"Operator": operator, "Message":message, "Result":result}
-        
+
+        # 获取链接ID
+        connection=self.connections.get(connection_id)
+
+        # 链接ID不存在
+        if connection is None:
+            return DeleteResponse(
+                operator=operator,
+                message=f"Delete failed",
+                result=False,
+                err_code=MySQLAgentResponseErrorCode.CONNECT_ID_NOT_EXISTED,
+                errors=[MySQLAgentErrorDetail(
+                    code=MySQLAgentResponseErrorCode.CONNECT_ID_NOT_EXISTED,
+                    message=f"Connection ID '{connection_id}' does not exist.",
+                    field="connection_id",
+                    hint="Please check if the connection ID is correct."
+                )]
+            )
+            
+        try:
+            affect_rows =  await self._delete_with_retry(connection=connection, sql=sql, sql_args=sql_args)
+            self.logger.info(f"Delete success. sql: '{sql}', sql_args:'{sql_args}'")
+            
+            # 删除成功 返回Response
+            return DeleteResponse(
+                operator=operator,
+                message=f"Delete success.",
+                result=True,
+                data=DeleteData(affect_rows=affect_rows)
+            )
+        except Exception as e:
+            message = f"Delete failed after 3 retries! Error:{str(e)}"
+            self.logger.error(message)
+            
+            # 删除失败，且已重试三次，返回Response
+            return DeleteResponse(
+                operator=operator,
+                message=message,
+                result=False,
+                err_code=MySQLAgentResponseErrorCode.DELETE_DATABASE_FAILED,
+                level="error"
+            )
+            
     
-    async def _update(self, id: int, sql: str, sql_args: List[str])-> Dict[str, Any]:
+    @retry(retries=3, delay=1.0, backoff=2.0, exceptions=(pymysql.MySQLError,), on_failure=lambda e: print(f"[ERROR] 最终重试失败: {e}"))  
+    async def _delete_with_retry(self, connection: Connection, sql: str, sql_args: List[Any]) -> int:
+        """
+        删除数据（带重试机制）
+
+        :param connection: 数据库连接
+        :param sql: SQL语句
+        :param sql_args: SQL语句参数
+
+        Returns: 删除了几行
+        """
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(sql, sql_args)
+                connection.commit()
+                
+                # 检查是否删除了记录
+                if cursor.rowcount > 0:
+                    message = f"Delete success, {cursor.rowcount} rows affected"
+                    self.logger.info(message)
+                else:
+                    message = f"Delete success, but no rows were affected"
+                    self.logger.warning(message)
+                return cursor.rowcount
+                    
+        except Exception as e:
+            self.logger.error(f"Delete Failed：{e}\n{traceback.format_exc()}")
+            raise
+
+
+    async def _update(self, connection_id: int, sql: str, sql_args: List[Any])-> UpdateResponse:
         """
         更新数据
         
-        :param id: 数据库连接ID
+        :param connection_id: 数据库连接ID
         :param sql: SQL语句
         :param sql_args: SQL语句参数
 
-        Returns:
-            成功:
-                {"Operator": Update, "Message":message, "Result":True}
-            失败:
-                {"Operator": Update, "Message":message, "Result":False}
+        Returns: UpdateResponse
         """
-        connection=self.connections[id]
         
         operator = "Update"
-        message=f"Update success."
-        result = False
         
-        if connection:
-            try:
-                with connection.cursor(pymysql.cursors.DictCursor) as cursor:
-                    cursor.execute(sql, sql_args)
-                    connection.commit()
-                    result = True
-                    
-                    # 检查是否更新了记录
-                    if cursor.rowcount > 0:
-                        message = f"Update success, {cursor.rowcount} rows affected"
-                        self.logger.info(f"Operator: {operator}, Message:{message}, Result: {result}")
-                        return {"Operator": operator, "Message":message, "Result":result}
-                    else:
-                        message = f"Update success, but no rows were affected"
-                        self.logger.warning(f"Operator: {operator}, Message:{message}, Result: {result}")
-                        return {"Operator": operator, "Message":message, "Result":result}
-                    
-            except Exception as e:
-                message = f"Update failed,Error:{str(e)}"
-                self.logger.error(f"Operator: {operator}, Message:{message}, Result: {result}")
-                return {"Operator": operator, "Message":message, "Result":result}
+        # 获取链接ID
+        connection=self.connections.get(connection_id)
+
+        # 链接ID不存在
+        if connection is None:
+            return UpdateResponse(
+                operator=operator,
+                message=f"Update failed",
+                result=False,
+                err_code=MySQLAgentResponseErrorCode.CONNECT_ID_NOT_EXISTED,
+                errors=[MySQLAgentErrorDetail(
+                    code=MySQLAgentResponseErrorCode.CONNECT_ID_NOT_EXISTED,
+                    message=f"Connection ID '{connection_id}' does not exist.",
+                    field="connection_id",
+                    hint="Please check if the connection ID is correct."
+                )]
+            )  
+         
+        try:
+            # 更新数据
+            affect_rows =  await self._update_with_retry(connection=connection, sql=sql, sql_args=sql_args)
+            self.logger.info(f"Update success. sql: '{sql}', sql_args:'{sql_args}'")
             
-        else:
-            message = f"ID {id} not exist! Update failed"
-            self.logger.error(f"Operator: {operator}, Message:{message}, Result: {result}")
-            return {"Operator": operator, "Message":message, "Result":result}
+            # 更新成功 返回Response
+            return UpdateResponse(
+                operator=operator,
+                message=f"Update success.",
+                result=True,
+                data= UpdateData(affect_rows=affect_rows)
+            ) 
+            
+        except Exception as e:
+            message = f"Update failed after 3 retries! Error:{str(e)}"
+            self.logger.error(message)
+            
+            # 更新失败，且已重试三次，返回Response
+            return UpdateResponse(
+                operator=operator,
+                message=message,
+                result=False,
+                err_code=MySQLAgentResponseErrorCode.UPDATE_DATABASE_FAILED,
+                errors=[MySQLAgentErrorDetail(
+                    code=MySQLAgentResponseErrorCode.UPDATE_DATABASE_FAILED,
+                    message=message,
+                    field="sql",
+                    hint="Please check the SQL syntax and parameters or try again later."
+                )]
+            )
+            
         
+    @retry(retries=3, delay=1.0, backoff=2.0, exceptions=(pymysql.MySQLError,), on_failure=lambda e: print(f"[ERROR] 最终重试失败: {e}"))      
+    async def _update_with_retry(self, connection: Connection, sql: str, sql_args: List[Any])-> int:
+        """
+        更新数据（带重试机制）
+
+        :param connection: 数据库连接
+        :param sql: SQL语句
+        :param sql_args: SQL语句参数
         
+        Returns: 受影响的纪录数
+        """
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(sql, sql_args)
+                connection.commit()
+                
+                # 检查是否更新了记录
+                if cursor.rowcount > 0:
+                    message = f"Update success, {cursor.rowcount} rows affected"
+                    self.logger.info(message)
+                else:
+                    message = f"Update success, but no rows were affected"
+                    self.logger.warning(message)
+                return cursor.rowcount
+                    
+        except Exception as e:
+            self.logger.error(f"Update Failed：{e}\n{traceback.format_exc()}")
+            raise
+           
     
-    async def _connect(self, host: str, port: int, user: str, password: str, database: str, charset: str) -> ConnectDatabaseResponse:
+    async def _connect_database(self, host: str, port: int, user: str, password: str, database: str, charset: str) -> ConnectDatabaseResponse:
         """
         创建一个新的 MySQL 数据库连接，并返回其 ID。
 
@@ -379,35 +557,45 @@ class MySQLAgent:
         
         try:
             # 获取链接ID 和 链接对象
-            connection_id, connection = await self._connect_database(
+            connection_id, connection = await self._connect_database_with_retry(
                 host=host, port=port, user=user, password=password, 
                 database=database, charset=charset
             )
-            
-            # 存储
+
+            # 存储连接
             self.connections[connection_id] = connection
+            self.logger.info(f"Success connect database:'{database}'，connection_id='{connection_id}'")
             
             # 返回结果
             return ConnectDatabaseResponse(
                 operator=operator,
                 result=True,
-                message=f"成功连接MySQL数据库'{database}'",
+                message=f"Success connect database:'{database}'",
                 data=ConnectDatabaseData(connection_id=connection_id)
             )
         
         except Exception as e:
-            self.logger.error(f"数据库'{database}'连接失败，已重试3次。")
+            message = f"Failed to connect database '{database}' after 3 retries."
+            self.logger.error(message)
+            
+            # 返回错误响应
             return ConnectDatabaseResponse(
                 operator=operator,
                 result=False,
-                message=f"数据库'{database}'连接失败，已重试3次。",
+                message=message,
                 level="error",
-                err_code=MySQLAgentResponseErrorCode.CONNECT_DATABASE_FAILED
+                err_code=MySQLAgentResponseErrorCode.CONNECT_DATABASE_FAILED,
+                errors=[MySQLAgentErrorDetail(
+                    code=MySQLAgentResponseErrorCode.CONNECT_DATABASE_FAILED,
+                    message=message,
+                    field="database",
+                    hint="Please check the database parameters or try again later."
+                )]
             )
     
     
     @retry(retries=3, delay=1.0, backoff=2.0, exceptions=(pymysql.MySQLError,), on_failure=lambda e: print(f"[ERROR] 最终重试失败: {e}"))  
-    async def _connect_database(self, host: str, port: int,
+    async def _connect_database_with_retry(self, host: str, port: int,
                                 user: str, password: str,
                                 database: str, charset: str) -> Tuple[int, Connection]:
         """
@@ -437,24 +625,24 @@ class MySQLAgent:
         
         # 捕获可能产生的所有异常。 pymysql.MySQLError是所有 PyMySQL 异常的基类
         except pymysql.MySQLError as e:
-            self.logger.warning(f"In function: '_connect_database': MySQL connection failed (attempt will be retried): {e}")
+            self.logger.error(f"Connect database failed：{e}\n{traceback.format_exc()}")
             raise  # 必须抛出让 @retry 机制知道要重试
             
 
-    def close(self, id: int) -> bool:
+    def close(self, connection_id: int) -> bool:
         """
         根据连接 ID 关闭对应的数据库连接。
 
-        :param id: 要关闭的连接 ID
+        :param connection_id: 要关闭的连接 ID
         :return bool: 是否成功关闭
         """
-        if id not in self.connections:
-            self.logger.error(f"No such connection ID: {id}")
+        if connection_id not in self.connections:
+            self.logger.error(f"No such connection ID: {connection_id}")
             return False
-        connection = self.connections[id]
+        connection = self.connections[connection_id]
         try:
             connection.close()
-            del self.connections[id]
+            del self.connections[connection_id]
             return True
         except pymysql.MySQLError as e:
             self.logger.error(f"Failed to close the connection with mysql database : {e}")
@@ -466,12 +654,12 @@ class MySQLAgent:
         关闭所有数据库连接。
         """
         ids = list(self.connections.keys())
-        for id in ids:
+        for connection_id in ids:
             try:
-                res = self.close(id)
+                res = self.close(connection_id)
                 if res:
                     self.logger.info(f"Success to close the connection with mysql databse.")
-                    del self.connections[id]
+                    del self.connections[connection_id]
                 else:
                     self.logger.error(f"Failed to close the connection with mysql databse.")
                 

@@ -2,7 +2,7 @@
 # Author:       yomu
 # Time:         2025/6/18
 # Version:      0.1
-# Description:  Request Type Definitions
+# Description:  UserService Request Type Definitions
 
 
 """

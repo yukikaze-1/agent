@@ -34,7 +34,7 @@ from Module.Utils.FastapiServiceTools import (
     unregister_service_from_consul,
     get_client_ip
 )
-from Module.Utils.Database.UserServiceRequestType import (
+from Service.Other.UserServiceRequestType import (
     RegisterRequest,
     LoginRequest,
     UnregisterRequest,
@@ -44,7 +44,7 @@ from Module.Utils.Database.UserServiceRequestType import (
     ModifySettingRequest,
     ModifyNotificationSettingsRequest
 )
-from Module.Utils.Database.UserServiceResponseType import (
+from Service.Other.UserServiceResponseType import (
     UserServiceResponseErrorCode,
     UserServiceErrorDetail,
     RegisterData,

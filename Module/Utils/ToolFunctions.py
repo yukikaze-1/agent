@@ -21,7 +21,16 @@ def retry(
     exceptions: tuple[type[BaseException], ...] = (Exception,),
     on_failure: Callable[[BaseException], None] | None = None,
 ) -> Callable[[Callable[..., Awaitable[T]]], Callable[..., Awaitable[T]]]:
-
+    """
+        通用的重试装饰器，支持同步和异步函数。
+        :param retries: 最大重试次数
+        :param delay: 初始重试间隔（秒）
+        :param backoff: 每次重试延迟的倍数增长（指数退避）
+        :param exceptions: 可重试的异常类型
+        :param on_failure: 最终失败回调，接收最后的异常对象
+        
+        :return 
+    """
     def decorator(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
         @functools.wraps(func)
         async def wrapper(*args, **kwargs) -> T:
