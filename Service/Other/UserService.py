@@ -158,17 +158,17 @@ class UserService:
         task = None
         try:
             # 注册服务到 Consul
-            self.logger.info("Registering service to Consul...")
-            tags = ["UserService"]
-            await register_service_to_consul(consul_url=self.consul_url,
-                                             client=self.client,
-                                             logger=self.logger,
-                                             service_name=self.service_name,
-                                             service_id=self.service_id,
-                                             address=self.host,
-                                             port=self.port,
-                                             tags=tags,
-                                             health_check_url=self.health_check_url)
+            # self.logger.info("Registering service to Consul...")
+            # tags = ["UserService"]
+            # await register_service_to_consul(consul_url=self.consul_url,
+            #                                  client=self.client,
+            #                                  logger=self.logger,
+            #                                  service_name=self.service_name,
+            #                                  service_id=self.service_id,
+            #                                  address=self.host,
+            #                                  port=self.port,
+            #                                  tags=tags,
+            #                                  health_check_url=self.health_check_url)
             # 异步调用 init_connection，让 db_user_account 拿到 connect_id
             await self.db_user_account.init_connection()
             # 启动后台任务
@@ -285,9 +285,9 @@ class UserService:
 
         # 用户上传文件
         @self.app.post("/usr/upload_file")
-        async def usr_upload_file(session_token: str = Form(...), 
-                                  file: UploadFile = File(...), 
-                                  request: Request | None = None):
+        async def usr_upload_file(request: Request,
+                                  session_token: str = Form(...), 
+                                  file: UploadFile = File(...)):
             return await self._usr_upload_file(session_token=session_token, file=file)
 
     # --------------------------------

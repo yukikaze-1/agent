@@ -33,20 +33,23 @@ from Module.Utils.FastapiServiceTools import (
 from Module.Utils.Database.MySQLAgentResponseType import (
     MySQLAgentResponseErrorCode,
     MySQLAgentErrorDetail,
-    ConnectDatabaseData,
-    ConnectDatabaseResponse,
-    QueryResult,
-    QueryResponse,
-    InsertData,
-    InsertResponse,
-    DeleteData,
-    DeleteResponse,
-    UpdateData,
-    UpdateResponse
+    MySQLAgentConnectDatabaseData,
+    MySQLAgentConnectDatabaseResponse,
+    MySQLAgentQueryResult,
+    MySQLAgentQueryResponse,
+    MySQLAgentInsertData,
+    MySQLAgentInsertResponse,
+    MySQLAgentDeleteData,
+    MySQLAgentDeleteResponse,
+    MySQLAgentUpdateData,
+    MySQLAgentUpdateResponse,
+    MySQLAgentTransactionData,
+    MySQLAgentTransactionResponse
 )
 from Module.Utils.Database.MySQLAgentRequestType import (
-    SQLRequest, 
-    ConnectRequest
+    MySQLAgentSQLRequest, 
+    MySQLAgentConnectRequest,
+    MySQLAgentTransactionRequest
 )
 
 class MySQLAgent:
@@ -111,18 +114,18 @@ class MySQLAgent:
             self.logger.info("Async HTTP Client Initialized")
 
             # 注册服务到 Consul
-            self.logger.info("Registering service to Consul...")
-            tags = ["MySQLAgent"]
-            await register_service_to_consul(consul_url=self.consul_url,
-                                             client=self.client,
-                                             logger=self.logger,
-                                             service_name=self.service_name,
-                                             service_id=self.service_id,
-                                             address=self.host,
-                                             port=self.port,
-                                             tags=tags,
-                                             health_check_url=self.health_check_url)
-            self.logger.info("Service registered to Consul.")
+            # self.logger.info("Registering service to Consul...")
+            # tags = ["MySQLAgent"]
+            # await register_service_to_consul(consul_url=self.consul_url,
+            #                                  client=self.client,
+            #                                  logger=self.logger,
+            #                                  service_name=self.service_name,
+            #                                  service_id=self.service_id,
+            #                                  address=self.host,
+            #                                  port=self.port,
+            #                                  tags=tags,
+            #                                  health_check_url=self.health_check_url)
+            # self.logger.info("Service registered to Consul.")
 
             yield  # 应用正常运行
 
@@ -164,34 +167,104 @@ class MySQLAgent:
         
         
         @self.app.post("/database/mysql/insert", summary="插入接口")
-        async def insert(payload: SQLRequest):
+        async def insert(payload: MySQLAgentSQLRequest):
             return await self._insert(payload.connection_id, payload.sql, payload.sql_args)
 
         
         @self.app.post("/database/mysql/update", summary="更新接口")
-        async def update(payload: SQLRequest):
+        async def update(payload: MySQLAgentSQLRequest):
             return await self._update(payload.connection_id, payload.sql, payload.sql_args)
 
 
         @self.app.post("/database/mysql/delete", summary= "删除接口")
-        async def delete(payload: SQLRequest):
+        async def delete(payload: MySQLAgentSQLRequest):
             return await self._delete(payload.connection_id, payload.sql, payload.sql_args)
 
 
         @self.app.post("/database/mysql/query", summary= "查询接口")
-        async def query(payload: SQLRequest):
+        async def query(payload: MySQLAgentSQLRequest):
             return await self._query(payload.connection_id, payload.sql, payload.sql_args)
 
 
         @self.app.post("/database/mysql/connect", summary= "连接接口")
-        async def connect(payload: ConnectRequest):
+        async def connect(payload: MySQLAgentConnectRequest):
             return await self._connect_database(payload.host, payload.port, payload.user, payload.password, payload.database,  payload.charset)
         
+        
+        @self.app.post("/database/mysql/transaction", summary="事务接口")
+        async def transaction(payload: MySQLAgentTransactionRequest):
+            return await self._transaction(payload.connection_id, payload.sql_requests)
+            
         
     # --------------------------------
     # 功能函数
     # --------------------------------     
-    async def _query(self, connection_id: int, sql: str, sql_args: List[Any]) -> QueryResponse:
+    async def _transaction(self, connection_id: int, sql_requests: List[MySQLAgentSQLRequest]) -> MySQLAgentTransactionResponse:
+        """
+        处理一组 SQL 请求作为一个事务。
+        
+        :param connection_id: 数据库连接ID
+        :param sql_requests: 一组 SQL 请求
+        """
+        operator = "Transaction"
+            
+        # 获取链接对象
+        connection = self.connections.get(connection_id)
+        
+        # 链接ID不存在
+        if connection is None:
+            return MySQLAgentTransactionResponse(
+                operator=operator,
+                message=f"Transaction failed",
+                result=False,
+                err_code=MySQLAgentResponseErrorCode.CONNECT_ID_NOT_EXISTED,
+                errors=[MySQLAgentErrorDetail(
+                    code=MySQLAgentResponseErrorCode.CONNECT_ID_NOT_EXISTED,
+                    message=f"Connection ID '{connection_id}' does not exist.",
+                    field="connection_id",
+                    hint="Please check if the connection ID is correct."
+                )]
+            )
+        
+        try:
+            with connection.cursor() as cursor:
+                 # 显式开启事务
+                connection.begin()
+                # 执行每个 SQL 请求
+                for sql_request in sql_requests:
+                    cursor.execute(sql_request.sql, sql_request.sql_args)
+                
+                # 提交事务
+                connection.commit()
+                self.logger.info(f"Transaction success. connection_id: {connection_id}")
+
+            # 执行成功，返回Response
+            return MySQLAgentTransactionResponse(
+                operator=operator,
+                message="Transaction success.",
+                result=True
+            )
+            
+        except Exception as e:
+            connection.rollback()
+            self.logger.error(f"Transaction failed. connection_id: {connection_id}, error: {e}")
+
+            return MySQLAgentTransactionResponse(
+                operator=operator,
+                message="Transaction failed.",
+                result=False,
+                err_code=MySQLAgentResponseErrorCode.QUERY_DATABASE_FAILED,
+                errors=[MySQLAgentErrorDetail(
+                    code=MySQLAgentResponseErrorCode.QUERY_DATABASE_FAILED,
+                    message=str(e),
+                    field="sql",
+                    hint="Please check the SQL syntax and parameters or try again later."
+                )]
+            )
+            
+            
+
+    async def _query(self, connection_id: int, sql: str, sql_args: List[Any]) -> MySQLAgentQueryResponse:
         """
         查询
         
@@ -208,7 +281,7 @@ class MySQLAgent:
 
         # 链接ID不存在
         if connection is None:
-            return QueryResponse(
+            return MySQLAgentQueryResponse(
                 operator=operator,
                 message=f"Query failed",
                 result=False,
@@ -223,10 +296,10 @@ class MySQLAgent:
 
         try:
             # 查询
-            query_data: List[QueryResult] = await self._query_with_retry(connection=connection, sql=sql, sql_args=sql_args)
+            query_data: List[MySQLAgentQueryResult] = await self._query_with_retry(connection=connection, sql=sql, sql_args=sql_args)
             self.logger.debug(f"Query success. sql: '{sql}', sql_args:'{sql_args}'")
             
-            return QueryResponse(
+            return MySQLAgentQueryResponse(
                 operator=operator,
                 message="Query success.",
                 result=True,
@@ -236,7 +309,7 @@ class MySQLAgent:
             message = f"Query failed after 3 retries! Error:{str(e)}"
             self.logger.error(message)
             
-            return QueryResponse(
+            return MySQLAgentQueryResponse(
                 operator=operator,
                 message=message,
                 result=False,
@@ -251,7 +324,7 @@ class MySQLAgent:
                 
 
     @retry(retries=3, delay=1.0, backoff=2.0, exceptions=(pymysql.MySQLError,), on_failure=lambda e: print(f"[ERROR] 最终重试失败: {e}"))  
-    async def _query_with_retry(self, connection: Connection, sql: str, sql_args: List[Any]) -> List[QueryResult]:
+    async def _query_with_retry(self, connection: Connection, sql: str, sql_args: List[Any]) -> List[MySQLAgentQueryResult]:
         """
         查询 (附带重试机制)
         
@@ -267,7 +340,7 @@ class MySQLAgent:
                 cursor.execute(sql, sql_args)
                 query_result = cursor.fetchall()
                 return [
-                    QueryResult(
+                    MySQLAgentQueryResult(
                         column_names=list(query_result[0].keys()),
                         rows=[list(row.values()) for row in query_result],
                         row_count=len(query_result)
@@ -278,7 +351,7 @@ class MySQLAgent:
             raise
 
 
-    async def _insert(self, connection_id: int, sql: str, sql_args: List[Any])-> InsertResponse:
+    async def _insert(self, connection_id: int, sql: str, sql_args: List[Any])-> MySQLAgentInsertResponse:
         """
         插入
         
@@ -296,7 +369,7 @@ class MySQLAgent:
         
         # 链接ID不存在
         if connection is None:
-            return InsertResponse(
+            return MySQLAgentInsertResponse(
                 operator=operator,
                 message=f"Insert failed",
                 result=False,
@@ -315,18 +388,18 @@ class MySQLAgent:
             self.logger.info(f"Insert success. sql: '{sql}', sql_args:'{sql_args}'")
             
             #插入成功 返回Response
-            return InsertResponse(
+            return MySQLAgentInsertResponse(
                     operator=operator,
                     message=f"Insert success.",
                     result=True,
-                    data=InsertData(affect_rows=affect_rows)
+                    data=MySQLAgentInsertData(affect_rows=affect_rows)
             )
         except Exception as e:
                 message= f"Insert failed after 3 retries! Error:{str(e)}"
                 self.logger.error(message)
                 
                 # 插入失败，且已重试三次，返回Response
-                return InsertResponse(
+                return MySQLAgentInsertResponse(
                     operator=operator,
                     message=message,
                     result=False,
@@ -361,7 +434,7 @@ class MySQLAgent:
             raise
         
         
-    async def _delete(self, connection_id: int, sql: str, sql_args: List[Any])-> DeleteResponse:
+    async def _delete(self, connection_id: int, sql: str, sql_args: List[Any])-> MySQLAgentDeleteResponse:
         """
         删除数据
 
@@ -379,7 +452,7 @@ class MySQLAgent:
 
         # 链接ID不存在
         if connection is None:
-            return DeleteResponse(
+            return MySQLAgentDeleteResponse(
                 operator=operator,
                 message=f"Delete failed",
                 result=False,
@@ -397,18 +470,18 @@ class MySQLAgent:
             self.logger.info(f"Delete success. sql: '{sql}', sql_args:'{sql_args}'")
             
             # 删除成功 返回Response
-            return DeleteResponse(
+            return MySQLAgentDeleteResponse(
                 operator=operator,
                 message=f"Delete success.",
                 result=True,
-                data=DeleteData(affect_rows=affect_rows)
+                data=MySQLAgentDeleteData(affect_rows=affect_rows)
             )
         except Exception as e:
             message = f"Delete failed after 3 retries! Error:{str(e)}"
             self.logger.error(message)
             
             # 删除失败，且已重试三次，返回Response
-            return DeleteResponse(
+            return MySQLAgentDeleteResponse(
                 operator=operator,
                 message=message,
                 result=False,
@@ -447,7 +520,7 @@ class MySQLAgent:
             raise
 
 
-    async def _update(self, connection_id: int, sql: str, sql_args: List[Any])-> UpdateResponse:
+    async def _update(self, connection_id: int, sql: str, sql_args: List[Any])-> MySQLAgentUpdateResponse:
         """
         更新数据
         
@@ -465,7 +538,7 @@ class MySQLAgent:
 
         # 链接ID不存在
         if connection is None:
-            return UpdateResponse(
+            return MySQLAgentUpdateResponse(
                 operator=operator,
                 message=f"Update failed",
                 result=False,
@@ -484,11 +557,11 @@ class MySQLAgent:
             self.logger.info(f"Update success. sql: '{sql}', sql_args:'{sql_args}'")
             
             # 更新成功 返回Response
-            return UpdateResponse(
+            return MySQLAgentUpdateResponse(
                 operator=operator,
                 message=f"Update success.",
                 result=True,
-                data= UpdateData(affect_rows=affect_rows)
+                data= MySQLAgentUpdateData(affect_rows=affect_rows)
             ) 
             
         except Exception as e:
@@ -496,7 +569,7 @@ class MySQLAgent:
             self.logger.error(message)
             
             # 更新失败，且已重试三次，返回Response
-            return UpdateResponse(
+            return MySQLAgentUpdateResponse(
                 operator=operator,
                 message=message,
                 result=False,
@@ -540,7 +613,7 @@ class MySQLAgent:
             raise
            
     
-    async def _connect_database(self, host: str, port: int, user: str, password: str, database: str, charset: str) -> ConnectDatabaseResponse:
+    async def _connect_database(self, host: str, port: int, user: str, password: str, database: str, charset: str) -> MySQLAgentConnectDatabaseResponse:
         """
         创建一个新的 MySQL 数据库连接，并返回其 ID。
 
@@ -567,11 +640,11 @@ class MySQLAgent:
             self.logger.info(f"Success connect database:'{database}'，connection_id='{connection_id}'")
             
             # 返回结果
-            return ConnectDatabaseResponse(
+            return MySQLAgentConnectDatabaseResponse(
                 operator=operator,
                 result=True,
                 message=f"Success connect database:'{database}'",
-                data=ConnectDatabaseData(connection_id=connection_id)
+                data=MySQLAgentConnectDatabaseData(connection_id=connection_id)
             )
         
         except Exception as e:
@@ -579,7 +652,7 @@ class MySQLAgent:
             self.logger.error(message)
             
             # 返回错误响应
-            return ConnectDatabaseResponse(
+            return MySQLAgentConnectDatabaseResponse(
                 operator=operator,
                 result=False,
                 message=message,
@@ -616,7 +689,10 @@ class MySQLAgent:
                 user=user,
                 password=password,
                 database=database,
-                charset=charset
+                charset=charset,
+                connect_timeout=5,   # TCP 连接超时时间
+                read_timeout=10,     # 读取结果超时时间
+                write_timeout=10     # 写入语句超时时间
             )
             # 保存内部序号
             connection_id = self.ids
@@ -659,7 +735,7 @@ class MySQLAgent:
                 res = self.close(connection_id)
                 if res:
                     self.logger.info(f"Success to close the connection with mysql databse.")
-                    del self.connections[connection_id]
+                    self.connections.pop(connection_id, None)
                 else:
                     self.logger.error(f"Failed to close the connection with mysql databse.")
                 

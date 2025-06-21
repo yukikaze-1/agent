@@ -49,17 +49,17 @@ class MySQLAgentBaseResponse(BaseModel):
     
     
     
-class ConnectDatabaseData(BaseModel):
+class MySQLAgentConnectDatabaseData(BaseModel):
     """  连接数据库 数据"""    
     connection_id: int = Field(..., description="")
     
-class ConnectDatabaseResponse(MySQLAgentBaseResponse):
+class MySQLAgentConnectDatabaseResponse(MySQLAgentBaseResponse):
     """ 连接数据库 Response """
-    data: ConnectDatabaseData | None = Field(default=None, description="连接数据库附加数据")
+    data: MySQLAgentConnectDatabaseData | None = Field(default=None, description="连接数据库附加数据")
 
 
 
-class QueryResult(BaseModel):
+class MySQLAgentQueryResult(BaseModel):
     """ SQL查询 数据 """
     column_names: List[str] = Field(..., description="查询结果列名列表")
     rows: List[List[Any]] = Field(..., description="查询结果数据行列表，每行是一个列表")
@@ -68,36 +68,45 @@ class QueryResult(BaseModel):
     page_size: int | None = Field(default=None, description="每页记录数（如果适用）")
     current_page: int | None = Field(default=None, description="当前页码（如果适用）")
 
-class QueryResponse(MySQLAgentBaseResponse):
+class MySQLAgentQueryResponse(MySQLAgentBaseResponse):
     """ SQL查询 Response """
-    data : List[QueryResult] | None = Field(default=None, description="查询结果数据列表")
+    data : List[MySQLAgentQueryResult] | None = Field(default=None, description="查询结果数据列表")
     
     
     
-class InsertData(BaseModel):
+class MySQLAgentInsertData(BaseModel):
     """ SQL插入 数据 """
     affect_rows: int = Field(..., description="插入的记录数")
 
-class InsertResponse(MySQLAgentBaseResponse):
+class MySQLAgentInsertResponse(MySQLAgentBaseResponse):
     """ SQL插入 Response """
-    data: InsertData | None = Field(default=None, description="插入数据附加信息")
+    data: MySQLAgentInsertData | None = Field(default=None, description="插入数据附加信息")
     
     
     
-class DeleteData(BaseModel):
+class MySQLAgentDeleteData(BaseModel):
     """ SQL删除 数据 """
     affect_rows: int = Field(..., description="删除的记录数")
 
-class DeleteResponse(MySQLAgentBaseResponse):
+class MySQLAgentDeleteResponse(MySQLAgentBaseResponse):
     """ SQL删除 Response """
-    data: DeleteData | None = Field(default=None, description="删除数据附加信息")
+    data: MySQLAgentDeleteData | None = Field(default=None, description="删除数据附加信息")
     
     
     
-class UpdateData(BaseModel):
+class MySQLAgentUpdateData(BaseModel):
     """ SQL更新 数据 """
     affect_rows: int = Field(..., description="更新的记录数")
 
-class UpdateResponse(MySQLAgentBaseResponse):
+class MySQLAgentUpdateResponse(MySQLAgentBaseResponse):
     """ SQL更新 Response """
-    data: UpdateData | None = Field(default=None, description="更新数据附加信息")
+    data: MySQLAgentUpdateData | None = Field(default=None, description="更新数据附加信息")
+    
+    
+class MySQLAgentTransactionData(BaseModel):
+    """ 事务 数据 """
+    pass
+    
+class MySQLAgentTransactionResponse(MySQLAgentBaseResponse):
+    """ 事务 Response """
+    data: List[MySQLAgentBaseResponse] | None = Field(default=None, description="事务中每个操作的响应列表")

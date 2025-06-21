@@ -23,6 +23,7 @@ from Module.Utils.ConfigTools import load_config, validate_config
 from Module.Utils.FormatValidate import is_email, is_account_name
 from Module.Utils.Database.MySQLHelper import MySQLHelper
 from Module.Utils.ToolFunctions import retry
+from Module.Utils.Database.MySQLAgentResponseType import MySQLAgentConnectDatabaseResponse
 
 """
 ## 用户信息数据库设计
@@ -343,7 +344,7 @@ class UserAccountDataBaseAgent():
         self.config = load_config(config_path=self.config_path, config_name='UserAccountDataBaseAgent', logger=self.logger)
         
         # 验证配置文件
-        required_keys = [ "mysql_host", "mysql_port", "mysql_agent_url", "mysql_user",  "mysql_password", "database", "table", "charset"]
+        required_keys = [ "mysql_host", "mysql_port", "mysql_agent_url", "mysql_user",  "mysql_password", "database", "charset"]
         validate_config(required_keys, self.config, self.logger)
         
         # MySQL配置
@@ -950,19 +951,26 @@ class UserAccountDataBaseAgent():
         try:
             response = await self.client.post(url=url, json=payload, headers=headers, timeout=120.0)
             response.raise_for_status()
-            response_data :Dict = response.json()
             
-            if response.status_code == 200:
-                id = response_data.get("ConnectionID", -1)
+            if response.status_code != 200:
+                self.logger.error(f"Unexpected response structure: {response.json()}")
+                raise ValueError(f"Failed to connect to the database '{self.database}'")
+            
+            response_dict: Dict = response.json()
+            response_data = MySQLAgentConnectDatabaseResponse.model_validate(response_dict)
+            
+            if response_data.data is None:
+                self.logger.error(f"Failed to connect database '{self.database}.'")
+                raise HTTPException(status_code=500, detail=f"Internal server error. Failed to connect database '{self.database}.'")
+            else:
+                id = response_data.data.connection_id
                 if id == -1:
                     self.logger.error(f"Failed connect to the database '{self.database}'. Message: '{response_data}'")
                     raise HTTPException(status_code=500, detail="Internal server error. Get the default wrong ConnectionID: -1")
                 else: 
                     self.logger.info(f"Success connect to the database '{self.database}'. Message: '{response_data}'")
-                    return int(id)
-            else:
-                self.logger.error(f"Unexpected response structure: {response_data}")
-                raise ValueError(f"Failed to connect to the database '{self.database}'")
+                    return id
+                
                 
         except httpx.HTTPStatusError as e:
             self.logger.error(f"Connect to database '{self.database}' failed! HTTP error: {e.response.status_code}, {e.response.text}")

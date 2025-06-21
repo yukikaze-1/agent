@@ -13,14 +13,14 @@ from typing import Dict, List, Any
 from pydantic import BaseModel, EmailStr, constr, Field, model_validator
 
 
-class SQLRequest(BaseModel):
+class MySQLAgentSQLRequest(BaseModel):
     """ SQL请求格式 """
     connection_id: int = Field(..., description="数据库请求ID")
     sql: str = Field(..., description="SQL语句")
     sql_args: List[Any] = Field(..., description="SQL语句参数")
 
 
-class ConnectRequest(BaseModel):
+class MySQLAgentConnectRequest(BaseModel):
     """ 连接数据库请求格式 """
     host: str = Field(..., description="数据库主机名")
     port: int = Field(..., description="数据库端口")
@@ -30,3 +30,7 @@ class ConnectRequest(BaseModel):
     charset: str = Field(..., description="数据库字符集")
 
 
+class MySQLAgentTransactionRequest(BaseModel):
+    """ 事务请求格式 """
+    connection_id: int = Field(..., description="数据库连接ID")
+    sql_requests: List[MySQLAgentSQLRequest] = Field(..., description="一组SQL请求")
