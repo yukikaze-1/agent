@@ -24,6 +24,26 @@ from Module.Utils.FormatValidate import is_email, is_account_name
 from Module.Utils.Database.MySQLHelper import MySQLHelper
 from Module.Utils.ToolFunctions import retry
 from Module.Utils.Database.MySQLAgentResponseType import MySQLAgentConnectDatabaseResponse
+from Module.Utils.Database.UserInfoTableType import (
+    SQL_REQUEST_ALLOWED_FIELDS,
+    get_allowed_fields,
+    filter_writable_fields,
+    UserStatus,
+    TableUsersSchema, TableUsersInsertSchema, TableUsersUpdateSchema,
+    TableUserProfileSchema, TableUserProfileInsertSchema, TableUserProfileUpdateSchema,
+    TableUserLoginLogsSchema, TableUserLoginLogsInsertSchema,
+    UserLanguage,
+    TableUserSettingsSchema, TableUserSettingsInsertSchema, TableUserSettingsUpdateSchema,
+    UserAccountActionType,
+    TableUserAccountActionsSchema, TableUserAccountActionsInsertSchema,
+    UserNotificationType,
+    TableUserNotificationsSchema, TableUserNotificationsInsertSchema, TableUserNotificationsUpdateSchema,
+    TableUserFilesSchema, TableUserFilesInsertSchema, TableUserFilesUpdateSchema,
+    TableConversationsSchema, TableConversationsInsertSchema, TableConversationsUpdateSchema,
+    ConversationMessageType,
+    SenderRole,
+    TableConversationMessagesSchema, TableConversationMessagesInsertSchema
+)
 
 
 class UserAccountDataBaseAgent():
@@ -108,448 +128,358 @@ class UserAccountDataBaseAgent():
     # ------------------------------------------------------------------------------------------------
     # 功能函数---查询表项目
     # ------------------------------------------------------------------------------------------------     
+    
     """
         查询函数封装在了MySQLHelper中的query_one和query_many中
     """
+    
     # ------------------------------------------------------------------------------------------------
     # 功能函数---插入表项目
     # ------------------------------------------------------------------------------------------------
-    async def insert_users(self, user_uuid: str, 
-                            account: str, email: str,
-                            password_hash: str, user_name: str,
-                            file_folder_path: str) -> Optional[int]:
+    
+    async def insert_users(self, insert_data: TableUsersInsertSchema) -> Optional[int]:
         """
         插入 users 表项目
 
-        :param account: 用户账号（必须）
-        :param email: 用户邮箱（必须）
-        :param password_hash: 用户密码哈希（必须）
-        :param user_name: 用户昵称（必须）
-        :param file_folder_path: 用户文件夹路径（必须）
+        :param insert_data: TableUsersInsertSchema 对象，包含以下字段：
+                account: 用户账号
+                email: 用户邮箱
+                password_hash: 用户密码哈希
+                user_name: 用户昵称
+                file_folder_path: 用户文件夹路径
 
         :return: 成功返回 user_id，失败返回 None
         """
+        table = "users"
+        # 清洗数据
+        data = filter_writable_fields(
+            schema=insert_data,
+            allowed_fields=get_allowed_fields(table=table, action="insert")
+        )
         
-        data = {
-            "user_uuid": user_uuid,
-            "account": account,
-            "email": email,
-            "password_hash": password_hash,
-            "user_name": user_name,
-            "file_folder_path": file_folder_path
-        }
-
-        res = await self.mysql_helper.insert_one(table="users", data=data,
-                                     success_msg=f"Inserted user info for account: {account}",
-                                     warning_msg=f"User info insert may have failed for account: {account}",
-                                     error_msg=f"Insert error for account: {account}")
+        # 执行插入
+        res = await self.mysql_helper.insert_one(table=table, data=data,
+                                     success_msg=f"Inserted user info for account: {insert_data.account}",
+                                     warning_msg=f"User info insert may have failed for account: {insert_data.account}",
+                                     error_msg=f"Insert error for account: {insert_data.account}")
+        
         if not res:
-            self.logger.error(f"Failed to insert user info for account: {account}")
+            self.logger.error(f"Failed to insert user info for account: {insert_data.account}")
             return None
 
         try:
-            user_id = await self.fetch_user_id_by_uuid(user_uuid)
+            user_id = await self.fetch_user_id_by_uuid(insert_data.user_uuid)
         except Exception as e:
-            self.logger.error(f"Failed to fetch user_id for user_uuid: {user_uuid}. Error: {e}")
+            self.logger.error(f"Failed to fetch user_id for user_uuid: {insert_data.user_uuid}. Error: {e}")
             return None
         
         if user_id is None:
-            self.logger.warning(f"No user found with UUID: {user_uuid}")
+            self.logger.warning(f"No user found with UUID: {insert_data.user_uuid}")
             return None
         return user_id
     
     
-    async def insert_user_profile(self, user_id: int,
-                                  user_name: str)-> bool:
+    async def insert_user_profile(self, insert_data: TableUserProfileInsertSchema)-> bool:
         """
         插入新用户的个人资料信息到 user_profile 表。
 
-        :param user_id: 用户ID
-        :param user_name: 用户名
+        :param insert_data: TableUserProfileInsertSchema 对象，包含以下字段：
+                user_id: 用户ID
+                user_name: 用户名
 
         :return: 插入是否成功
         """
+        table = "user_profile"
+        # 清洗数据
+        data = filter_writable_fields(
+            schema=insert_data,
+            allowed_fields=get_allowed_fields(table=table, action="insert")
+        )
         
-        data = {
-            "user_id": user_id,
-            "user_name": user_name 
-        }
-
-        return await self.mysql_helper.insert_one(table="user_profile", data=data,
-                            success_msg=f"Inserted user profile.User id: {user_id}",
-                            warning_msg=f"User profile insert may have failed.User id: {user_id}",
-                            error_msg=f"Insert error.User id: {user_id}")
+        # 执行插入
+        return await self.mysql_helper.insert_one(table=table, data=data,
+                            success_msg=f"Inserted user profile.User id: {insert_data.user_id}",
+                            warning_msg=f"User profile insert may have failed.User id: {insert_data.user_id}",
+                            error_msg=f"Insert error.User id: {insert_data.user_id}")
 
 
-    async def insert_user_login_logs(self, user_id: int, 
-                                     ip_address: str,
-                                     agent: str,
-                                     device: str,
-                                     os: str,
-                                     login_success: bool) -> bool:
+    async def insert_user_login_logs(self, insert_data: TableUserLoginLogsInsertSchema) -> bool:
         """
         插入用户登录日志到 user_login_logs 表
 
-        :param user_id: 用户ID
-        :param ip_address: 登录IP地址
-        :param agent: 浏览器代理
-        :param device: 登录设备
-        :param os: 操作系统
-        :param login_success: 登录是否成功
+        :param insert_data: TableUserLoginLogsInsertSchema 对象，包含以下字段：
+                user_id: 用户ID
+                ip_address: 登录IP地址
+                agent: 浏览器代理
+                device: 登录设备
+                os: 操作系统
+                login_success: 登录是否成功
 
         :return: 插入是否成功
         """
-        data = {
-            "user_id": user_id,
-            "ip_address": ip_address,
-            "agent": agent,
-            "device": device,
-            "os": os,
-            "login_success": login_success
-        }
+        table = "user_login_logs"
+        # 清洗数据
+        data = filter_writable_fields(
+            schema=insert_data,
+            allowed_fields=get_allowed_fields(table=table, action="insert")
+        )
+        
+        # 执行插入
+        return await self.mysql_helper.insert_one(table=table, data=data,
+                                     success_msg=f"Inserted user login log.User id: {insert_data.user_id}",
+                                     warning_msg=f"User login log insert may have failed.User id: {insert_data.user_id}",
+                                     error_msg=f"Insert error.User id: {insert_data.user_id}")
 
-        return await self.mysql_helper.insert_one(table="user_login_logs", data=data,
-                                     success_msg=f"Inserted user login log.User id: {user_id}",
-                                     warning_msg=f"User login log insert may have failed.User id: {user_id}",
-                                     error_msg=f"Insert error.User id: {user_id}")
 
-
-    async def insert_user_settings(self, user_id: int, 
-                                   language: str | None = None,
-                                   configure : Dict | None = None,
-                                   notification_setting: Dict | None = None)-> bool:
+    async def insert_user_settings(self, insert_data: TableUserSettingsInsertSchema)-> bool:
         """ 
         插入新用户的个人设置到 user_settings 表
 
-        :param user_id: 用户ID
-        :param language: 语言
-        :param configure: 用户配置
-        :param notification_setting: 通知设置
+        :param insert_data: TableUserSettingsInsertSchema 对象，包含以下字段：
+                user_id: 用户ID
+                language: 语言
+                configure: 用户配置
+                notification_setting: 通知设置
 
         :return: 插入是否成功
         """
+        table = "user_settings"
+        # 清洗数据
+        data = filter_writable_fields(
+            schema=insert_data,
+            allowed_fields=get_allowed_fields(table=table, action="insert")
+        )
         
-        data = {
-            "user_id": user_id,
-            "language": language or "zh",
-            "configure": json.dumps(configure) if configure else "{}",
-            "notification_setting": json.dumps(notification_setting) if notification_setting else "{}"
-        }
-
-        return await self.mysql_helper.insert_one(table="user_settings", data=data,
-                                     success_msg=f"Inserted user settings.User id: {user_id}",
-                                     warning_msg=f"User settings insert may have failed.User id: {user_id}",
-                                     error_msg=f"Insert error.User id: {user_id}")
+        # 执行插入
+        return await self.mysql_helper.insert_one(table=table, data=data,
+                                     success_msg=f"Inserted user settings.User id: {insert_data.user_id}",
+                                     warning_msg=f"User settings insert may have failed.User id: {insert_data.user_id}",
+                                     error_msg=f"Insert error.User id: {insert_data.user_id}")
    
 
-    async def insert_user_account_actions(self, user_id: int, 
-                                          action_type: str, 
-                                          action_time: str) -> bool:
+    async def insert_user_account_actions(self, insert_data: TableUserAccountActionsInsertSchema) -> bool:
         """
         插入用户账号操作记录到 user_account_actions 表
 
-        :param user_id: 用户ID
-        :param action_type: 操作类型
-        :param action_time: 操作时间
+        :param insert_data: TableUserAccountActionsInsertSchema 对象，包含以下字段：
+                user_id: 用户ID
+                action_type: 操作类型
+                action_time: 操作时间
 
         :return: 插入是否成功
         """
-        data = {
-            "user_id": user_id,
-            "action_type": action_type,
-            "action_time": action_time
-        }
+        table = "user_account_actions"
+        # 清洗数据
+        data = filter_writable_fields(
+            schema=insert_data,
+            allowed_fields=get_allowed_fields(table=table, action="insert")
+        )
+        
+        # 执行插入
+        return await self.mysql_helper.insert_one(table=table, data=data,
+                                     success_msg=f"Inserted user account action.User id: {insert_data.user_id}",
+                                     warning_msg=f"User account action insert may have failed.User id: {insert_data.user_id}",
+                                     error_msg=f"Insert error.User id: {insert_data.user_id}")
 
-        return await self.mysql_helper.insert_one(table="user_account_actions", data=data,
-                                     success_msg=f"Inserted user account action.User id: {user_id}",
-                                     warning_msg=f"User account action insert may have failed.User id: {user_id}",
-                                     error_msg=f"Insert error.User id: {user_id}")
 
-
-    async def insert_user_notifications(self, user_id: int,
-                                        notification_type: str, 
-                                        notification_title: str,
-                                        notification_content: str,
-                                        is_read: bool = False) -> bool:
+    async def insert_user_notifications(self, insert_data: TableUserNotificationsInsertSchema) -> bool:
         """
         插入 user_notifications 表
 
-        :param user_id: 用户ID
-        :param notification_type: 通知类型
-        :param notification_title: 通知标题
-        :param notification_content: 通知内容
+        :param insert_data: TableUserNotificationsInsertSchema 对象，包含以下字段：
+                user_id: 用户ID
+                notification_type: 通知类型
+                notification_title: 通知标题
+                notification_content: 通知内容
         
         :param is_read: 是否已读
         """
-        data = {
-            "user_id": user_id,
-            "notification_type": notification_type,
-            "notification_title": notification_title,
-            "notification_content": notification_content,
-            "is_read": is_read
-        }
+        table = "user_notifications"
+        # 清洗数据
+        data = filter_writable_fields(
+            schema=insert_data,
+            allowed_fields=get_allowed_fields(table=table, action="insert")
+        )
+        
+        # 执行插入
+        return await self.mysql_helper.insert_one(table=table, data=data,
+                                     success_msg=f"Inserted user notification.User id: {insert_data.user_id}",
+                                     warning_msg=f"User notification insert may have failed.User id: {insert_data.user_id}",
+                                     error_msg=f"Insert error.User id: {insert_data.user_id}")
 
-        return await self.mysql_helper.insert_one(table="user_notifications", data=data,
-                                     success_msg=f"Inserted user notification.User id: {user_id}",
-                                     warning_msg=f"User notification insert may have failed.User id: {user_id}",
-                                     error_msg=f"Insert error.User id: {user_id}")
 
-
-    async def insert_user_files(self, user_id: int, 
-                                file_path: str, 
-                                file_name: str,
-                                file_type: str, 
-                                file_size: int,
-                                upload_time: datetime, 
-                                is_deleted: bool = False) -> bool:
+    async def insert_user_files(self, insert_data: TableUserFilesInsertSchema) -> bool:
         """
         插入 user_files
 
-        :param user_id: 用户ID
-        :param file_path: 文件路径
-        :param file_name: 文件名
-        :param file_type: 文件类型
-        :param file_size: 文件大小
-        :param upload_time: 上传时间        
-        :param is_deleted: 是否已删除(非必须)
+        :param insert_data: TableUserFilesInsertSchema 对象，包含以下字段：
+                user_id: 用户ID
+                file_path: 文件路径
+                file_name: 文件名
+                file_type: 文件类型
+                file_size: 文件大小
+                upload_time: 上传时间        
+                is_deleted: 是否已删除(非必须)
 
         :return: 插入是否成功
         """
+        table = "user_files"
+        # 清洗数据
+        data = filter_writable_fields(
+            schema=insert_data,
+            allowed_fields=get_allowed_fields(table=table, action="insert")
+        )
         
-        data = {
-            "user_id": user_id,
-            "file_path": file_path,
-            "file_name": file_name,
-            "file_type": file_type,
-            "upload_time": upload_time,
-            "file_size": file_size,
-            "is_deleted": is_deleted
-        }
-        return await self.mysql_helper.insert_one(table="user_files", data=data,
-                            success_msg=f"Inserted user files.User id: {user_id}",
-                            warning_msg=f"User files insert may have failed.User id: {user_id}",
-                            error_msg=f"Insert error.User id: {user_id}")
+        # 执行插入
+        return await self.mysql_helper.insert_one(table=table, data=data,
+                            success_msg=f"Inserted user files.User id: {insert_data.user_id}",
+                            warning_msg=f"User files insert may have failed.User id: {insert_data.user_id}",
+                            error_msg=f"Insert error.User id: {insert_data.user_id}")
      
     # ------------------------------------------------------------------------------------------------
     # 功能函数---更新表项目
     # ------------------------------------------------------------------------------------------------
-    async def update_users(self, user_id: int,
-                           status: Optional[str] = None,
-                           password_hash: Optional[str] = None,
-                           last_login_time: Optional[str] = None,
-                           last_login_ip: Optional[str] = None,
-                           session_token: Optional[str] = None) -> bool:
+    async def update_users(self, update_data: TableUsersUpdateSchema) -> bool:
         """
         更新 users 表
 
-        :param user_id: 用户id
-        :param status: 用户状态
-        :param password_hash: 用户密码哈希
-        :param last_login_time: 用户最后登录时间
-        :param last_login_ip: 用户最后登录IP
-        :param session_token: 用户会话令牌
+        :param update_data: TableUsersUpdateSchema 对象，可能包含以下任意字段：
+                user_id: 用户id(必须，定位用，实际不更新)  
+                status: 用户状态
+                password_hash: 用户密码哈希
+                last_login_time: 用户最后登录时间
+                last_login_ip: 用户最后登录IP
+                session_token: 用户会话令牌
 
         :return: 更新是否成功
         """
+        table = "users"
+        # 清洗数据
+        data = filter_writable_fields(
+            schema=update_data,
+            allowed_fields=get_allowed_fields(table=table, action="update")
+        )
 
-        if status is None and password_hash is None and last_login_time is None and last_login_ip is None and session_token is None:
-            self.logger.warning(f"Nothing to update in user_settings for user_id: {user_id}.")
-            return False
-        
-        data = {}
-        
-        if status is not None:
-            data["status"] = status
-
-        if password_hash is not None:
-            data["password_hash"] = password_hash
-
-        if last_login_time is not None:
-            data["last_login_time"] = last_login_time
-
-        if last_login_ip is not None:
-            data["last_login_ip"] = last_login_ip
-
-        if session_token is not None:
-            data["session_token"] = session_token
-
-        return await self.mysql_helper.update_one(table="users", data=data,
+        # 执行更新
+        return await self.mysql_helper.update_one(table=table, data=data,
                                         where_conditions=["user_id = %s", "status != %s"],
-                                        where_values=[user_id, "deleted"],
+                                        where_values=[update_data.user_id, "deleted"],
                                         success_msg=f"Updated user info.",
                                         warning_msg=f"User info update may have failed.",
                                         error_msg=f"Update error.")
     
 
-    async def update_user_profile(self, user_id: int,
-                                    user_name: Optional[str] = None,
-                                    profile_picture_url: Optional[str] = None,
-                                    signature: Optional[str] = None) -> bool:
+    async def update_user_profile(self, update_data: TableUserProfileUpdateSchema) -> bool:
         """
         更新 user_profile 表
 
-        :param user_id: 用户ID
-        :param user_name: 用户名
-        :param profile_picture_url: 用户头像URL
-        :param signature: 用户签名
+        :param update_data: TableUserProfileUpdateSchema 对象，可能包含以下任意字段：
+                user_id: 用户ID(必须，定位用，实际不更新)  
+                user_name: 用户名
+                profile_picture_url: 用户头像URL
+                signature: 用户签名
 
         :return: 更新是否成功
         """
+        table = "user_profile"
+        # 清洗数据
+        data = filter_writable_fields(
+            schema=update_data,
+            allowed_fields=get_allowed_fields(table=table, action="update")
+        )
 
-        if user_name is None and profile_picture_url is None and signature is None:
-            self.logger.warning(f"Nothing to update in user_profile for user_id: {user_id}.")
-            return False
-        
-        data = {}
-        
-        if user_name is not None:
-            data["user_name"] = user_name
-            
-        if profile_picture_url is not None:
-            data["profile_picture_url"] = profile_picture_url
-            
-        if signature is not None:
-            data["signature"] = signature
-
-        return await self.mysql_helper.update_one(table="user_profile", data=data,
+        # 执行更新
+        return await self.mysql_helper.update_one(table=table, data=data,
                                                    where_conditions=["user_id = %s"],
-                                                   where_values=[user_id],
-                                                   success_msg=f"Updated user profile.User id: {user_id}",
-                                                   warning_msg=f"User profile update may have failed.User id: {user_id}",
-                                                   error_msg=f"Update error.User id: {user_id}")
+                                                   where_values=[update_data.user_id],
+                                                   success_msg=f"Updated user profile.User id: {update_data.user_id}",
+                                                   warning_msg=f"User profile update may have failed.User id: {update_data.user_id}",
+                                                   error_msg=f"Update error.User id: {update_data.user_id}")
    
    
     # user_login_logs不应该修改
     
    
-    async def update_user_settings(self, user_id: int, 
-                                   language: str | None = None,
-                                   configure : Dict | None = None,
-                                   notification_setting: Dict | None = None) -> bool:
+    async def update_user_settings(self, update_data: TableUserSettingsUpdateSchema) -> bool:
         """
         更新 user_settings（仅更新传入的字段）
-
-        :param user_id: 用户ID
-        :param language: 语言设置
-        :param configure: 用户配置
-        :param notification_setting: 通知设置
-
-        :return: 更新是否成功
-        """
-        if language is None and notification_setting is None and configure is None:
-            self.logger.warning(f"Nothing to update in user_settings for user_id: {user_id}.")
-            return False
-        
-        data = {}
-        
-        if language is not None:
-            data["language"] = language
-        
-        if notification_setting is not None:
-            data["notification_setting"] = notification_setting
-
-        if configure is not None:
-            data["configure"] = configure
-
-        return await self.mysql_helper.update_one(table="users", data=data,
-                                      where_conditions=["user_id = %s"],
-                                      where_values=[user_id],
-                                      success_msg=f"Updated user settings. User id: {user_id}",
-                                      warning_msg=f"User settings update may have failed. User id: {user_id}",
-                                      error_msg=f"Update error. User id: {user_id}")
-
-
-    async def update_user_account_actions(self, user_id: int,
-                                          action_type: str,
-                                          action_detail: str) -> bool:
-        """
-        更新用户的账户操作记录
-
-        :param user_id: 用户ID
-        :param action_type: 用户操作类型
-        :param action_detail: 用户操作详情
+        :param update_data: TableUserSettingsUpdateSchema 对象，可能包含以下任意字段：
+            user_id: 用户ID(必须，定位用，实际不更新)  
+            language: 语言设置
+            configure: 用户配置
+            notification_setting: 通知设置
 
         :return: 更新是否成功
         """
-        
-        data = {
-            "action_type": action_type,
-            "action_detail": action_detail
-        }
+        table = "user_settings"
+        # 清洗数据
+        data = filter_writable_fields(
+            schema=update_data,
+            allowed_fields=get_allowed_fields(table=table, action="update")
+        )
 
-        return await self.mysql_helper.update_one(table="user_account_actions", data=data,
+        # 执行更新
+        return await self.mysql_helper.update_one(table=table, data=data,
                                       where_conditions=["user_id = %s"],
-                                      where_values=[user_id],
-                                      success_msg=f"Updated user account actions. User id: {user_id}",
-                                      warning_msg=f"User account actions update may have failed. User id: {user_id}",
-                                      error_msg=f"Update error. User id: {user_id}")
+                                      where_values=[update_data.user_id],
+                                      success_msg=f"Updated user settings. User id: {update_data.user_id}",
+                                      warning_msg=f"User settings update may have failed. User id: {update_data.user_id}",
+                                      error_msg=f"Update error. User id: {update_data.user_id}")
 
 
-    async def update_user_notifications(self, user_id: int, is_read: bool) -> bool:
+    async def update_user_notifications(self, update_data: TableUserNotificationsUpdateSchema) -> bool:
         """
         更新用户的通知状态
-
-        :param user_id: 用户ID
-        :param is_read: 是否已读
+        :param update_data: TableUserNotificationsUpdateSchema 对象，可能包含以下任意字段：
+                notification_id: 用户ID(必须，定位用，实际不更新) 
+                is_read: 是否已读
 
         :return: 更新是否成功
         """
+        table = "user_notifications"
+        # 清洗数据
+        data = filter_writable_fields(
+            schema=update_data,
+            allowed_fields=get_allowed_fields(table=table, action="update")
+        )
 
-        data = {"is_read": is_read}
-
-        return await self.mysql_helper.update_one(table="user_notifications", data=data,
-                                      where_conditions=["user_id = %s"],
-                                      where_values=[user_id],
-                                      success_msg=f"Updated user notifications. User id: {user_id}",
-                                      warning_msg=f"User notifications update may have failed. User id: {user_id}",
-                                      error_msg=f"Update error. User id: {user_id}")
+        # 执行更新
+        return await self.mysql_helper.update_one(table=table, data=data,
+                                      where_conditions=["notification_id= %s"],
+                                      where_values=[update_data.notification_id],
+                                      success_msg=f"Updated user notifications. Notification id: {update_data.notification_id}",
+                                      warning_msg=f"User notifications update may have failed. Notification id: {update_data.notification_id}",
+                                      error_msg=f"Update error. Notification id: {update_data.notification_id}")
        
 
-    async def update_user_files(self, user_id: int,
-                                file_path: Optional[str] = None,
-                                file_name: Optional[str] = None,
-                                file_type: Optional[str] = None,
-                                file_size: Optional[int] = None,
-                                is_deleted: Optional[bool] = None) -> bool:
+    async def update_user_files(self, update_data: TableUserFilesUpdateSchema) -> bool:
         """
         更新 user_files（仅更新传入的字段）
 
-        :param user_id: 用户ID
-        :param file_path: 文件路径
-        :param file_name: 文件名
-        :param file_type: 文件类型
-        :param file_size: 文件大小
-        :param is_deleted: 是否已删除
+        :param update_data: TableUserFilesUpdateSchema 对象，可能包含以下任意字段：
+                file_id: 文件ID(必须，定位用，实际不更新) 
+                file_path: 文件路径
+                file_name: 文件名
+                file_type: 文件类型
+                file_size: 文件大小
+                is_deleted: 是否已删除
         
         :return: 更新是否成功
         """
-        if file_path is None and file_name is None and file_type is None and file_size is None and is_deleted is None:
-            self.logger.warning(f"No fields provided to update for user_id: {user_id}")
-            return False
+        table = "user_files"
+        # 清洗数据
+        data = filter_writable_fields(
+            schema=update_data,
+            allowed_fields=get_allowed_fields(table=table, action="update")
+        )
 
-        data = {}
-        
-        if file_path is not None:
-            data["file_path"] = file_path
-
-        if file_name is not None:
-            data["file_name"] = file_name
-
-        if file_type is not None:
-            data["file_type"] = file_type
-
-        if file_size is not None:
-            data["file_size"] = file_size
-
-        if is_deleted is not None:
-            data["is_deleted"] = is_deleted
-
-        return await self.mysql_helper.update_one(table="user_files", data=data,
-                                      where_conditions=["user_id = %s"],
-                                      where_values=[user_id],
-                                      success_msg=f"Updated user files. User id: {user_id}",
-                                      warning_msg=f"User files update may have failed. User id: {user_id}",
-                                      error_msg=f"Update error. User id: {user_id}")
+        # 执行更新
+        return await self.mysql_helper.update_one(table=table, data=data,
+                                      where_conditions=["file_id = %s"],
+                                      where_values=[update_data.file_id],
+                                      success_msg=f"Updated user files. File id: {update_data.file_id}",
+                                      warning_msg=f"User files update may have failed. File id: {update_data.file_id}",
+                                      error_msg=f"Update error. File id: {update_data.file_id}")
 
     
     # ------------------------------------------------------------------------------------------------
@@ -826,8 +756,7 @@ class UserAccountDataBaseAgent():
                                                   where_values=[user_id])
 
     
-    async def insert_new_user(self, account: str, email: str,
-                                   password_hash: str, user_name: str) -> Optional[int]:
+    async def insert_new_user(self, account: str, email: str, password_hash: str, user_name: str) -> Optional[int]:
         """
         插入用户注册信息所有表。
             1. users 表
@@ -849,16 +778,20 @@ class UserAccountDataBaseAgent():
         file_folder_path = f"Users/Files/{user_uuid}/"
         
         # 开启事务
-        
+        # TODO: 这里可以考虑使用事务来确保数据一致性
         
         # 1. 插入 users 表
+        # 构建插入数据
+        insert_data_users = TableUsersInsertSchema(
+            user_uuid=user_uuid,
+            account=account,
+            email=email,
+            password_hash=password_hash,
+            file_folder_path=file_folder_path
+        )  
+        
         try:
-            user_id = await self.insert_users(user_uuid=user_uuid, 
-                                              account=account, 
-                                              email=email,
-                                              password_hash=password_hash,
-                                              user_name=user_name,
-                                              file_folder_path=file_folder_path)
+            user_id = await self.insert_users(insert_data=insert_data_users)
         except Exception as e:
             self.logger.error(f"Insert users Failed. Error: {e}")
             return None
@@ -869,12 +802,17 @@ class UserAccountDataBaseAgent():
             self.logger.warning(f"Insert users Failed. user_id: {user_id}")
             return None
         
-        
         # 2. 插入 user_profile 表（使用默认头像）
+        # 构建插入数据
+        insert_data_user_profile = TableUserProfileInsertSchema(
+            user_id=user_id,  # 这里使用上面插入成功的 user_id
+            user_name=user_name,
+            profile_picture_path=None,  # 默认头像
+            signature=""  # 默认签名为空
+        )
+        
         try:
-            res_insert_user_profile = await self.insert_user_profile(
-                                user_id=user_id, 
-                                user_name=user_name)
+            res_insert_user_profile = await self.insert_user_profile(insert_data=insert_data_user_profile)
         except Exception as e:
             self.logger.error(f"Insert user profile Failed. Error: {e}")
             return None
@@ -887,8 +825,19 @@ class UserAccountDataBaseAgent():
         
         
         # 3. 插入 user_settings 表 (使用默认配置)
+        # 构建插入数据
+        insert_data_user_settings = TableUserSettingsInsertSchema(
+            user_id=user_id,
+            language=UserLanguage.zh,  # 默认语言
+            configure={},  # 默认配置为空
+            notification_setting={
+                "notifications_enabled": True,# TODO 待在表中增加字段，到时候修改
+                "settings_json": {}
+            }  # 默认通知设置
+        )
+        
         try:
-            res_insert_user_settings = await self.insert_user_settings(user_id=user_id)
+            res_insert_user_settings = await self.insert_user_settings(insert_data=insert_data_user_settings)
         except Exception as e:
             self.logger.error(f"Insert user settings Failed. Error: {e}")
             return None
@@ -899,7 +848,7 @@ class UserAccountDataBaseAgent():
             self.logger.warning(f"User settings insert may have failed. User ID: {user_id}")
             return None
  
-
+    # TODO 待修改，是否需要统一接口参数为 TableUsersInsertSchema?
     async def update_user_password_by_user_id(self, user_id: int, new_password_hash: str) -> bool:
             """
             根据 user_id 更新用户密码哈希。

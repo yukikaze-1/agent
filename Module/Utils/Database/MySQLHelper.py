@@ -33,8 +33,7 @@ class MySQLHelper:
         self.db_connect_id = db_connect_id
         self.client = client
         
-    # ---------------------- 生成 sql语句 函数 ----------------------
-    
+    # ---------------------- 生成 sql语句 函数 ----------------------       
     def build_insert_sql(self, table: str, data: Dict) -> tuple[str, list]:
         """
         构造通用 INSERT SQL 语句
@@ -254,7 +253,6 @@ class MySQLHelper:
             return None
         
     # ---------------------- 封装操作函数 ----------------------
-        
     async def insert_one(self, table: str, data: Dict,
                      success_msg: str = "Insert Success", warning_msg: str = "Insert Warning.",
                      error_msg: str = "Insert Error.") -> bool:

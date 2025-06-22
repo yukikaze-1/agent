@@ -9,7 +9,7 @@
 """
 
 from enum import StrEnum
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Set, Literal
 from pydantic import BaseModel, EmailStr, Field, model_validator, field_validator, IPvAnyAddress, IPv4Address, IPv6Address
 from datetime import datetime
 from pathlib import Path
@@ -18,42 +18,75 @@ from pydantic_core import PydanticCustomError
 """
     pydantic层面的设计：
     
-        所有的 InsertRequest 和 UpdateRequest 的字段集合都是数据库中的 表 的字段 的真子集。
+        所有的 InsertSchema 和 UpdateSchema 的字段集合都是数据库中的 表 的字段 的真子集。
         
         insert 有insert的白名单
         update 有update的白名单
         
-        InsertRequest：
-            1. 在InsertRequest中的所有字段均必须手动赋值，没有默认值。
-            2. 在InsertRequest中没有，但是在表中有的字段表示：
+        InsertSchema：
+            1. 在InsertSchema中的所有字段均必须手动赋值，没有默认值。
+            2. 在InsertSchema中没有，但是在表中有的字段表示：
                 a. 该字段只能由数据库自动插入（这些字段都在数据库层面由默认值）。eg. 每张表的created_at字段，有默认值DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP。
                 b. 插入时无需赋值且默认为NULL 且 更新时可以更新的字段。eg. users表中的last_login_time和last_login_ip
             
-        UpdateRequest:
-            1. 在UpdateRequest中的所有字段值均可以为None，但不能同时全部为None。
-            2. 在UpdateRequest中值为None的字段表示不更新该字段。具体转换在构建update sql语句时进行(跳过值为None的字段)。
-            3. 在UpdateRequest中某些字段需要进行格式校验。eg. users表中的file_folder_path字段。
-            4. 在表中有但在UpdateRequest中没有的字段表示：
+        UpdateSchema:
+            1. 在UpdateSchema中的所有字段值均可以为None，但不能同时全部为None。
+            2. 在UpdateSchema中值为None的字段表示不更新该字段。具体转换在构建update sql语句时进行(跳过值为None的字段)。
+            3. 在UpdateSchema中某些字段需要进行格式校验。eg. users表中的file_folder_path字段。
+            4. 在表中有但在UpdateSchema中没有的字段表示：
                 a. 该字段只能由数据库进行更新。eg.每张表的updated_at字段。
             5. 
             
-        Response:
+        Schema:
             1. 所有表的所有字段均会被返回
             2. 某些表的某些字段可能会返回None，代表该字段值为NULL。eg. users表的last_login_time和last_login_ip之类的字段。
             3. 
 """
 
 # 字段过滤
+def get_allowed_fields(table: str, action: Literal['insert', 'update', 'delete', 'query']) -> set[str]:
+    """ 
+    获取指定表和操作的允许字段集合
+    
+    :param table: 表名
+    :param action: 操作类型
+    :type action: Literal['insert', 'update', 'delete', 'query']
+    :return: 允许的字段集合
+    """
+    if action not in {'insert', 'update', 'delete', 'query'}:
+        raise ValueError(f"Unsupported action: '{action}'. Must be one of <'insert', 'update', 'delete', 'query'>")
+    return SQL_REQUEST_ALLOWED_FIELDS.get(table, {}).get(action, set())
+
+
+def filter_writable_fields(schema: BaseModel, allowed_fields: Set[str]) -> dict:
+    """
+    过滤出可用于 SQL 写入的字段。
+    
+    - 跳过为 None 的字段（用于 insert 或 update）
+    - 跳过未在白名单中的字段
+    
+    :pram schema: pydantic BaseModel 实例
+    :param allowed_fields: 允许的字段集合
+    
+    :return: 过滤后的字典，包含允许的字段及其值
+    """
+    return {
+        key: value
+        for key, value in schema.model_dump(exclude_unset=True).items()
+        if key in allowed_fields and value is not None
+    }
+
+
 SQL_REQUEST_ALLOWED_FIELDS = {
     "users": {
-        "insert": {"user_uuid", "status", "account", "password_hash", "email", "file_folder_path"},
-        "update": {"status", "password_hash", "last_login_ip", "last_login_ip", "session_token", "deleted_at"}
-    },
+        "insert": {"user_uuid", "account", "password_hash", "email", "file_folder_path"},
+        "update": {"user_id", "status", "password_hash", "last_login_ip", "last_login_ip", "session_token", "deleted_at"}
+    }, # update中有user_id是因为需要user_id来定位更新的位置,并不会实际更新
     
     "user_profile": {
-        "insert": {"user_name", "profile_picture_path", "signature"},
-        "update": {"user_name", "profile_picture_path", "signature"}
-    },
+        "insert": {"user_id", "user_name", "profile_picture_path", "signature"},
+        "update": {"user_id", "user_name", "profile_picture_path", "signature"}
+    }, # update中有user_id是因为需要user_id来定位更新的位置,并不会实际更新
     
     "user_login_logs": {
         "insert": {"user_id", "login_time", "ip_address", "agent", "device", "os", "login_success"},
@@ -62,8 +95,8 @@ SQL_REQUEST_ALLOWED_FIELDS = {
     
     "user_settings": {
         "insert": {"user_id", "language", "configure", "notification_setting"},
-        "update": {"language", "configure", "notification_setting"}
-    },
+        "update": {"user_id", "language", "configure", "notification_setting"}
+    }, # update中有user_id是因为需要user_id来定位更新的位置,并不会实际更新
     
     "user_account_actions": {
         "insert": {"user_id", "action_type", "action_detail"},
@@ -72,18 +105,18 @@ SQL_REQUEST_ALLOWED_FIELDS = {
     
     "user_notifications": {
         "insert": {"user_id", "notification_type", "notification_title", "notification_content", "is_read"},
-        "update": {"notification_type", "notification_title", "notification_content", "is_read"}
-    },
+        "update": {"notification_id", "notification_type", "notification_title", "notification_content", "is_read"}
+    }, # update中有notification_id是因为需要notification_id来定位更新的位置,并不会实际更新
     
     "user_files": {
         "insert": {"user_id", "file_name", "file_path", "file_type", "file_size", "upload_time", "is_deleted"},
-        "update": {"file_name", "file_path", "file_size", "file_type", "upload_time", "is_deleted"}
-    },
+        "update": {"file_id", "file_name", "file_path", "file_size", "file_type", "upload_time", "is_deleted"}
+    }, # update中有file_id是因为需要file_id来定位更新的位置,并不会实际更新
     
     "conversations": {
         "insert": {"user_id", "title", "message_count"},
         "update": {"title", "message_count"}
-    },
+    }, # TODO 还没实现
     
     "conversation_messages": {
         "insert": {"conversation_id", "user_id", "sender_role", "message_type", "parent_message_id", "content", "token_count"},
@@ -144,8 +177,8 @@ class UserStatus(StrEnum):
     deleted = "deleted"
     
 
-class TableUsersResponse(StrictBaseModel):
-    """ 用户主表 Response"""
+class TableUsersSchema(StrictBaseModel):
+    """ 用户主表 Schema"""
     user_id: int = Field(..., description="用户内部ID（主键）")
     user_uuid: str = Field(..., description="用户UUID")
     status: UserStatus = Field(..., description="用户状态")
@@ -159,14 +192,13 @@ class TableUsersResponse(StrictBaseModel):
     created_at: datetime = Field(..., description="创建时间")
     updated_at: datetime = Field(..., description="修改时间")
     deleted_at: datetime | None = Field(..., description="删除时间")
-    # Response的file_folder_path不需要校验。但是在request中的需要校验
+    # Schema的file_folder_path不需要校验。但是在request中的需要校验
     
     
 
-class TableUsersInsertRequest(StrictBaseModel):
-    """ 用户主表 Insert Request """
+class TableUsersInsertSchema(StrictBaseModel):
+    """ 用户主表 Insert Schema """
     user_uuid: str = Field(..., min_length=36, max_length=36, description="用户UUID")
-    status: UserStatus = Field(default=UserStatus.inactive, description="用户状态")
     account: str = Field(..., min_length=4, max_length=256, description="用户账号")
     password_hash: str = Field(..., min_length=6, max_length=256, description="密码哈希值")
     email: EmailStr = Field(..., description="用户邮箱")
@@ -192,8 +224,9 @@ class TableUsersInsertRequest(StrictBaseModel):
         return normalized  # 返回标准化字符串
     
     
-class TableUsersUpdateRequest(StrictBaseModel):
-    """ 用户主表 Update Request """
+class TableUsersUpdateSchema(StrictBaseModel):
+    """ 用户主表 Update Schema """
+    user_id: int = Field(..., description="用户内部ID（主键）") # 因为是更新，需要user_id来定位更新的位置
     status: UserStatus | None = Field(default=None, description="用户状态")
     password_hash: str | None = Field(default=None, min_length=6, max_length=256, description="密码哈希值")
     last_login_time: datetime | None = Field(default=None, description="最后登录时间")
@@ -202,7 +235,7 @@ class TableUsersUpdateRequest(StrictBaseModel):
     deleted_at: datetime | None = Field(default=None, description="删除时间")
 
     @model_validator(mode="after")
-    def at_least_one_field_must_be_present(self) -> 'TableUsersUpdateRequest':
+    def at_least_one_field_must_be_present(self) -> 'TableUsersUpdateSchema':
         if not ( self.status or self.password_hash or  self.last_login_time or self.last_login_ip or self.session_token or self.deleted_at):
             raise ValueError("至少需要提供一个要更新的字段（status、password_hash、last_login_time、last_login_ip、session_token、deleted_at）")
         return self
@@ -249,8 +282,8 @@ CREATE TABLE user_profile (
 );
 
 """
-class TableUserProfileResponse(StrictBaseModel):
-    """ 用户扩展资料 Response"""
+class TableUserProfileSchema(StrictBaseModel):
+    """ 用户扩展资料 Schema"""
     user_id: int = Field(..., description="用户ID（主键+外键）")
     user_name: str = Field(..., description="用户名")
     profile_picture_path: str = Field(..., description="头像URL地址")
@@ -258,11 +291,12 @@ class TableUserProfileResponse(StrictBaseModel):
     created_at: datetime = Field(..., description="创建时间")
     updated_at: datetime = Field(..., description="修改时间")
     profile_picture_updated_at: datetime = Field(..., description="头像URL地址修改时间")
-    # Response的profile_picture_path不需要校验。但是在request中的需要校验
+    # Schema的profile_picture_path不需要校验。但是在request中的需要校验
 
 
-class TableUserProfileInsertRequest(StrictBaseModel):
-    """  用户扩展资料 Insert Request """
+class TableUserProfileInsertSchema(StrictBaseModel):
+    """  用户扩展资料 Insert Schema """
+    user_id: int = Field(..., description="用户ID（主键+外键）")
     user_name: str = Field(..., min_length=1, max_length=256, description="用户名")
     profile_picture_path: str | None = Field(default=None, description="头像URL地址")
     signature: str | None = Field(default=None,max_length=256, description="用户个性签名")
@@ -288,8 +322,9 @@ class TableUserProfileInsertRequest(StrictBaseModel):
         return normalized
     
 
-class TableUserProfileUpdateRequest(StrictBaseModel):
-    """  用户扩展资料 Update Request """
+class TableUserProfileUpdateSchema(StrictBaseModel):
+    """  用户扩展资料 Update Schema """
+    user_id: int = Field(..., description="用户ID（主键+外键）")# 因为是更新，需要user_id来定位更新的位置
     user_name: str | None = Field(default=None, min_length=1, max_length=256, description="用户名")
     profile_picture_path: str | None = Field(default=None, description="头像URL地址")
     signature: str | None = Field(default=None, max_length=256, description="用户个性签名")
@@ -312,7 +347,7 @@ class TableUserProfileUpdateRequest(StrictBaseModel):
         return normalized
     
     @model_validator(mode="after")
-    def at_least_one_field_must_be_present(self) -> 'TableUserProfileUpdateRequest':
+    def at_least_one_field_must_be_present(self) -> 'TableUserProfileUpdateSchema':
         if not (self.user_name or self.profile_picture_path or self.signature):
             raise ValueError("至少需要提供一个要更新的字段（用户名(user_name)、头像URL(profile_picture_path)或签名(signature)）")
         return self
@@ -352,7 +387,7 @@ CREATE TABLE user_login_logs (
 
 """
 
-class TableUserLoginLogsResponse(StrictBaseModel):
+class TableUserLoginLogsSchema(StrictBaseModel):
     """ 用户登录日志 """
     login_id: int = Field(..., description="日志ID（主键）")
     user_id: int = Field(..., description="用户ID（外键）")
@@ -366,8 +401,8 @@ class TableUserLoginLogsResponse(StrictBaseModel):
     updated_at: datetime = Field(..., description="修改时间")
 
 
-class TableUserLoginLogsInsertRequest(StrictBaseModel):
-    """ 用户登录日志 Insert Request """
+class TableUserLoginLogsInsertSchema(StrictBaseModel):
+    """ 用户登录日志 Insert Schema """
     user_id: int = Field(..., description="用户ID（外键）")
     ip_address: IPvAnyAddress = Field(..., description="登录IP地址")
     agent: str = Field(..., description="浏览器代理")
@@ -410,7 +445,7 @@ class UserLanguage(StrEnum):
     jp = "jp"
     
 
-class TableUserSettingsResponse(StrictBaseModel):
+class TableUserSettingsSchema(StrictBaseModel):
     """ 用户自定义设置 """
     user_id: int = Field(..., description="用户ID（主键+外键）")
     language: UserLanguage = Field(..., description="用户语言偏好")
@@ -420,22 +455,23 @@ class TableUserSettingsResponse(StrictBaseModel):
     updated_at: datetime = Field(..., description="修改时间")
 
 
-class TableUserSettingsInsertRequest(StrictBaseModel):
-    """ 用户自定义设置 Insert Request """
+class TableUserSettingsInsertSchema(StrictBaseModel):
+    """ 用户自定义设置 Insert Schema """
     user_id: int = Field(..., description="用户ID（主键+外键）")
     language: UserLanguage = Field(..., description="用户语言偏好")
     configure: dict = Field(..., description="用户配置")
     notification_setting: dict = Field(..., description="用户通知设置")
     
     
-class TableUserSettingsUpdateRequest(StrictBaseModel):
-    """ 用户自定义设置 Update Request """
+class TableUserSettingsUpdateSchema(StrictBaseModel):
+    """ 用户自定义设置 Update Schema """
+    user_id: int = Field(..., description="用户ID（主键+外键）")# 因为是更新，需要user_id来定位更新的位置
     language: UserLanguage | None = Field(default=None, description="用户语言偏好")
     configure: dict | None = Field(default=None, description="用户配置")
     notification_setting: dict | None = Field(default=None, description="用户通知设置")
     
     @model_validator(mode="after")
-    def at_least_one_field_must_be_present(self) -> 'TableUserSettingsUpdateRequest':
+    def at_least_one_field_must_be_present(self) -> 'TableUserSettingsUpdateSchema':
         if not (self.language or self.configure or self.notification_setting):
             raise ValueError("至少需要提供一个要更新的字段（language、configure或notification_setting）")
         return self
@@ -475,7 +511,7 @@ class UserAccountActionType(StrEnum):
     account_deletion = "account_deletion"
     
 
-class TableUserAccountActionsResponse(StrictBaseModel):
+class TableUserAccountActionsSchema(StrictBaseModel):
     """ 用户账户行为 """
     action_id: int = Field(..., description="主键")
     user_id: int = Field(..., description="用户ID（外键）")
@@ -485,8 +521,8 @@ class TableUserAccountActionsResponse(StrictBaseModel):
     updated_at: datetime = Field(..., description="更新时间")
 
 
-class TableUserAccountActionsInsertRequest(StrictBaseModel):
-    """ 用户账户行为 Insert Request """
+class TableUserAccountActionsInsertSchema(StrictBaseModel):
+    """ 用户账户行为 Insert Schema """
     user_id: int = Field(..., description="用户ID（外键）")
     action_type: UserAccountActionType = Field(..., description="用户账户操作类型")
     action_detail: str = Field(..., description="用户账户操作细节")
@@ -530,8 +566,8 @@ class UserNotificationType(StrEnum):
     promotion = "promotion"
 
 
-class TableUserNotificationsResponse(StrictBaseModel):
-    """ 用户通知与消息 Response"""
+class TableUserNotificationsSchema(StrictBaseModel):
+    """ 用户通知与消息 Schema"""
     notification_id: int = Field(..., description="通知ID（主键）")
     user_id: int = Field(..., description="用户ID（外键）")
     notification_type: UserNotificationType = Field(..., description="通知类型")
@@ -542,8 +578,8 @@ class TableUserNotificationsResponse(StrictBaseModel):
     updated_at: datetime = Field(..., description="更新时间")
 
 
-class TableUserNotificationsInsertRequest(StrictBaseModel):
-    """ 用户通知与消息 Insert Request """
+class TableUserNotificationsInsertSchema(StrictBaseModel):
+    """ 用户通知与消息 Insert Schema """
     user_id: int = Field(..., description="用户ID（外键）")
     notification_type: UserNotificationType = Field(..., description="通知类型")
     notification_title: str = Field(..., description="通知标题")
@@ -551,15 +587,16 @@ class TableUserNotificationsInsertRequest(StrictBaseModel):
     is_read: bool = Field(..., description="是否已读")
 
 
-class TableUserNotificationsUpdateRequest(StrictBaseModel):
-    """ 用户通知与消息 Update Request """
+class TableUserNotificationsUpdateSchema(StrictBaseModel):
+    """ 用户通知与消息 Update Schema """
+    notification_id: int = Field(..., description="通知ID（主键）")# 因为是更新，需要notification_id来定位更新的位置
     notification_type: UserNotificationType | None = Field(default=None, description="通知类型")
     notification_title: str | None = Field(default=None, description="通知标题")
     notification_content: str | None = Field(default=None, description="通知内容")
     is_read: bool | None = Field(default=None, description="是否已读")
     
     @model_validator(mode="after")
-    def at_least_one_field_must_be_present(self) -> 'TableUserNotificationsUpdateRequest':
+    def at_least_one_field_must_be_present(self) -> 'TableUserNotificationsUpdateSchema':
         if not (self.notification_type or self.notification_title or self.notification_content or self.is_read):
             raise ValueError("至少需要提供一个要更新的字段（notification_type、notification_title、notification_content或is_read）")
         return self
@@ -599,9 +636,9 @@ CREATE TABLE user_files (
 """
 # TODO file type是否需要一个单独的enum class?
 
-class TableUserFilesResponse(StrictBaseModel):
+class TableUserFilesSchema(StrictBaseModel):
     """ 用户文件 """
-    file_id: int = Field(..., description="文件ID")
+    file_id: int = Field(..., description="文件ID（主键）")
     user_id: int = Field(..., description="用户ID（外键）")
     file_name: str = Field(..., description="原始文件名")
     file_path: str = Field(..., description="文件相对路径")
@@ -613,8 +650,8 @@ class TableUserFilesResponse(StrictBaseModel):
     updated_at: datetime = Field(..., description="更新时间")
 
 
-class TableUserFilesInsertRequest(StrictBaseModel):
-    """ 用户文件 Insert Request """
+class TableUserFilesInsertSchema(StrictBaseModel):
+    """ 用户文件 Insert Schema """
     user_id: int = Field(..., description="用户ID（外键）")
     file_path: str = Field(..., min_length=1, max_length=512, description="文件相对路径")
     file_name: str = Field(..., min_length=1, max_length=256, description="原始文件名")
@@ -624,8 +661,9 @@ class TableUserFilesInsertRequest(StrictBaseModel):
     is_deleted: bool = Field(..., description="是否删除")
     
     
-class TableUserFilesUpdateRequest(StrictBaseModel):
-    """ 用户文件 Update Request """
+class TableUserFilesUpdateSchema(StrictBaseModel):
+    """ 用户文件 Update Schema """
+    file_id: int = Field(..., description="文件ID（主键）")# 因为是更新，需要file_id来定位更新的位置
     file_path: str | None = Field(default=None, min_length=1, max_length=512, description="文件相对路径")
     file_name: str | None = Field(default=None, min_length=1, max_length=256, description="原始文件名")
     file_type: str | None = Field(default=None, min_length=1, max_length=256, description="文件类型（如 .png）")
@@ -634,7 +672,7 @@ class TableUserFilesUpdateRequest(StrictBaseModel):
     is_deleted: bool | None = Field(default=None, description="是否删除")
 
     @model_validator(mode="after")
-    def at_least_one_field_must_be_present(self) -> 'TableUserFilesUpdateRequest':
+    def at_least_one_field_must_be_present(self) -> 'TableUserFilesUpdateSchema':
         if not (self.file_path or self.file_name or self.file_type or self.file_size or self.is_deleted or self.upload_time):
             raise ValueError("至少需要提供一个要更新的字段（file_path、file_name、file_type、file_size、is_deleted或upload_time）")
         return self
@@ -667,7 +705,7 @@ CREATE TABLE conversations (
 
 
 """
-class TableConversationsResponse(StrictBaseModel):
+class TableConversationsSchema(StrictBaseModel):
     """ 会话表 """
     conversation_id: int = Field(..., description="会话 ID")
     user_id: int = Field(..., description="用户内部 ID（外键）")
@@ -677,20 +715,20 @@ class TableConversationsResponse(StrictBaseModel):
     updated_at: datetime = Field(..., description="修改时间")
 
 
-class TableConversationsInsertRequest(StrictBaseModel):
-    """ 会话表 Insert Request """
+class TableConversationsInsertSchema(StrictBaseModel):
+    """ 会话表 Insert Schema """
     user_id: int = Field(..., description="用户内部 ID（外键）")
     title: str = Field(..., description="会话标题")
     message_count: int = Field(default=0, description="消息数量")
 
 
-class TableConversationsUpdateRequest(StrictBaseModel):
-    """ 会话表 Update Request """
+class TableConversationsUpdateSchema(StrictBaseModel):
+    """ 会话表 Update Schema """
     title: str | None = Field(default=None, min_length=1, max_length=256, description="会话标题")
     message_count: int | None = Field(default=None, description="消息数量")
 
     @model_validator(mode="after")
-    def at_least_one_field_must_be_present(self) -> 'TableConversationsUpdateRequest':
+    def at_least_one_field_must_be_present(self) -> 'TableConversationsUpdateSchema':
         if not (self.title or self.message_count):
             raise ValueError("至少需要提供一个要更新的字段（title、message_count）")
         return self
@@ -754,7 +792,7 @@ class SenderRole(StrEnum):
     observer = "observer"
     
 
-class TableConversationMessagesResponse(StrictBaseModel):
+class TableConversationMessagesSchema(StrictBaseModel):
     """ 会话消息表 """
     message_id: int = Field(..., description="消息 ID")
     conversation_id: int = Field(..., description="会话 ID（外键）")
@@ -768,8 +806,8 @@ class TableConversationMessagesResponse(StrictBaseModel):
 
 
 
-class TableConversationMessagesInsertRequest(StrictBaseModel):
-    """ 会话消息表 Insert Request """
+class TableConversationMessagesInsertSchema(StrictBaseModel):
+    """ 会话消息表 Insert Schema """
     conversation_id: int = Field(..., description="会话 ID（外键）")
     user_id: int = Field(..., description="用户 ID（外键）")
     sender_role: SenderRole = Field(..., description="角色")
