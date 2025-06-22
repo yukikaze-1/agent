@@ -114,18 +114,18 @@ class MySQLAgent:
             self.logger.info("Async HTTP Client Initialized")
 
             # 注册服务到 Consul
-            # self.logger.info("Registering service to Consul...")
-            # tags = ["MySQLAgent"]
-            # await register_service_to_consul(consul_url=self.consul_url,
-            #                                  client=self.client,
-            #                                  logger=self.logger,
-            #                                  service_name=self.service_name,
-            #                                  service_id=self.service_id,
-            #                                  address=self.host,
-            #                                  port=self.port,
-            #                                  tags=tags,
-            #                                  health_check_url=self.health_check_url)
-            # self.logger.info("Service registered to Consul.")
+            self.logger.info("Registering service to Consul...")
+            tags = ["MySQLAgent"]
+            await register_service_to_consul(consul_url=self.consul_url,
+                                             client=self.client,
+                                             logger=self.logger,
+                                             service_name=self.service_name,
+                                             service_id=self.service_id,
+                                             address=self.host,
+                                             port=self.port,
+                                             tags=tags,
+                                             health_check_url=self.health_check_url)
+            self.logger.info("Service registered to Consul.")
 
             yield  # 应用正常运行
 
