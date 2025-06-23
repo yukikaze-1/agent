@@ -89,7 +89,7 @@ class MySQLAgentDeleteResponseData(BaseModel):
 
 class MySQLAgentDeleteResponse(MySQLAgentBaseResponse):
     """ SQL删除 Response """
-    data: MySQLAgentDeleteResponseData | None = Field(default=None, description="删除数据附加信息")
+    data: MySQLAgentDeleteResponseData = Field(..., description="删除数据附加信息")
     
     
     

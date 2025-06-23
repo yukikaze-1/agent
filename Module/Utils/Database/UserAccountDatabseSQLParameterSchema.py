@@ -125,7 +125,7 @@ SQL_REQUEST_ALLOWED_FIELDS = {
         "insert": {"user_id", "title", "message_count"},
         "update": {"title", "message_count"},
         "delete": {"conversation_id", "user_id"}
-    }, # TODO 还没实现
+    }, # TODO 还没实现这两张表不该放这里
     
     "conversation_messages": {
         "insert": {"conversation_id", "user_id", "sender_role", "message_type", "parent_message_id", "content", "token_count"},

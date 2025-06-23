@@ -31,27 +31,27 @@ from Module.Utils.Database.UserAccountDatabseSQLParameterSchema import (
     get_allowed_fields,
     filter_writable_fields,
     UserStatus,
-    TableUsersSchema, TableUsersInsertSchema, TableUsersUpdateSchema,
-    TableUserProfileSchema, TableUserProfileInsertSchema, TableUserProfileUpdateSchema,
-    TableUserLoginLogsSchema, TableUserLoginLogsInsertSchema,
+    TableUsersSchema, TableUsersInsertSchema, TableUsersUpdateSchema, TableUsersDeleteSchema,
+    TableUserProfileSchema, TableUserProfileInsertSchema, TableUserProfileUpdateSchema, TableUserProfileDeleteSchema,
+    TableUserLoginLogsSchema, TableUserLoginLogsInsertSchema, TableUserLoginLogsDeleteSchema,
     UserLanguage,
-    TableUserSettingsSchema, TableUserSettingsInsertSchema, TableUserSettingsUpdateSchema,
+    TableUserSettingsSchema, TableUserSettingsInsertSchema, TableUserSettingsUpdateSchema, TableUserSettingsDeleteSchema,
     UserAccountActionType,
-    TableUserAccountActionsSchema, TableUserAccountActionsInsertSchema,
+    TableUserAccountActionsSchema, TableUserAccountActionsInsertSchema, TableUserAccountActionsDeleteSchema,
     UserNotificationType,
-    TableUserNotificationsSchema, TableUserNotificationsInsertSchema, TableUserNotificationsUpdateSchema,
-    TableUserFilesSchema, TableUserFilesInsertSchema, TableUserFilesUpdateSchema,
-    TableConversationsSchema, TableConversationsInsertSchema, TableConversationsUpdateSchema,
+    TableUserNotificationsSchema, TableUserNotificationsInsertSchema, TableUserNotificationsUpdateSchema, TableUserNotificationsDeleteSchema,
+    TableUserFilesSchema, TableUserFilesInsertSchema, TableUserFilesUpdateSchema, TableUserFilesDeleteSchema,
+    TableConversationsSchema, TableConversationsInsertSchema, TableConversationsUpdateSchema, TableConversationsDeleteSchema,
     ConversationMessageType,
     SenderRole,
-    TableConversationMessagesSchema, TableConversationMessagesInsertSchema
+    TableConversationMessagesSchema, TableConversationMessagesInsertSchema, TableConversationMessagesDeleteSchema
 )
 
 from Module.Utils.Database.MySQLAgentResponseType import (
     MySQLAgentInsertResponse,
     MySQLAgentUpdateResponse,
     MySQLAgentDeleteResponse,
-    
+    MySQLAgentQueryResponse
 )
 
 
@@ -210,6 +210,26 @@ class UserAccountDataBaseAgent():
             self.logger.error(f"Connect to database '{self.database}' failed! Unexpected error: {e}")
             raise HTTPException(status_code=500, detail="Internal server error.")
         
+   
+    def extract_where_from_schema(self, schema: BaseModel, keys: List[str]) -> tuple[List[str], List[Any]]:
+        """
+        从 Pydantic 模型(xxxDeleteSchema)中提取 WHERE 条件和参数值
+
+        :param schema: Pydantic 模型实例（如 DeleteSchema）
+        :param keys: 需要构造 WHERE 条件的字段名列表
+        :return: (条件表达式列表, 参数值列表)
+        """
+        conditions = []
+        values = []
+
+        for key in keys:
+            value = getattr(schema, key)
+            if value is None:
+                raise ValueError(f"字段 {key} 不能为 None")
+            conditions.append(f"{key} = %s")
+            values.append(value)
+
+        return conditions, values
         
     # ------------------------------------------------------------------------------------------------
     # 功能函数---查询表项目
@@ -637,27 +657,111 @@ class UserAccountDataBaseAgent():
     # ------------------------------------------------------------------------------------------------
     # 功能函数---删除表项目
     # ------------------------------------------------------------------------------------------------ 
-    async def delete_users(self, 
-                           where_conditions: List[str],
-                           where_values: List[Any],
-                           success_msg: str = "Delete success.",
-                           warning_msg: str = "Delete warning.",
-                           error_msg: str = "Delete error.") -> bool:
-        return await self._delete_record(
+    async def delete_users(self, delete_data: TableUsersDeleteSchema) -> bool:
+        return await self._delete_record_by_schema(
             table="users",
+            schema=delete_data,
+            success_msg=f"删除用户成功",
+            warning_msg=f"删除用户时未命中任何记录",
+            error_msg=f"删除用户失败"
+        )
+    
+    async def delete_user_profile(self, delete_data: TableUserProfileDeleteSchema) -> bool:
+        return await self._delete_record_by_schema(
+            table="user_profile",
+            schema=delete_data,
+            success_msg=f"删除用户扩展资料成功",
+            warning_msg=f"删除用户扩展资料时未命中任何记录",
+            error_msg=f"删除用户扩展资料失败"
+        )
+        
+    async def delete_user_login_logs(self, delete_data: TableUserLoginLogsDeleteSchema) -> bool:
+        return await self._delete_record_by_schema(
+            table="user_login_logs",
+            schema=delete_data,
+            success_msg=f"删除用户登录日志成功",
+            warning_msg=f"删除用户登录日志时未命中任何记录",
+            error_msg=f"删除用户登录日志失败"
+        )
+        
+    async def delete_user_settings(self, delete_data: TableUserSettingsDeleteSchema) -> bool:
+        return await self._delete_record_by_schema(
+            table="user_settings",
+            schema=delete_data,
+            success_msg=f"删除用户设置成功",
+            warning_msg=f"删除用户设置时未命中任何记录",
+            error_msg=f"删除用户设置失败"
+        )
+        
+    async def delete_user_account_actions(self, delete_data: TableUserAccountActionsDeleteSchema) -> bool:
+        return await self._delete_record_by_schema(
+            table="user_account_actions",
+            schema=delete_data,
+            success_msg=f"删除用户账户行为成功",
+            warning_msg=f"删除用户账户行为时未命中任何记录",
+            error_msg=f"删除用户账户行为失败"
+        )
+        
+    async def delete_user_notifications(self, delete_data: TableUserNotificationsDeleteSchema) -> bool:
+        return await self._delete_record_by_schema(
+            table="user_notifications",
+            schema=delete_data,
+            success_msg=f"删除用户通知成功",
+            warning_msg=f"删除用户通知时未命中任何记录",
+            error_msg=f"删除用户通知失败"
+        )
+        
+    async def delete_user_files(self, delete_data: TableUserFilesDeleteSchema) -> bool:
+        return await self._delete_record_by_schema(
+            table="user_files",
+            schema=delete_data,
+            success_msg=f"删除用户文件成功",
+            warning_msg=f"删除用户文件时未命中任何记录",
+            error_msg=f"删除用户文件失败"
+        )
+    
+    async def _delete_record_by_schema(self,
+                                  table: str,
+                                  schema: BaseModel,
+                                  success_msg: str = "Delete success.",
+                                  warning_msg: str = "Delete warning.",
+                                  error_msg: str = "Delete error.") -> bool:
+        """通用 delete 调用（通过 schema + 表名）"""
+        
+        try:
+            where_conditions, where_values = self.extract_where_from_schema(
+                schema=schema,
+                keys=list(get_allowed_fields(table=table, action="delete"))
+            )
+        except Exception as e:
+            self.logger.error(f"提取 WHERE 条件失败: {e}")
+            return False
+
+        deleted_count = await self._delete_record(
+            table=table,
             where_conditions=where_conditions,
             where_values=where_values,
             success_msg=success_msg,
             warning_msg=warning_msg,
             error_msg=error_msg
         )
-    
+
+        if deleted_count > 0:
+            self.logger.info(f"{success_msg}，已删除 {deleted_count} 条记录 | 表: {table}")
+            return True
+        elif deleted_count == 0:
+            self.logger.warning(f"{warning_msg}：未匹配任何记录 | 表: {table}")
+            return True
+        else:
+            self.logger.error(f"{error_msg} | 表: {table}")
+            return False
+
     async def _delete_record(self, table: str,
                      where_conditions: List[str],
                      where_values: List[Any],
                      success_msg: str = "Delete success.",
                      warning_msg: str = "Delete warning.",
-                     error_msg: str = "Delete error.") -> bool:
+                     error_msg: str = "Delete error.") -> int:
         """
         删除一条记录
 
@@ -667,16 +771,16 @@ class UserAccountDataBaseAgent():
         :param success_msg: 成功日志
         :param warning_msg: 警告日志
         :param error_msg: 错误日志
-        :return: 是否删除成功
+        :return: 实际删除的行数（0 表示未删，-1 表示失败）
         """
         
         if not where_conditions or not where_values:
             self.logger.warning(f"{warning_msg}：WHERE 条件或值缺失，跳过删除")
-            return False
+            return -1
         
         if len(where_conditions) != len(where_values):
             self.logger.error("WHERE 条件与值长度不一致")
-            return False
+            return -1
         
         # 构造 SQL
         try:
@@ -687,7 +791,7 @@ class UserAccountDataBaseAgent():
             )
         except Exception as e:
             self.logger.error(f"SQL构建失败: {e}")
-            return False
+            return -1
         
         # 构建请求URL
         url = self.mysql_agent_url + "/database/mysql/delete"
@@ -713,13 +817,17 @@ class UserAccountDataBaseAgent():
                     f"错误码: {delete_response.err_code} | "
                     f"字段错误: {delete_response.errors}"
                 )
-                return False
-            return True
+                return 0  # 删除失败，返回 0 行受影响
+            
+            return delete_response.data.rows_affected
+        
         except Exception as e:
             self.logger.error(f"{error_msg}: {e}")
-            return False
-    
-    
+            return -1   # 出错，返回 -1
+
+    # ------------------------------------------------------------------------------------------------
+    # 软硬删除功能函数
+    # ------------------------------------------------------------------------------------------------ 
     async def soft_delete_user_by_user_id(self, user_id: int) -> bool:
         """
         软删除用户：设为 'deleted' 并记录删除时间。
