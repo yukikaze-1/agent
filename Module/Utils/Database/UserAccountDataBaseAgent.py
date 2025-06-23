@@ -50,6 +50,8 @@ from Module.Utils.Database.UserAccountDatabseSQLParameterSchema import (
 from Module.Utils.Database.MySQLAgentResponseType import (
     MySQLAgentInsertResponse,
     MySQLAgentUpdateResponse,
+    MySQLAgentDeleteResponse,
+    
 )
 
 
@@ -343,7 +345,7 @@ class UserAccountDataBaseAgent():
 
         # 执行插入
         try:
-            response_dict = await self.sql_executor.execute_write_sql(url=url, sql=sql, sql_args=sql_args,
+            response_dict = await self.sql_executor.execute_insert_sql(url=url, sql=sql, sql_args=sql_args,
                                                 warning_msg=f"User info insert may have failed for account: {insert_data.account}",
                                                 success_msg=f"User info insert succeeded for account: {insert_data.account}",
                                                 error_msg=f"Insert error for account: {insert_data.account}")
@@ -364,7 +366,6 @@ class UserAccountDataBaseAgent():
         except Exception as e:
             self.logger.error(f"插入用户数据失败: {e}")
             return None    
-
 
     async def insert_user_profile(self, insert_data: TableUserProfileInsertSchema) -> bool:
         return await self._insert_record(
@@ -419,8 +420,7 @@ class UserAccountDataBaseAgent():
             success_msg=f"User files insert succeeded. User id: {insert_data.user_id}",
             error_msg=f"Insert error. User id: {insert_data.user_id}"
         )
-     
-     
+       
     async def _insert_record(
         self,
         table: str,
@@ -457,7 +457,7 @@ class UserAccountDataBaseAgent():
         
         # 执行插入
         try:
-            response_dict = await self.sql_executor.execute_write_sql(
+            response_dict = await self.sql_executor.execute_insert_sql(
                 url=url,
                 sql=sql,
                 sql_args=sql_args,
@@ -484,37 +484,57 @@ class UserAccountDataBaseAgent():
     # ------------------------------------------------------------------------------------------------
     # 功能函数---更新表项目
     # ------------------------------------------------------------------------------------------------
-    async def update_users(self, update_data: TableUsersUpdateSchema) -> bool:
+    async def update_users(self, 
+                           update_data: TableUsersUpdateSchema,
+                           where_conditions: List[str],
+                           where_values: List[Any]) -> bool:
         return await self._update_record(
             table="users",
             update_data=update_data,
+            where_conditions=where_conditions,
+            where_values=where_values,
             warning_msg=f"User info update may have failed. User id: {update_data.user_id}",
             success_msg=f"User info update succeeded. User id: {update_data.user_id}",
             error_msg=f"Update error. User id: {update_data.user_id}"
         )
 
-    async def update_user_profile(self, update_data: TableUserProfileUpdateSchema) -> bool:
+    async def update_user_profile(self, 
+                                  update_data: TableUserProfileUpdateSchema,
+                                  where_conditions: List[str],
+                                  where_values: List[Any]) -> bool:
         return await self._update_record(
             table="user_profile",
             update_data=update_data,
+            where_conditions=where_conditions,
+            where_values=where_values,
             warning_msg=f"User profile update may have failed. User id: {update_data.user_id}",
             success_msg=f"User profile update succeeded. User id: {update_data.user_id}",
             error_msg=f"Update error. User id: {update_data.user_id}"
         )
 
-    async def update_user_settings(self, update_data: TableUserSettingsUpdateSchema) -> bool:
+    async def update_user_settings(self, 
+                                   update_data: TableUserSettingsUpdateSchema,
+                                   where_conditions: List[str],
+                                    where_values: List[Any]) -> bool:
         return await self._update_record(
             table="user_settings",
             update_data=update_data,
+            where_conditions=where_conditions,
+            where_values=where_values,
             warning_msg=f"User settings update may have failed. User id: {update_data.user_id}",
             success_msg=f"User settings update succeeded. User id: {update_data.user_id}",
             error_msg=f"Update error. User id: {update_data.user_id}"
         )
 
-    async def update_user_notifications(self, update_data: TableUserNotificationsUpdateSchema) -> bool:
+    async def update_user_notifications(self, 
+                                        update_data: TableUserNotificationsUpdateSchema,
+                                        where_conditions: List[str],
+                                        where_values: List[Any]) -> bool:
         return await self._update_record(
             table="user_notifications",
             update_data=update_data,
+            where_conditions=where_conditions,
+            where_values=where_values,
             warning_msg=f"User notifications update may have failed. Notification id: {update_data.notification_id}",
             success_msg=f"User notifications update succeeded. Notification id: {update_data.notification_id}",
             error_msg=f"Update error. Notification id: {update_data.notification_id}"
@@ -523,7 +543,7 @@ class UserAccountDataBaseAgent():
     async def update_user_files(self,
                                 update_data: TableUserFilesUpdateSchema,
                                 where_conditions: List[str],
-                                where_values: List[Any],) -> bool:
+                                where_values: List[Any]) -> bool:
         return await self._update_record(
             table="user_files",
             update_data=update_data,
@@ -591,7 +611,7 @@ class UserAccountDataBaseAgent():
         
         # 执行SQL
         try:
-            response_dict = await self.sql_executor.execute_write_sql(
+            response_dict = await self.sql_executor.execute_update_sql(
                 url=url,
                 sql=sql,
                 sql_args=sql_args,
@@ -617,9 +637,24 @@ class UserAccountDataBaseAgent():
     # ------------------------------------------------------------------------------------------------
     # 功能函数---删除表项目
     # ------------------------------------------------------------------------------------------------ 
-    async def delete_one(self, table: str,
+    async def delete_users(self, 
+                           where_conditions: List[str],
+                           where_values: List[Any],
+                           success_msg: str = "Delete success.",
+                           warning_msg: str = "Delete warning.",
+                           error_msg: str = "Delete error.") -> bool:
+        return await self._delete_record(
+            table="users",
+            where_conditions=where_conditions,
+            where_values=where_values,
+            success_msg=success_msg,
+            warning_msg=warning_msg,
+            error_msg=error_msg
+        )
+    
+    async def _delete_record(self, table: str,
                      where_conditions: List[str],
-                     where_values: List,
+                     where_values: List[Any],
                      success_msg: str = "Delete success.",
                      warning_msg: str = "Delete warning.",
                      error_msg: str = "Delete error.") -> bool:
@@ -636,12 +671,12 @@ class UserAccountDataBaseAgent():
         """
         
         if not where_conditions or not where_values:
-            self.logger.error("Delete conditions and values cannot be empty.")
-            raise ValueError("Delete conditions and values cannot be empty.")
+            self.logger.warning(f"{warning_msg}：WHERE 条件或值缺失，跳过删除")
+            return False
         
         if len(where_conditions) != len(where_values):
-            self.logger.error("Where conditions and values length mismatch.")
-            raise ValueError("Where conditions and values length mismatch.")
+            self.logger.error("WHERE 条件与值长度不一致")
+            return False
         
         # 构造 SQL
         try:
@@ -659,14 +694,30 @@ class UserAccountDataBaseAgent():
         
         self.logger.info(f"Executing delete SQL: {sql} with args: {args} | Table: {table} | URL: {url}")
         
-        return await self.sql_executor.execute_write_sql(
-            url=url,
-            sql=sql,
-            sql_args=args,
-            success_msg=success_msg,
-            warning_msg=warning_msg,
-            error_msg=error_msg
-        )
+        # 执行SQL
+        try:
+            response_dict = await self.sql_executor.execute_delete_sql(
+                url=url,
+                sql=sql,
+                sql_args=args,
+                success_msg=success_msg,
+                warning_msg=warning_msg,
+                error_msg=error_msg
+            )
+            # 校验响应结构
+            delete_response = MySQLAgentDeleteResponse.model_validate(response_dict)
+                        
+            if delete_response.result is False:
+                self.logger.warning(
+                    f"{error_msg}：{delete_response.message} | "
+                    f"错误码: {delete_response.err_code} | "
+                    f"字段错误: {delete_response.errors}"
+                )
+                return False
+            return True
+        except Exception as e:
+            self.logger.error(f"{error_msg}: {e}")
+            return False
     
     
     async def soft_delete_user_by_user_id(self, user_id: int) -> bool:

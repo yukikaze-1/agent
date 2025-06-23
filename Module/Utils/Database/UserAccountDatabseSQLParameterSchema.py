@@ -22,6 +22,7 @@ from pydantic_core import PydanticCustomError
         
         insert 有insert的白名单
         update 有update的白名单
+        delete 有delete的白名单
         
         InsertSchema：
             1. 在InsertSchema中的所有字段均必须手动赋值，没有默认值。
@@ -80,47 +81,56 @@ def filter_writable_fields(schema: BaseModel, allowed_fields: Set[str]) -> dict:
 SQL_REQUEST_ALLOWED_FIELDS = {
     "users": {
         "insert": {"user_uuid", "account", "password_hash", "email", "file_folder_path"},
-        "update": {"user_id", "status", "password_hash", "last_login_ip", "last_login_ip", "session_token", "deleted_at"}
+        "update": {"user_id", "status", "password_hash", "last_login_ip", "last_login_ip", "session_token", "deleted_at"},
+        "delete": {"user_id", "status", "deleted_at"}
     }, # update中有user_id是因为需要user_id来定位更新的位置,并不会实际更新
     
     "user_profile": {
         "insert": {"user_id", "user_name", "profile_picture_path", "signature"},
-        "update": {"user_id", "user_name", "profile_picture_path", "signature"}
+        "update": {"user_id", "user_name", "profile_picture_path", "signature"},
+        "delete": {"user_id"}
     }, # update中有user_id是因为需要user_id来定位更新的位置,并不会实际更新
     
     "user_login_logs": {
         "insert": {"user_id", "login_time", "ip_address", "agent", "device", "os", "login_success"},
-        "update": {}
+        "update": {},
+        "delete": {"user_id", "login_id", "created_at"}
     },
     
     "user_settings": {
         "insert": {"user_id", "language", "configure", "notification_setting"},
-        "update": {"user_id", "language", "configure", "notification_setting"}
+        "update": {"user_id", "language", "configure", "notification_setting"},
+        "delete": {"user_id"}
     }, # update中有user_id是因为需要user_id来定位更新的位置,并不会实际更新
     
     "user_account_actions": {
         "insert": {"user_id", "action_type", "action_detail"},
-        "update": {}
+        "update": {},
+        "delete": {"user_id", "action_id"}
     },
     
     "user_notifications": {
         "insert": {"user_id", "notification_type", "notification_title", "notification_content", "is_read"},
-        "update": {"notification_id", "notification_type", "notification_title", "notification_content", "is_read"}
+        "update": {"notification_id", "notification_type", "notification_title", "notification_content", "is_read"},
+        "delete": {"user_id", "notification_id", "is_read", "created_at"}
     }, # update中有notification_id是因为需要notification_id来定位更新的位置,并不会实际更新
     
     "user_files": {
         "insert": {"user_id", "file_name", "file_path", "file_type", "file_size", "upload_time", "is_deleted"},
-        "update": {"file_id", "file_name", "file_path", "file_size", "file_type", "upload_time", "is_deleted"}
+        "update": {"file_id", "file_name", "file_path", "file_size", "file_type", "upload_time", "is_deleted"},
+        "delete": {"user_id", "file_id", "is_deleted", "created_at", "upload_time"}
     }, # update中有file_id是因为需要file_id来定位更新的位置,并不会实际更新
     
     "conversations": {
         "insert": {"user_id", "title", "message_count"},
-        "update": {"title", "message_count"}
+        "update": {"title", "message_count"},
+        "delete": {"conversation_id", "user_id"}
     }, # TODO 还没实现
     
     "conversation_messages": {
         "insert": {"conversation_id", "user_id", "sender_role", "message_type", "parent_message_id", "content", "token_count"},
-        "update": {}
+        "update": {},
+        "delete": {"message_id", "conversation_id", "user_id"}
     }
 }
 
@@ -241,6 +251,19 @@ class TableUsersUpdateSchema(StrictBaseModel):
         return self
 
 
+class TableUsersDeleteSchema(StrictBaseModel):
+    """ 用户主表 Delete Schema """
+    user_id: int | None = Field(default=None, description="用户内部ID（主键）")
+    status: UserStatus | None = Field(default=None, description="用户状态")
+    deleted_at: datetime | None = Field(default=None, description="删除时间")
+    
+    @model_validator(mode="after")
+    def at_least_one_field_must_be_present(self) -> 'TableUsersDeleteSchema':
+        if not (self.user_id or self.status or self.deleted_at):
+            raise ValueError("至少需要提供一个要删除的字段（user_id或status或deleted_at）")
+        return self
+
+
 """
 
 ### 2. 用户扩展资料 (`user_profile`)
@@ -351,6 +374,12 @@ class TableUserProfileUpdateSchema(StrictBaseModel):
         if not (self.user_name or self.profile_picture_path or self.signature):
             raise ValueError("至少需要提供一个要更新的字段（用户名(user_name)、头像URL(profile_picture_path)或签名(signature)）")
         return self
+    
+    
+class TableUserProfileDeleteSchema(StrictBaseModel):
+    """ 用户扩展资料 Delete Schema """
+    user_id: int = Field(..., description="用户ID（主键+外键）")# 因为是删除，需要user_id来定位删除的位置
+
 
 """
 
@@ -409,7 +438,19 @@ class TableUserLoginLogsInsertSchema(StrictBaseModel):
     device: str = Field(..., description="登录设备")
     os: str = Field(..., description="操作系统")
     login_success: bool = Field(..., description="登录是否成功")
+   
+   
+class TableUserLoginLogsDeleteSchema(StrictBaseModel):
+    """ 用户登录日志 Delete Schema """
+    user_id: int | None = Field(default=None, description="用户ID（外键）")  # 因为是删除，需要user_id来定位删除的位置
+    login_id: int | None = Field(default=None, description="日志ID（主键）")
+    created_at: datetime | None = Field(default=None, description="创建时间")
     
+    @model_validator(mode="after")
+    def at_least_one_field_must_be_present(self) -> 'TableUserLoginLogsDeleteSchema':
+        if not (self.user_id or self.login_id or self.created_at):
+            raise ValueError("至少需要提供一个要删除的字段（user_id、login_id或created_at）")
+        return self 
 
 """
 
@@ -476,6 +517,10 @@ class TableUserSettingsUpdateSchema(StrictBaseModel):
             raise ValueError("至少需要提供一个要更新的字段（language、configure或notification_setting）")
         return self
 
+class TableUserSettingsDeleteSchema(StrictBaseModel):
+    """ 用户自定义设置 Delete Schema """
+    user_id: int = Field(..., description="用户ID（主键+外键）")# 因为是删除，需要user_id来定位删除的位置
+
 """
 
 # TODO 将该表修改为只读
@@ -527,6 +572,17 @@ class TableUserAccountActionsInsertSchema(StrictBaseModel):
     action_type: UserAccountActionType = Field(..., description="用户账户操作类型")
     action_detail: str = Field(..., description="用户账户操作细节")
     
+
+class TableUserAccountActionsDeleteSchema(StrictBaseModel):
+    """ 用户账户行为 Delete Schema """
+    user_id: int | None = Field(default=None, description="用户ID（外键）")  # 因为是删除，需要user_id来定位删除的位置
+    action_id: int | None = Field(default=None, description="主键")
+    
+    @model_validator(mode="after")
+    def at_least_one_field_must_be_present(self) -> 'TableUserAccountActionsDeleteSchema':
+        if not (self.user_id or self.action_id):
+            raise ValueError("至少需要提供一个要删除的字段（user_id或action_id）")
+        return self
 
 """
 
@@ -599,6 +655,19 @@ class TableUserNotificationsUpdateSchema(StrictBaseModel):
     def at_least_one_field_must_be_present(self) -> 'TableUserNotificationsUpdateSchema':
         if not (self.notification_type or self.notification_title or self.notification_content or self.is_read):
             raise ValueError("至少需要提供一个要更新的字段（notification_type、notification_title、notification_content或is_read）")
+        return self
+
+class TableUserNotificationsDeleteSchema(StrictBaseModel):
+    """ 用户通知与消息 Delete Schema """
+    user_id: int | None = Field(default=None, description="用户ID（外键）")  # 因为是删除，需要user_id来定位删除的位置
+    notification_id: int | None = Field(default=None, description="通知ID（主键）")
+    is_read: bool | None = Field(default=None, description="是否已读")
+    created_at: datetime | None = Field(default=None, description="创建时间")
+    
+    @model_validator(mode="after")
+    def at_least_one_field_must_be_present(self) -> 'TableUserNotificationsDeleteSchema':
+        if not (self.user_id or self.notification_id or self.is_read or self.created_at):
+            raise ValueError("至少需要提供一个要删除的字段（user_id、notification_id、is_read或created_at）")
         return self
 
 """
@@ -677,6 +746,20 @@ class TableUserFilesUpdateSchema(StrictBaseModel):
             raise ValueError("至少需要提供一个要更新的字段（file_path、file_name、file_type、file_size、is_deleted或upload_time）")
         return self
 
+class TableUserFilesDeleteSchema(StrictBaseModel):
+    """ 用户文件 Delete Schema """
+    user_id: int | None = Field(default=None, description="用户ID（外键）")  
+    file_id: int | None = Field(default=None, description="文件ID（主键）")
+    upload_time: datetime | None = Field(default=None, description="上传时间")
+    created_at: datetime | None = Field(default=None, description="创建时间")
+    is_deleted: bool | None = Field(default=None, description="是否删除")
+
+    @model_validator(mode="after")
+    def at_least_one_field_must_be_present(self) -> 'TableUserFilesDeleteSchema':
+        if not (self.user_id or self.file_id or self.upload_time or self.created_at or self.is_deleted):
+            raise ValueError("至少需要提供一个要删除的字段（user_id、file_id、upload_time、created_at、is_deleted）")
+        return self
+
 """
 
 # TODO 将conversations 和conversations_messages 抽离出来放在一个单独的数据库，并且单独写一个封装类来操作
@@ -733,6 +816,17 @@ class TableConversationsUpdateSchema(StrictBaseModel):
             raise ValueError("至少需要提供一个要更新的字段（title、message_count）")
         return self
     
+
+class TableConversationsDeleteSchema(StrictBaseModel): 
+    """ 会话表 Delete Schema """
+    conversation_id: int | None = Field(default=None, description="会话 ID")  # 因为是删除，需要conversation_id来定位删除的位置
+    user_id: int | None = Field(default=None, description="用户内部 ID（外键）")
+    
+    @model_validator(mode="after")
+    def at_least_one_field_must_be_present(self) -> 'TableConversationsDeleteSchema':
+        if not (self.conversation_id or self.user_id):
+            raise ValueError("至少需要提供一个要删除的字段（conversation_id或user_id）")
+        return self
     
 """
 
@@ -816,5 +910,17 @@ class TableConversationMessagesInsertSchema(StrictBaseModel):
     content: str | None = Field(..., description="内容")
     token_count: int = Field(..., description="消息 Token 数（用于统计消耗）")
     
+    
+class TableConversationMessagesDeleteSchema(StrictBaseModel):
+    """ 会话消息表 Delete Schema """
+    message_id: int | None = Field(default=None, description="消息 ID")  # 因为是删除，需要message_id来定位删除的位置
+    conversation_id: int | None = Field(default=None, description="会话 ID（外键）")
+    user_id: int | None = Field(default=None, description="用户 ID（外键）")
+    
+    @model_validator(mode="after")
+    def at_least_one_field_must_be_present(self) -> 'TableConversationMessagesDeleteSchema':
+        if not (self.message_id or self.conversation_id or self.user_id):
+            raise ValueError("至少需要提供一个要删除的字段（message_id、conversation_id或user_id）")
+        return self   
     
     

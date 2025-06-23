@@ -85,7 +85,7 @@ class MySQLAgentInsertResponse(MySQLAgentBaseResponse):
     
 class MySQLAgentDeleteResponseData(BaseModel):
     """ SQL删除 数据 """
-    affect_rows: int = Field(..., description="删除的记录数")
+    rows_affected: int = Field(..., description="删除的记录数")
 
 class MySQLAgentDeleteResponse(MySQLAgentBaseResponse):
     """ SQL删除 Response """

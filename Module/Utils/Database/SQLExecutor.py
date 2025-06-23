@@ -110,9 +110,9 @@ class SQLExecutor:
             raise
 
 
-    async def execute_write_sql(self, url, sql, sql_args, warning_msg, success_msg, error_msg, timeout: float = 60.0) -> Dict[str, Any]:
+    async def execute_update_sql(self, url, sql, sql_args, warning_msg, success_msg, error_msg, timeout: float = 60.0) -> Dict[str, Any]:
         """
-        执行写操作的SQL语句
+        执行更新操作的SQL语句
         :param url: MySQL代理的URL
         :param sql: 要执行的SQL语句
         :param sql_args: SQL语句的参数列表
@@ -122,9 +122,36 @@ class SQLExecutor:
         :param timeout: 请求超时时间（秒）
         :return: 响应数据，包含执行结果和其他信息
         """
-        return await self._execute_sql(url, sql, sql_args, warning_msg, success_msg, error_msg, timeout, "Executing WRITE")
+        return await self._execute_sql(url, sql, sql_args, warning_msg, success_msg, error_msg, timeout, "Executing UPDATE")
 
+    async def execute_insert_sql(self, url, sql, sql_args, warning_msg, success_msg, error_msg, timeout: float = 60.0) -> Dict[str, Any]:
+        """
+        执行插入操作的SQL语句
+        :param url: MySQL代理的URL
+        :param sql: 要执行的SQL语句
+        :param sql_args: SQL语句的参数列表
+        :param warning_msg: 警告日志信息
+        :param success_msg: 成功日志信息
+        :param error_msg: 错误日志信息
+        :param timeout: 请求超时时间（秒）
+        :return: 响应数据，包含执行结果和其他信息
+        """
+        return await self._execute_sql(url, sql, sql_args, warning_msg, success_msg, error_msg, timeout, "Executing INSERT")
 
+    async def execute_delete_sql(self, url, sql, sql_args, warning_msg, success_msg, error_msg, timeout: float = 60.0) -> Dict[str, Any]:
+        """
+        执行删除操作的SQL语句
+        :param url: MySQL代理的URL
+        :param sql: 要执行的SQL语句
+        :param sql_args: SQL语句的参数列表
+        :param warning_msg: 警告日志信息
+        :param success_msg: 成功日志信息
+        :param error_msg: 错误日志信息
+        :param timeout: 请求超时时间（秒）
+        :return: 响应数据，包含执行结果和其他信息
+        """
+        return await self._execute_sql(url, sql, sql_args, warning_msg, success_msg, error_msg, timeout, "Executing DELETE")
+    
     async def execute_query_sql(self, url, sql, sql_args, warning_msg, success_msg, error_msg, timeout: float = 60.0) -> Dict[str, Any]:
         """
         执行查询操作的SQL语句
