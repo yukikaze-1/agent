@@ -296,7 +296,6 @@ class UserAccountDataBaseAgent():
             self.logger.error(f"{error_msg}: {str(e)}")
             return None
 
-
     async def query_one(self, table: str,
                     fields: Optional[List[str]] = None,
                     where_conditions: Optional[List[str]] = None,
@@ -327,8 +326,6 @@ class UserAccountDataBaseAgent():
                                        error_msg=error_msg)
         return result[0] if result else None
 
-
-    
     # ------------------------------------------------------------------------------------------------
     # 功能函数---插入表项目
     # ------------------------------------------------------------------------------------------------
@@ -513,9 +510,9 @@ class UserAccountDataBaseAgent():
             update_data=update_data,
             where_conditions=where_conditions,
             where_values=where_values,
-            warning_msg=f"User info update may have failed. User id: {update_data.user_id}",
-            success_msg=f"User info update succeeded. User id: {update_data.user_id}",
-            error_msg=f"Update error. User id: {update_data.user_id}"
+            warning_msg=f"User info update may have failed. ",
+            success_msg=f"User info update succeeded.",
+            error_msg=f"Update error."
         )
 
     async def update_user_profile(self, 
@@ -527,9 +524,9 @@ class UserAccountDataBaseAgent():
             update_data=update_data,
             where_conditions=where_conditions,
             where_values=where_values,
-            warning_msg=f"User profile update may have failed. User id: {update_data.user_id}",
-            success_msg=f"User profile update succeeded. User id: {update_data.user_id}",
-            error_msg=f"Update error. User id: {update_data.user_id}"
+            warning_msg=f"User profile update may have failed.",
+            success_msg=f"User profile update succeeded.",
+            error_msg=f"Update error."
         )
 
     async def update_user_settings(self, 
@@ -541,9 +538,9 @@ class UserAccountDataBaseAgent():
             update_data=update_data,
             where_conditions=where_conditions,
             where_values=where_values,
-            warning_msg=f"User settings update may have failed. User id: {update_data.user_id}",
-            success_msg=f"User settings update succeeded. User id: {update_data.user_id}",
-            error_msg=f"Update error. User id: {update_data.user_id}"
+            warning_msg=f"User settings update may have failed.",
+            success_msg=f"User settings update succeeded.",
+            error_msg=f"Update error."
         )
 
     async def update_user_notifications(self, 
@@ -555,9 +552,9 @@ class UserAccountDataBaseAgent():
             update_data=update_data,
             where_conditions=where_conditions,
             where_values=where_values,
-            warning_msg=f"User notifications update may have failed. Notification id: {update_data.notification_id}",
-            success_msg=f"User notifications update succeeded. Notification id: {update_data.notification_id}",
-            error_msg=f"Update error. Notification id: {update_data.notification_id}"
+            warning_msg=f"User notifications update may have failed. ",
+            success_msg=f"User notifications update succeeded. ",
+            error_msg=f"Update error. "
         )
 
     async def update_user_files(self,
@@ -569,9 +566,9 @@ class UserAccountDataBaseAgent():
             update_data=update_data,
             where_conditions=where_conditions,
             where_values=where_values,
-            warning_msg=f"User files update may have failed. File id: {update_data.file_id}",
-            success_msg=f"User files update succeeded. File id: {update_data.file_id}",
-            error_msg=f"Update error. File id: {update_data.file_id}"
+            warning_msg=f"User files update may have failed.",
+            success_msg=f"User files update succeeded.",
+            error_msg=f"Update error."
         )
         
     async def _update_record(
@@ -585,7 +582,7 @@ class UserAccountDataBaseAgent():
         error_msg: str
     ) -> bool:
         """
-        更新指定表的记录
+        更新指定表的记录(该函数不会抛出异常)
         
         :param  table: 表名
         :param update_data: 要更新的数据，必须是一个继承自 BaseModel 的对象
@@ -726,7 +723,10 @@ class UserAccountDataBaseAgent():
                                   success_msg: str = "Delete success.",
                                   warning_msg: str = "Delete warning.",
                                   error_msg: str = "Delete error.") -> bool:
-        """通用 delete 调用（通过 schema + 表名）"""
+        """
+        通用 delete 调用（通过 schema + 表名）
+        该函数不会抛出异常
+        """
         
         try:
             where_conditions, where_values = self.extract_where_from_schema(
@@ -763,7 +763,7 @@ class UserAccountDataBaseAgent():
                      warning_msg: str = "Delete warning.",
                      error_msg: str = "Delete error.") -> int:
         """
-        删除一条记录
+        删除记录(该函数不会报异常)
 
         :param table: 表名
         :param where_conditions: WHERE 条件表达式列表
@@ -825,6 +825,7 @@ class UserAccountDataBaseAgent():
             self.logger.error(f"{error_msg}: {e}")
             return -1   # 出错，返回 -1
 
+
     # ------------------------------------------------------------------------------------------------
     # 软硬删除功能函数
     # ------------------------------------------------------------------------------------------------ 
@@ -835,17 +836,15 @@ class UserAccountDataBaseAgent():
         :param user_id: 用户ID
         :return: 更新是否成功
         """
-        
+        update_data= TableUsersUpdateSchema(
+            status=UserStatus.deleted
+        )
         # 1. 将users 表中的 status 设置为 'deleted'
         try:
-            res = await self.mysql_helper.update_one(
-                table="users",
-                data={"status": "deleted", "deleted_at": "CURRENT_TIMESTAMP"},
+            res = await self.update_users(
+                update_data=update_data,
                 where_conditions=["user_id = %s"],
-                where_values=[user_id],
-                success_msg=f"Soft-deleted user ID: {user_id}",
-                warning_msg=f"Soft delete may have failed. User ID: {user_id}",
-                error_msg=f"Soft delete error. User ID: {user_id}"
+                where_values=[user_id]
             )
         except Exception as e:
             self.logger.error(f"Soft delete failed! Error: {str(e)}")
@@ -858,21 +857,22 @@ class UserAccountDataBaseAgent():
         return True
         
             
-    async def delete_user_by_user_id(self, user_id: int) -> bool:
+    async def hard_delete_user_by_user_id(self, user_id: int) -> bool:
         """
         根据 user_id 删除用户（包含自动删除 user_profile 中的关联记录）。
 
         :param user_id: 用户ID
         :return: 删除是否成功
         """
+        delete_data = TableUsersDeleteSchema(user_id=user_id)
         
         # 1. 删除 users 表中数据(根据user_id)
         try:
-            success = await self.delete_one(table="users",
-                                                     where_conditions=["user_id = %s"],
-                                                     where_values=[user_id])
+            success = await self.delete_users(delete_data=delete_data)
+            if not success:
+                self.logger.warning(f"Hard delete may have failed. User ID: '{user_id}'")
         except Exception as e:
-            self.logger.error(f"Delete failed! Error: {str(e)}")
+            self.logger.error(f"Delete failed! User ID: '{user_id}' Error: {str(e)}")
             return False
 
         # 2. 删除 user_profile 表中数据
@@ -886,36 +886,36 @@ class UserAccountDataBaseAgent():
         return True
 
         
-    async def hard_delete_expired_users(self)->bool:
+    async def hard_delete_expired_users(self, days: int = 30) -> bool:
         """
-        物理删除已标记为 deleted 超过 30 天的用户。
+        物理删除已标记为 deleted 且 deleted_at 超过 days 天的用户。
         """
-        sql = """
-            DELETE FROM users
-            WHERE status = 'deleted' AND deleted_at < (NOW() - INTERVAL 30 DAY);
-        """
-        payload = {
-            "id": self.db_connect_id,
-            "sql": sql,
-            "sql_args": []
-        }
+        table = "users"
+        where_conditions = [
+            "status = %s",
+            "deleted_at < (NOW() - INTERVAL %s DAY)"
+        ]
+        where_values = ["deleted", days]  # 只有一个需要参数化的字段
 
-        try:
-            response = await self.client.post(
-                url=self.mysql_agent_url + "/database/mysql/delete",
-                json=payload,
-                timeout=120.0
-            )
-            response.raise_for_status()
-            response_data = response.json()
+        deleted_count = await self._delete_record(
+            table=table,
+            where_conditions=where_conditions,
+            where_values=where_values,
+            success_msg="成功删除过期用户",
+            warning_msg="删除操作完成，但无匹配用户",
+            error_msg="物理删除过期用户失败"
+        )
 
-            if response.status_code == 200:
-                self.logger.info("Expired deleted users purged.")
+        if deleted_count > 0:
+            self.logger.info(f"物理删除 {deleted_count} 条已过期的用户记录")
             return True
-
-        except Exception as e:
-            self.logger.error(f"Hard delete failed! Error: {str(e)}")
+        elif deleted_count == 0:
+            self.logger.warning("无已过期的 deleted 用户可删除")
+            return True
+        else:
+            self.logger.error("物理删除过程出错")
             return False
+
         
 
     
@@ -972,7 +972,7 @@ class UserAccountDataBaseAgent():
             return None
 
         try:
-            res = await self.mysql_helper.query_one(
+            res = await self.query_one(
                 table="users",
                 fields=fields,
                 where_conditions=where_conditions,
@@ -998,7 +998,7 @@ class UserAccountDataBaseAgent():
         :return: 用户UUID，如果未找到则返回 None
         """
         try:
-            res = await self.mysql_helper.query_one(
+            res = await self.query_one(
                 table="users",
                 fields=["user_uuid"],
                 where_conditions=["user_id = %s"],
@@ -1013,36 +1013,6 @@ class UserAccountDataBaseAgent():
             return None
 
         return res["user_uuid"]
-
-
-    async def update_user_notification_settings(self, user_id: int,
-                                                notifications_enabled: Optional[bool] = None,
-                                                settings_json: Optional[Dict] = None) -> bool:
-        """
-        更新用户通知设定
-
-        :param user_id: 用户ID
-        :param notifications_enabled: 是否启用通知
-        :param settings_json: 通知设定JSON
-        
-        :return: 更新是否成功
-        """
-        
-        if notifications_enabled is None and settings_json is None:
-            self.logger.warning(f"No fields provided to update for user: {user_id}")
-            return False
-        
-        data = {}
-        
-        if notifications_enabled is not None:
-            data["notifications_enabled"] = notifications_enabled
-
-        if settings_json is not None:
-            data["settings_json"] = settings_json
-
-        return await self.mysql_helper.update_one(table="user_settings", data=data, 
-                                                  where_conditions=["user_id = %s"], 
-                                                  where_values=[user_id])
 
     
     async def insert_new_user(self, account: str, email: str, password_hash: str, user_name: str) -> Optional[int]:
@@ -1136,47 +1106,51 @@ class UserAccountDataBaseAgent():
         else:
             self.logger.warning(f"User settings insert may have failed. User ID: {user_id}")
             return None
+        
  
     # TODO 待修改，是否需要统一接口参数为 TableUsersInsertSchema?
     async def update_user_password_by_user_id(self, user_id: int, new_password_hash: str) -> bool:
-            """
-            根据 user_id 更新用户密码哈希。
-                1. 先更新 users 表中的 password_hash 字段
-                2. 再向 user_account_actions 表中插入新纪录
+        """
+        根据 user_id 更新用户密码哈希，并记录操作日志。
+        
+        1. 更新 users 表中的 password_hash 字段
+        2. 向 user_account_actions 表中插入新纪录
+        
+        :param user_id: 用户ID
+        :param new_password_hash: 新密码哈希
+        :return: 是否成功
+        """
+        # 1. 更新 users 表
+        update_success = await self._update_record(
+            table="users",
+            update_data=TableUsersUpdateSchema(password_hash=new_password_hash),
+            where_conditions=["user_id = %s"],
+            where_values=[user_id],
+            success_msg="用户密码更新成功",
+            warning_msg="用户密码更新可能未生效",
+            error_msg="更新用户密码失败"
+        )
 
-            :param user_id: 用户ID
-            :param new_password_hash: 新密码哈希
+        if not update_success:
+            self.logger.error(f"用户密码更新失败，user_id={user_id}")
+            return False
 
-            :return: 更新是否成功
-            """
-            # 1. 更新 users 表中的 password_hash 字段
-            data = {"password_hash": new_password_hash}
-            where_conditions = ["user_id = %s"]
-            where_values = [user_id]
-            
-            
-            res =  await self.mysql_helper.update_one(table="users", data=data,
-                                        where_conditions=where_conditions,
-                                        where_values=where_values, 
-                                        success_msg=f"Updated user info.",
-                                        warning_msg=f"User info update may have failed.",
-                                        error_msg=f"Update error.")
-            
-            if not res:
-                self.logger.error(f"Failed to update password. User id: {user_id}") 
-                return False
-            
-            # 2. 向 user_account_actions 表中插入新纪录
-            data = {
-                "user_id": user_id,
-                "action_type": "update_password",
-                "action_detail": f"Password updated to {new_password_hash}"
-            }
-            res = await self.mysql_helper.insert_one(table="user_account_actions",data = data)
-            
-            if not res:
-                self.logger.error(f"Failed to insert user account action. User id: {user_id}")
-                return False
-            else:
-                self.logger.info(f"Success to update password. User id: {user_id}")
-                return True
+        # 2. 插入到 user_account_actions 表
+        insert_success = await self._insert_record(
+            table="user_account_actions",
+            insert_data=TableUserAccountActionsInsertSchema(
+                user_id=user_id,
+                action_type=UserAccountActionType.password_change,
+                action_detail=f"Password updated to {new_password_hash}"
+            ),
+            success_msg="用户行为记录插入成功",
+            warning_msg="行为记录可能未插入成功",
+            error_msg="插入用户行为记录失败"
+        )
+
+        if not insert_success:
+            self.logger.error(f"用户行为记录插入失败，user_id={user_id}")
+            return False
+
+        self.logger.info(f"用户密码更新完成，user_id={user_id}")
+        return True

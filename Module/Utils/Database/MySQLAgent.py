@@ -385,7 +385,7 @@ class MySQLAgent:
         
 
         try:
-            affect_rows =  await self._insert_with_retry(connection=connection, sql=sql, sql_args=sql_args)
+            rows_affected =  await self._insert_with_retry(connection=connection, sql=sql, sql_args=sql_args)
             self.logger.info(f"Insert success. sql: '{sql}', sql_args:'{sql_args}'")
             
             #插入成功 返回Response
@@ -393,7 +393,7 @@ class MySQLAgent:
                     operator=operator,
                     message=f"Insert success.",
                     result=True,
-                    data=MySQLAgentInsertResponseData(affect_rows=affect_rows)
+                    data=MySQLAgentInsertResponseData(rows_affected=rows_affected)
             )
         except Exception as e:
                 message= f"Insert failed after 3 retries! Error:{str(e)}"
@@ -457,6 +457,7 @@ class MySQLAgent:
                 operator=operator,
                 message=f"Delete failed",
                 result=False,
+                data=MySQLAgentDeleteResponseData(rows_affected=-1),
                 err_code=MySQLAgentResponseErrorCode.CONNECT_ID_NOT_EXISTED,
                 errors=[MySQLAgentErrorDetail(
                     code=MySQLAgentResponseErrorCode.CONNECT_ID_NOT_EXISTED,
@@ -467,7 +468,7 @@ class MySQLAgent:
             )
             
         try:
-            affect_rows =  await self._delete_with_retry(connection=connection, sql=sql, sql_args=sql_args)
+            rows_affected =  await self._delete_with_retry(connection=connection, sql=sql, sql_args=sql_args)
             self.logger.info(f"Delete success. sql: '{sql}', sql_args:'{sql_args}'")
             
             # 删除成功 返回Response
@@ -475,7 +476,7 @@ class MySQLAgent:
                 operator=operator,
                 message=f"Delete success.",
                 result=True,
-                data=MySQLAgentDeleteResponseData(affect_rows=affect_rows)
+                data=MySQLAgentDeleteResponseData(rows_affected=rows_affected)
             )
         except Exception as e:
             message = f"Delete failed after 3 retries! Error:{str(e)}"
@@ -486,6 +487,7 @@ class MySQLAgent:
                 operator=operator,
                 message=message,
                 result=False,
+                data= MySQLAgentDeleteResponseData(rows_affected=-1),
                 err_code=MySQLAgentResponseErrorCode.DELETE_DATABASE_FAILED,
                 level="error"
             )
@@ -554,7 +556,7 @@ class MySQLAgent:
          
         try:
             # 更新数据
-            affect_rows =  await self._update_with_retry(connection=connection, sql=sql, sql_args=sql_args)
+            rows_affected =  await self._update_with_retry(connection=connection, sql=sql, sql_args=sql_args)
             self.logger.info(f"Update success. sql: '{sql}', sql_args:'{sql_args}'")
             
             # 更新成功 返回Response
@@ -562,7 +564,7 @@ class MySQLAgent:
                 operator=operator,
                 message=f"Update success.",
                 result=True,
-                data= MySQLAgentUpdateResponseData(affect_rows=affect_rows)
+                data= MySQLAgentUpdateResponseData(rows_affected=rows_affected)
             ) 
             
         except Exception as e:

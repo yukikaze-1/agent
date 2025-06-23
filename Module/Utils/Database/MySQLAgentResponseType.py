@@ -74,7 +74,7 @@ class MySQLAgentQueryResponse(MySQLAgentBaseResponse):
 
 class MySQLAgentInsertResponseData(BaseModel):
     """ SQL插入操作 Response 附加数据 """
-    affect_rows: int = Field(..., description="插入的记录数")
+    rows_affected: int = Field(..., description="插入的记录数")
     last_insert_id: int | None = Field(default=None, description="自增主键 ID（如果有）")
 
 class MySQLAgentInsertResponse(MySQLAgentBaseResponse):
@@ -85,7 +85,7 @@ class MySQLAgentInsertResponse(MySQLAgentBaseResponse):
     
 class MySQLAgentDeleteResponseData(BaseModel):
     """ SQL删除 数据 """
-    rows_affected: int = Field(..., description="删除的记录数")
+    rows_affected: int = Field(default=-1, description="删除的记录数")
 
 class MySQLAgentDeleteResponse(MySQLAgentBaseResponse):
     """ SQL删除 Response """
@@ -95,7 +95,7 @@ class MySQLAgentDeleteResponse(MySQLAgentBaseResponse):
     
 class MySQLAgentUpdateResponseData(BaseModel):
     """ SQL更新 数据 """
-    affect_rows: int = Field(..., description="更新的记录数")
+    rows_affected: int = Field(..., description="更新的记录数")
 
 class MySQLAgentUpdateResponse(MySQLAgentBaseResponse):
     """ SQL更新 Response """

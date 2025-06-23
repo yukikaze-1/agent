@@ -81,15 +81,15 @@ def filter_writable_fields(schema: BaseModel, allowed_fields: Set[str]) -> dict:
 SQL_REQUEST_ALLOWED_FIELDS = {
     "users": {
         "insert": {"user_uuid", "account", "password_hash", "email", "file_folder_path"},
-        "update": {"user_id", "status", "password_hash", "last_login_ip", "last_login_ip", "session_token", "deleted_at"},
+        "update": {"status", "password_hash", "last_login_ip", "last_login_ip", "session_token"},
         "delete": {"user_id", "status", "deleted_at"}
-    }, # update中有user_id是因为需要user_id来定位更新的位置,并不会实际更新
+    }, 
     
     "user_profile": {
         "insert": {"user_id", "user_name", "profile_picture_path", "signature"},
-        "update": {"user_id", "user_name", "profile_picture_path", "signature"},
+        "update": {"user_name", "profile_picture_path", "signature"},
         "delete": {"user_id"}
-    }, # update中有user_id是因为需要user_id来定位更新的位置,并不会实际更新
+    }, 
     
     "user_login_logs": {
         "insert": {"user_id", "login_time", "ip_address", "agent", "device", "os", "login_success"},
@@ -99,9 +99,9 @@ SQL_REQUEST_ALLOWED_FIELDS = {
     
     "user_settings": {
         "insert": {"user_id", "language", "configure", "notification_setting"},
-        "update": {"user_id", "language", "configure", "notification_setting"},
+        "update": {"language", "configure", "notification_setting"},
         "delete": {"user_id"}
-    }, # update中有user_id是因为需要user_id来定位更新的位置,并不会实际更新
+    }, 
     
     "user_account_actions": {
         "insert": {"user_id", "action_type", "action_detail"},
@@ -111,15 +111,15 @@ SQL_REQUEST_ALLOWED_FIELDS = {
     
     "user_notifications": {
         "insert": {"user_id", "notification_type", "notification_title", "notification_content", "is_read"},
-        "update": {"notification_id", "notification_type", "notification_title", "notification_content", "is_read"},
+        "update": {"notification_type", "notification_title", "notification_content", "is_read"},
         "delete": {"user_id", "notification_id", "is_read", "created_at"}
-    }, # update中有notification_id是因为需要notification_id来定位更新的位置,并不会实际更新
+    }, 
     
     "user_files": {
         "insert": {"user_id", "file_name", "file_path", "file_type", "file_size", "upload_time", "is_deleted"},
-        "update": {"file_id", "file_name", "file_path", "file_size", "file_type", "upload_time", "is_deleted"},
+        "update": {"file_name", "file_path", "file_size", "file_type", "upload_time", "is_deleted"},
         "delete": {"user_id", "file_id", "is_deleted", "created_at", "upload_time"}
-    }, # update中有file_id是因为需要file_id来定位更新的位置,并不会实际更新
+    }, 
     
     "conversations": {
         "insert": {"user_id", "title", "message_count"},
@@ -170,7 +170,25 @@ CREATE TABLE users (
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   deleted_at DATETIME DEFAULT NULL
-);
+);  
+DELIMITER $$
+
+CREATE TRIGGER before_users_update
+BEFORE UPDATE ON users
+FOR EACH ROW
+BEGIN
+  -- 如果 status 被设置为 'deleted'，并且之前不是 'deleted'，则更新 deleted_at
+  IF NEW.status = 'deleted' AND OLD.status <> 'deleted' THEN
+    SET NEW.deleted_at = NOW();
+  END IF;
+
+  -- 如果 status 被改回非 deleted，并且原来是 deleted，可以选择是否清空 deleted_at（可选）
+  IF NEW.status <> 'deleted' AND OLD.status = 'deleted' THEN
+    SET NEW.deleted_at = NULL;
+  END IF;
+END$$
+
+DELIMITER ;
 """
 
 
@@ -236,18 +254,16 @@ class TableUsersInsertSchema(StrictBaseModel):
     
 class TableUsersUpdateSchema(StrictBaseModel):
     """ 用户主表 Update Schema """
-    user_id: int = Field(..., description="用户内部ID（主键）") # 因为是更新，需要user_id来定位更新的位置
     status: UserStatus | None = Field(default=None, description="用户状态")
     password_hash: str | None = Field(default=None, min_length=6, max_length=256, description="密码哈希值")
     last_login_time: datetime | None = Field(default=None, description="最后登录时间")
     last_login_ip: IPvAnyAddress | None = Field(default=None, description="最后登录IP")
     session_token: str | None = Field(default=None, description="Session令牌")
-    deleted_at: datetime | None = Field(default=None, description="删除时间")
 
     @model_validator(mode="after")
     def at_least_one_field_must_be_present(self) -> 'TableUsersUpdateSchema':
-        if not ( self.status or self.password_hash or  self.last_login_time or self.last_login_ip or self.session_token or self.deleted_at):
-            raise ValueError("至少需要提供一个要更新的字段（status、password_hash、last_login_time、last_login_ip、session_token、deleted_at）")
+        if not ( self.status or self.password_hash or  self.last_login_time or self.last_login_ip or self.session_token):
+            raise ValueError("至少需要提供一个要更新的字段（status、password_hash、last_login_time、last_login_ip、session_token）")
         return self
 
 
@@ -259,8 +275,8 @@ class TableUsersDeleteSchema(StrictBaseModel):
     
     @model_validator(mode="after")
     def at_least_one_field_must_be_present(self) -> 'TableUsersDeleteSchema':
-        if not (self.user_id or self.status or self.deleted_at):
-            raise ValueError("至少需要提供一个要删除的字段（user_id或status或deleted_at）")
+        if not (self.user_id or self.status):
+            raise ValueError("至少需要提供一个要删除的字段（user_id或status）")
         return self
 
 
@@ -289,7 +305,8 @@ CREATE TABLE user_profile (
   CONSTRAINT fk_user_profile_user_id FOREIGN KEY (user_id) 
     REFERENCES users(user_id)
     ON DELETE CASCADE ON UPDATE CASCADE
-    
+);  
+
   DELIMITER $$
 
   CREATE TRIGGER trg_update_profile_picture_time
@@ -302,7 +319,7 @@ CREATE TABLE user_profile (
     END IF;
   END$$  
   DELIMITER ;
-);
+
 
 """
 class TableUserProfileSchema(StrictBaseModel):
@@ -347,7 +364,6 @@ class TableUserProfileInsertSchema(StrictBaseModel):
 
 class TableUserProfileUpdateSchema(StrictBaseModel):
     """  用户扩展资料 Update Schema """
-    user_id: int = Field(..., description="用户ID（主键+外键）")# 因为是更新，需要user_id来定位更新的位置
     user_name: str | None = Field(default=None, min_length=1, max_length=256, description="用户名")
     profile_picture_path: str | None = Field(default=None, description="头像URL地址")
     signature: str | None = Field(default=None, max_length=256, description="用户个性签名")
@@ -506,7 +522,6 @@ class TableUserSettingsInsertSchema(StrictBaseModel):
     
 class TableUserSettingsUpdateSchema(StrictBaseModel):
     """ 用户自定义设置 Update Schema """
-    user_id: int = Field(..., description="用户ID（主键+外键）")# 因为是更新，需要user_id来定位更新的位置
     language: UserLanguage | None = Field(default=None, description="用户语言偏好")
     configure: dict | None = Field(default=None, description="用户配置")
     notification_setting: dict | None = Field(default=None, description="用户通知设置")
@@ -645,7 +660,6 @@ class TableUserNotificationsInsertSchema(StrictBaseModel):
 
 class TableUserNotificationsUpdateSchema(StrictBaseModel):
     """ 用户通知与消息 Update Schema """
-    notification_id: int = Field(..., description="通知ID（主键）")# 因为是更新，需要notification_id来定位更新的位置
     notification_type: UserNotificationType | None = Field(default=None, description="通知类型")
     notification_title: str | None = Field(default=None, description="通知标题")
     notification_content: str | None = Field(default=None, description="通知内容")
@@ -732,7 +746,6 @@ class TableUserFilesInsertSchema(StrictBaseModel):
     
 class TableUserFilesUpdateSchema(StrictBaseModel):
     """ 用户文件 Update Schema """
-    file_id: int = Field(..., description="文件ID（主键）")# 因为是更新，需要file_id来定位更新的位置
     file_path: str | None = Field(default=None, min_length=1, max_length=512, description="文件相对路径")
     file_name: str | None = Field(default=None, min_length=1, max_length=256, description="原始文件名")
     file_type: str | None = Field(default=None, min_length=1, max_length=256, description="文件类型（如 .png）")
