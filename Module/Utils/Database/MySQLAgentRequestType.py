@@ -6,7 +6,7 @@
 
 
 """
-    各种请求的格式定义
+    各种MySQLAgent请求的格式定义
 """
 
 from typing import Dict, List, Any

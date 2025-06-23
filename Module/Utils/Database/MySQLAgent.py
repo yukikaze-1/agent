@@ -33,17 +33,17 @@ from Module.Utils.FastapiServiceTools import (
 from Module.Utils.Database.MySQLAgentResponseType import (
     MySQLAgentResponseErrorCode,
     MySQLAgentErrorDetail,
-    MySQLAgentConnectDatabaseData,
+    MySQLAgentConnectDatabaseResponseData,
     MySQLAgentConnectDatabaseResponse,
-    MySQLAgentQueryResult,
+    MySQLAgentQueryResponseData,
     MySQLAgentQueryResponse,
-    MySQLAgentInsertData,
+    MySQLAgentInsertResponseData,
     MySQLAgentInsertResponse,
-    MySQLAgentDeleteData,
+    MySQLAgentDeleteResponseData,
     MySQLAgentDeleteResponse,
-    MySQLAgentUpdateData,
+    MySQLAgentUpdateResponseData,
     MySQLAgentUpdateResponse,
-    MySQLAgentTransactionData,
+    MySQLAgentTransactionResponseData,
     MySQLAgentTransactionResponse
 )
 from Module.Utils.Database.MySQLAgentRequestType import (
@@ -199,6 +199,7 @@ class MySQLAgent:
     # --------------------------------
     # 功能函数
     # --------------------------------     
+    # TODO 将这里的sql_requests: List[MySQLAgentSQLRequest]修改为使用事务请求的专门的参数，而不是sqlrequest的列表
     async def _transaction(self, connection_id: int, sql_requests: List[MySQLAgentSQLRequest]) -> MySQLAgentTransactionResponse:
         """
         处理一组 SQL 请求作为一个事务。
@@ -296,7 +297,7 @@ class MySQLAgent:
 
         try:
             # 查询
-            query_data: List[MySQLAgentQueryResult] = await self._query_with_retry(connection=connection, sql=sql, sql_args=sql_args)
+            query_data: List[MySQLAgentQueryResponseData] = await self._query_with_retry(connection=connection, sql=sql, sql_args=sql_args)
             self.logger.debug(f"Query success. sql: '{sql}', sql_args:'{sql_args}'")
             
             return MySQLAgentQueryResponse(
@@ -324,7 +325,7 @@ class MySQLAgent:
                 
 
     @retry(retries=3, delay=1.0, backoff=2.0, exceptions=(pymysql.MySQLError,), on_failure=lambda e: print(f"[ERROR] 最终重试失败: {e}"))  
-    async def _query_with_retry(self, connection: Connection, sql: str, sql_args: List[Any]) -> List[MySQLAgentQueryResult]:
+    async def _query_with_retry(self, connection: Connection, sql: str, sql_args: List[Any]) -> List[MySQLAgentQueryResponseData]:
         """
         查询 (附带重试机制)
         
@@ -340,7 +341,7 @@ class MySQLAgent:
                 cursor.execute(sql, sql_args)
                 query_result = cursor.fetchall()
                 return [
-                    MySQLAgentQueryResult(
+                    MySQLAgentQueryResponseData(
                         column_names=list(query_result[0].keys()),
                         rows=[list(row.values()) for row in query_result],
                         row_count=len(query_result)
@@ -392,7 +393,7 @@ class MySQLAgent:
                     operator=operator,
                     message=f"Insert success.",
                     result=True,
-                    data=MySQLAgentInsertData(affect_rows=affect_rows)
+                    data=MySQLAgentInsertResponseData(affect_rows=affect_rows)
             )
         except Exception as e:
                 message= f"Insert failed after 3 retries! Error:{str(e)}"
@@ -474,7 +475,7 @@ class MySQLAgent:
                 operator=operator,
                 message=f"Delete success.",
                 result=True,
-                data=MySQLAgentDeleteData(affect_rows=affect_rows)
+                data=MySQLAgentDeleteResponseData(affect_rows=affect_rows)
             )
         except Exception as e:
             message = f"Delete failed after 3 retries! Error:{str(e)}"
@@ -561,7 +562,7 @@ class MySQLAgent:
                 operator=operator,
                 message=f"Update success.",
                 result=True,
-                data= MySQLAgentUpdateData(affect_rows=affect_rows)
+                data= MySQLAgentUpdateResponseData(affect_rows=affect_rows)
             ) 
             
         except Exception as e:
@@ -644,7 +645,7 @@ class MySQLAgent:
                 operator=operator,
                 result=True,
                 message=f"Success connect database:'{database}'",
-                data=MySQLAgentConnectDatabaseData(connection_id=connection_id)
+                data=MySQLAgentConnectDatabaseResponseData(connection_id=connection_id)
             )
         
         except Exception as e:

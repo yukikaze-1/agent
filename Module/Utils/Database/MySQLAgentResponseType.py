@@ -6,7 +6,7 @@
 
 
 """
-    Uservice 各种回复的格式定义
+   MySQLAgent 各种回复的格式定义
 """
 
 from datetime import datetime
@@ -26,14 +26,12 @@ class MySQLAgentResponseErrorCode(IntEnum):
     UPDATE_DATABASE_FAILED = 5001  # 更新数据库失败
 
 
-
 class MySQLAgentErrorDetail(BaseModel):
     """ MySQLAgent详细错误类 """
     code: MySQLAgentResponseErrorCode = Field(..., description="错误代码")
     message: str = Field(..., description="错误信息")
     field: str | None = Field(default=None, description="出错字段，比如 'email'")
     hint: str | None = Field(default=None, description="帮助提示")
-
 
 
 class MySQLAgentBaseResponse(BaseModel):
@@ -49,17 +47,17 @@ class MySQLAgentBaseResponse(BaseModel):
     
     
     
-class MySQLAgentConnectDatabaseData(BaseModel):
+class MySQLAgentConnectDatabaseResponseData(BaseModel):
     """  连接数据库 数据"""    
     connection_id: int = Field(..., description="")
     
 class MySQLAgentConnectDatabaseResponse(MySQLAgentBaseResponse):
     """ 连接数据库 Response """
-    data: MySQLAgentConnectDatabaseData | None = Field(default=None, description="连接数据库附加数据")
+    data: MySQLAgentConnectDatabaseResponseData | None = Field(default=None, description="连接数据库附加数据")
 
 
 
-class MySQLAgentQueryResult(BaseModel):
+class MySQLAgentQueryResponseData(BaseModel):
     """ SQL查询 数据 """
     column_names: List[str] = Field(..., description="查询结果列名列表")
     rows: List[List[Any]] = Field(..., description="查询结果数据行列表，每行是一个列表")
@@ -70,40 +68,42 @@ class MySQLAgentQueryResult(BaseModel):
 
 class MySQLAgentQueryResponse(MySQLAgentBaseResponse):
     """ SQL查询 Response """
-    data : List[MySQLAgentQueryResult] | None = Field(default=None, description="查询结果数据列表")
-    
-    
-    
-class MySQLAgentInsertData(BaseModel):
-    """ SQL插入 数据 """
+    data : List[MySQLAgentQueryResponseData] | None = Field(default=None, description="查询结果数据列表")
+
+
+
+class MySQLAgentInsertResponseData(BaseModel):
+    """ SQL插入操作 Response 附加数据 """
     affect_rows: int = Field(..., description="插入的记录数")
+    last_insert_id: int | None = Field(default=None, description="自增主键 ID（如果有）")
 
 class MySQLAgentInsertResponse(MySQLAgentBaseResponse):
     """ SQL插入 Response """
-    data: MySQLAgentInsertData | None = Field(default=None, description="插入数据附加信息")
+    data: MySQLAgentInsertResponseData | None = Field(default=None, description="插入数据附加信息")
     
     
     
-class MySQLAgentDeleteData(BaseModel):
+class MySQLAgentDeleteResponseData(BaseModel):
     """ SQL删除 数据 """
     affect_rows: int = Field(..., description="删除的记录数")
 
 class MySQLAgentDeleteResponse(MySQLAgentBaseResponse):
     """ SQL删除 Response """
-    data: MySQLAgentDeleteData | None = Field(default=None, description="删除数据附加信息")
+    data: MySQLAgentDeleteResponseData | None = Field(default=None, description="删除数据附加信息")
     
     
     
-class MySQLAgentUpdateData(BaseModel):
+class MySQLAgentUpdateResponseData(BaseModel):
     """ SQL更新 数据 """
     affect_rows: int = Field(..., description="更新的记录数")
 
 class MySQLAgentUpdateResponse(MySQLAgentBaseResponse):
     """ SQL更新 Response """
-    data: MySQLAgentUpdateData | None = Field(default=None, description="更新数据附加信息")
+    data: MySQLAgentUpdateResponseData | None = Field(default=None, description="更新数据附加信息")
     
     
-class MySQLAgentTransactionData(BaseModel):
+    
+class MySQLAgentTransactionResponseData(BaseModel):
     """ 事务 数据 """
     pass
     

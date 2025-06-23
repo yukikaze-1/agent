@@ -5,7 +5,7 @@
 # Description:  agent User information database initialize
 
 """
-    用户账户数据库
+    用户账户数据库管理类
 """
 import httpx
 import uuid
@@ -16,15 +16,17 @@ from dotenv import dotenv_values
 from logging import Logger
 from fastapi import HTTPException
 from datetime import datetime
+from pydantic import BaseModel, Field, EmailStr
 
 
 from Module.Utils.Logger import setup_logger
 from Module.Utils.ConfigTools import load_config, validate_config
 from Module.Utils.FormatValidate import is_email, is_account_name
-from Module.Utils.Database.MySQLHelper import MySQLHelper
+from Module.Utils.Database.SQLBuilder import SQLBuilder
+from Module.Utils.Database.SQLExecutor import SQLExecutor
 from Module.Utils.ToolFunctions import retry
 from Module.Utils.Database.MySQLAgentResponseType import MySQLAgentConnectDatabaseResponse
-from Module.Utils.Database.UserInfoTableType import (
+from Module.Utils.Database.UserAccountDatabseSQLParameterSchema import (
     SQL_REQUEST_ALLOWED_FIELDS,
     get_allowed_fields,
     filter_writable_fields,
@@ -45,12 +47,31 @@ from Module.Utils.Database.UserInfoTableType import (
     TableConversationMessagesSchema, TableConversationMessagesInsertSchema
 )
 
+from Module.Utils.Database.MySQLAgentResponseType import (
+    MySQLAgentInsertResponse,
+    MySQLAgentUpdateResponse,
+)
+
 
 class UserAccountDataBaseAgent():
     """
-        数据库:userinfo
+        该类负责用户账户相关数据的管理和操作
         
-        配置文件为config.yml,配置文件路径存放在Init/.env中的的INIT_CONFIG_PATH变量中
+        主要功能：
+            1. 提供用户账户相关数据的增删改查接口
+            2. 保存MySQLAgent返回的数据库连接ID
+            3. 该类的所有方法都需要在数据库连接成功后才能调用
+            4. 该类只为UserService提供服务，UserService会在需要时调用该类的方法
+
+        该Agent管理的数据库名称: userinfo
+
+        注意：
+            1. 该类初始化时不进行数据库的连接，只进行参数设置
+            2. 该类的init_connection()函数只会在上层UserService中的lifespan中进行手动调用
+            3. 该类的所有方法都需要在数据库连接成功后才能调用
+            4. 该类只为UserService提供服务，UserService会在需要时调用该类的方法
+
+        配置文件为 config.yml ,配置文件路径存放在 Init/.env 中的 INIT_CONFIG_PATH 变量中
             配置内容为：
                 user_account_database_config：
                     host
@@ -60,16 +81,19 @@ class UserAccountDataBaseAgent():
                     database
                     charset
                                 
-        # 需要手动在mysql数据库中创建用户信息数据库 
-          TODO 应该让程序自动创建一个数据库，待实现
-        (注：1.要先手动创建一个名为userinfo的database才行 2. 创建表的SQL语句见本文件顶部的注释):    
-            1. 用户主表 (`users`)
-            2. 用户扩展资料 (`user_profile`)
-            3. 用户登录认证 (`user_login_logs`)
-            4. 用户自定义设置 (`user_settings`)
-            5. 用户账户行为 (`user_account_actions`)
-            6. 用户通知与消息 (`user_notifications`)
-            7. 用户文件 (`user_files`)
+        ### 需要手动在mysql数据库中创建用户信息数据库 
+        
+        注：
+            1.要先手动创建一个名为userinfo的database才行
+            2. 创建表的SQL语句以及各个表的结构见 UserAccountDatabseSQLParameterSchema.py:    
+                用户主表 (`users`)
+                用户扩展资料 (`user_profile`)
+                用户登录认证 (`user_login_logs`)
+                用户自定义设置 (`user_settings`)
+                用户账户行为 (`user_account_actions`)
+                用户通知与消息 (`user_notifications`)
+                用户文件 (`user_files`)
+                
     """
     def __init__(self, logger: Optional[Logger]=None):
         self.logger = logger or setup_logger(name="UserAccountDataBaseAgent", log_path="InternalModule")
@@ -102,17 +126,22 @@ class UserAccountDataBaseAgent():
         # 一个(id, mysql数据库连接对象)的映射
         self.db_connect_id: int = -1
 
-        # 初始化 MySQLHelper
-        self.mysql_helper = MySQLHelper(
-            mysql_agent_url=self.mysql_agent_url,
+        # 初始化SQLBuilder 
+        self.sql_builder = SQLBuilder(logger=self.logger)
+        
+        # 初始化SQLExecutor
+        self.sql_executor = SQLExecutor(
             db_connect_id=self.db_connect_id,
-            client=self.client
+            client=self.client,
+            logger=self.logger
         )
         
 
     async def init_connection(self) -> None:
         """
         真正执行连接, 并为 self.db_connect_id 赋值
+        在上层的USerService中的lifespan中手动调用。
+        该类初始化时不调用。
         """
         try:
             self.db_connect_id = await self.connect_to_database()
@@ -121,464 +150,13 @@ class UserAccountDataBaseAgent():
                 raise ValueError("Failed to connect to database,connect id == -1")
             else:
                 self.logger.info(f"db_connect_id = {self.db_connect_id}")
+                # 同步到 SQLExecutor
+                self.sql_executor.db_connect_id = self.db_connect_id
         except Exception as e:
             self.logger.error(f"Failed to init connection: {e}")
             raise
         
-    # ------------------------------------------------------------------------------------------------
-    # 功能函数---查询表项目
-    # ------------------------------------------------------------------------------------------------     
-    
-    """
-        查询函数封装在了MySQLHelper中的query_one和query_many中
-    """
-    
-    # ------------------------------------------------------------------------------------------------
-    # 功能函数---插入表项目
-    # ------------------------------------------------------------------------------------------------
-    
-    async def insert_users(self, insert_data: TableUsersInsertSchema) -> Optional[int]:
-        """
-        插入 users 表项目
-
-        :param insert_data: TableUsersInsertSchema 对象，包含以下字段：
-                account: 用户账号
-                email: 用户邮箱
-                password_hash: 用户密码哈希
-                user_name: 用户昵称
-                file_folder_path: 用户文件夹路径
-
-        :return: 成功返回 user_id，失败返回 None
-        """
-        table = "users"
-        # 清洗数据
-        data = filter_writable_fields(
-            schema=insert_data,
-            allowed_fields=get_allowed_fields(table=table, action="insert")
-        )
         
-        # 执行插入
-        res = await self.mysql_helper.insert_one(table=table, data=data,
-                                     success_msg=f"Inserted user info for account: {insert_data.account}",
-                                     warning_msg=f"User info insert may have failed for account: {insert_data.account}",
-                                     error_msg=f"Insert error for account: {insert_data.account}")
-        
-        if not res:
-            self.logger.error(f"Failed to insert user info for account: {insert_data.account}")
-            return None
-
-        try:
-            user_id = await self.fetch_user_id_by_uuid(insert_data.user_uuid)
-        except Exception as e:
-            self.logger.error(f"Failed to fetch user_id for user_uuid: {insert_data.user_uuid}. Error: {e}")
-            return None
-        
-        if user_id is None:
-            self.logger.warning(f"No user found with UUID: {insert_data.user_uuid}")
-            return None
-        return user_id
-    
-    
-    async def insert_user_profile(self, insert_data: TableUserProfileInsertSchema)-> bool:
-        """
-        插入新用户的个人资料信息到 user_profile 表。
-
-        :param insert_data: TableUserProfileInsertSchema 对象，包含以下字段：
-                user_id: 用户ID
-                user_name: 用户名
-
-        :return: 插入是否成功
-        """
-        table = "user_profile"
-        # 清洗数据
-        data = filter_writable_fields(
-            schema=insert_data,
-            allowed_fields=get_allowed_fields(table=table, action="insert")
-        )
-        
-        # 执行插入
-        return await self.mysql_helper.insert_one(table=table, data=data,
-                            success_msg=f"Inserted user profile.User id: {insert_data.user_id}",
-                            warning_msg=f"User profile insert may have failed.User id: {insert_data.user_id}",
-                            error_msg=f"Insert error.User id: {insert_data.user_id}")
-
-
-    async def insert_user_login_logs(self, insert_data: TableUserLoginLogsInsertSchema) -> bool:
-        """
-        插入用户登录日志到 user_login_logs 表
-
-        :param insert_data: TableUserLoginLogsInsertSchema 对象，包含以下字段：
-                user_id: 用户ID
-                ip_address: 登录IP地址
-                agent: 浏览器代理
-                device: 登录设备
-                os: 操作系统
-                login_success: 登录是否成功
-
-        :return: 插入是否成功
-        """
-        table = "user_login_logs"
-        # 清洗数据
-        data = filter_writable_fields(
-            schema=insert_data,
-            allowed_fields=get_allowed_fields(table=table, action="insert")
-        )
-        
-        # 执行插入
-        return await self.mysql_helper.insert_one(table=table, data=data,
-                                     success_msg=f"Inserted user login log.User id: {insert_data.user_id}",
-                                     warning_msg=f"User login log insert may have failed.User id: {insert_data.user_id}",
-                                     error_msg=f"Insert error.User id: {insert_data.user_id}")
-
-
-    async def insert_user_settings(self, insert_data: TableUserSettingsInsertSchema)-> bool:
-        """ 
-        插入新用户的个人设置到 user_settings 表
-
-        :param insert_data: TableUserSettingsInsertSchema 对象，包含以下字段：
-                user_id: 用户ID
-                language: 语言
-                configure: 用户配置
-                notification_setting: 通知设置
-
-        :return: 插入是否成功
-        """
-        table = "user_settings"
-        # 清洗数据
-        data = filter_writable_fields(
-            schema=insert_data,
-            allowed_fields=get_allowed_fields(table=table, action="insert")
-        )
-        
-        # 执行插入
-        return await self.mysql_helper.insert_one(table=table, data=data,
-                                     success_msg=f"Inserted user settings.User id: {insert_data.user_id}",
-                                     warning_msg=f"User settings insert may have failed.User id: {insert_data.user_id}",
-                                     error_msg=f"Insert error.User id: {insert_data.user_id}")
-   
-
-    async def insert_user_account_actions(self, insert_data: TableUserAccountActionsInsertSchema) -> bool:
-        """
-        插入用户账号操作记录到 user_account_actions 表
-
-        :param insert_data: TableUserAccountActionsInsertSchema 对象，包含以下字段：
-                user_id: 用户ID
-                action_type: 操作类型
-                action_time: 操作时间
-
-        :return: 插入是否成功
-        """
-        table = "user_account_actions"
-        # 清洗数据
-        data = filter_writable_fields(
-            schema=insert_data,
-            allowed_fields=get_allowed_fields(table=table, action="insert")
-        )
-        
-        # 执行插入
-        return await self.mysql_helper.insert_one(table=table, data=data,
-                                     success_msg=f"Inserted user account action.User id: {insert_data.user_id}",
-                                     warning_msg=f"User account action insert may have failed.User id: {insert_data.user_id}",
-                                     error_msg=f"Insert error.User id: {insert_data.user_id}")
-
-
-    async def insert_user_notifications(self, insert_data: TableUserNotificationsInsertSchema) -> bool:
-        """
-        插入 user_notifications 表
-
-        :param insert_data: TableUserNotificationsInsertSchema 对象，包含以下字段：
-                user_id: 用户ID
-                notification_type: 通知类型
-                notification_title: 通知标题
-                notification_content: 通知内容
-        
-        :param is_read: 是否已读
-        """
-        table = "user_notifications"
-        # 清洗数据
-        data = filter_writable_fields(
-            schema=insert_data,
-            allowed_fields=get_allowed_fields(table=table, action="insert")
-        )
-        
-        # 执行插入
-        return await self.mysql_helper.insert_one(table=table, data=data,
-                                     success_msg=f"Inserted user notification.User id: {insert_data.user_id}",
-                                     warning_msg=f"User notification insert may have failed.User id: {insert_data.user_id}",
-                                     error_msg=f"Insert error.User id: {insert_data.user_id}")
-
-
-    async def insert_user_files(self, insert_data: TableUserFilesInsertSchema) -> bool:
-        """
-        插入 user_files
-
-        :param insert_data: TableUserFilesInsertSchema 对象，包含以下字段：
-                user_id: 用户ID
-                file_path: 文件路径
-                file_name: 文件名
-                file_type: 文件类型
-                file_size: 文件大小
-                upload_time: 上传时间        
-                is_deleted: 是否已删除(非必须)
-
-        :return: 插入是否成功
-        """
-        table = "user_files"
-        # 清洗数据
-        data = filter_writable_fields(
-            schema=insert_data,
-            allowed_fields=get_allowed_fields(table=table, action="insert")
-        )
-        
-        # 执行插入
-        return await self.mysql_helper.insert_one(table=table, data=data,
-                            success_msg=f"Inserted user files.User id: {insert_data.user_id}",
-                            warning_msg=f"User files insert may have failed.User id: {insert_data.user_id}",
-                            error_msg=f"Insert error.User id: {insert_data.user_id}")
-     
-    # ------------------------------------------------------------------------------------------------
-    # 功能函数---更新表项目
-    # ------------------------------------------------------------------------------------------------
-    async def update_users(self, update_data: TableUsersUpdateSchema) -> bool:
-        """
-        更新 users 表
-
-        :param update_data: TableUsersUpdateSchema 对象，可能包含以下任意字段：
-                user_id: 用户id(必须，定位用，实际不更新)  
-                status: 用户状态
-                password_hash: 用户密码哈希
-                last_login_time: 用户最后登录时间
-                last_login_ip: 用户最后登录IP
-                session_token: 用户会话令牌
-
-        :return: 更新是否成功
-        """
-        table = "users"
-        # 清洗数据
-        data = filter_writable_fields(
-            schema=update_data,
-            allowed_fields=get_allowed_fields(table=table, action="update")
-        )
-
-        # 执行更新
-        return await self.mysql_helper.update_one(table=table, data=data,
-                                        where_conditions=["user_id = %s", "status != %s"],
-                                        where_values=[update_data.user_id, "deleted"],
-                                        success_msg=f"Updated user info.",
-                                        warning_msg=f"User info update may have failed.",
-                                        error_msg=f"Update error.")
-    
-
-    async def update_user_profile(self, update_data: TableUserProfileUpdateSchema) -> bool:
-        """
-        更新 user_profile 表
-
-        :param update_data: TableUserProfileUpdateSchema 对象，可能包含以下任意字段：
-                user_id: 用户ID(必须，定位用，实际不更新)  
-                user_name: 用户名
-                profile_picture_url: 用户头像URL
-                signature: 用户签名
-
-        :return: 更新是否成功
-        """
-        table = "user_profile"
-        # 清洗数据
-        data = filter_writable_fields(
-            schema=update_data,
-            allowed_fields=get_allowed_fields(table=table, action="update")
-        )
-
-        # 执行更新
-        return await self.mysql_helper.update_one(table=table, data=data,
-                                                   where_conditions=["user_id = %s"],
-                                                   where_values=[update_data.user_id],
-                                                   success_msg=f"Updated user profile.User id: {update_data.user_id}",
-                                                   warning_msg=f"User profile update may have failed.User id: {update_data.user_id}",
-                                                   error_msg=f"Update error.User id: {update_data.user_id}")
-   
-   
-    # user_login_logs不应该修改
-    
-   
-    async def update_user_settings(self, update_data: TableUserSettingsUpdateSchema) -> bool:
-        """
-        更新 user_settings（仅更新传入的字段）
-        :param update_data: TableUserSettingsUpdateSchema 对象，可能包含以下任意字段：
-            user_id: 用户ID(必须，定位用，实际不更新)  
-            language: 语言设置
-            configure: 用户配置
-            notification_setting: 通知设置
-
-        :return: 更新是否成功
-        """
-        table = "user_settings"
-        # 清洗数据
-        data = filter_writable_fields(
-            schema=update_data,
-            allowed_fields=get_allowed_fields(table=table, action="update")
-        )
-
-        # 执行更新
-        return await self.mysql_helper.update_one(table=table, data=data,
-                                      where_conditions=["user_id = %s"],
-                                      where_values=[update_data.user_id],
-                                      success_msg=f"Updated user settings. User id: {update_data.user_id}",
-                                      warning_msg=f"User settings update may have failed. User id: {update_data.user_id}",
-                                      error_msg=f"Update error. User id: {update_data.user_id}")
-
-
-    async def update_user_notifications(self, update_data: TableUserNotificationsUpdateSchema) -> bool:
-        """
-        更新用户的通知状态
-        :param update_data: TableUserNotificationsUpdateSchema 对象，可能包含以下任意字段：
-                notification_id: 用户ID(必须，定位用，实际不更新) 
-                is_read: 是否已读
-
-        :return: 更新是否成功
-        """
-        table = "user_notifications"
-        # 清洗数据
-        data = filter_writable_fields(
-            schema=update_data,
-            allowed_fields=get_allowed_fields(table=table, action="update")
-        )
-
-        # 执行更新
-        return await self.mysql_helper.update_one(table=table, data=data,
-                                      where_conditions=["notification_id= %s"],
-                                      where_values=[update_data.notification_id],
-                                      success_msg=f"Updated user notifications. Notification id: {update_data.notification_id}",
-                                      warning_msg=f"User notifications update may have failed. Notification id: {update_data.notification_id}",
-                                      error_msg=f"Update error. Notification id: {update_data.notification_id}")
-       
-
-    async def update_user_files(self, update_data: TableUserFilesUpdateSchema) -> bool:
-        """
-        更新 user_files（仅更新传入的字段）
-
-        :param update_data: TableUserFilesUpdateSchema 对象，可能包含以下任意字段：
-                file_id: 文件ID(必须，定位用，实际不更新) 
-                file_path: 文件路径
-                file_name: 文件名
-                file_type: 文件类型
-                file_size: 文件大小
-                is_deleted: 是否已删除
-        
-        :return: 更新是否成功
-        """
-        table = "user_files"
-        # 清洗数据
-        data = filter_writable_fields(
-            schema=update_data,
-            allowed_fields=get_allowed_fields(table=table, action="update")
-        )
-
-        # 执行更新
-        return await self.mysql_helper.update_one(table=table, data=data,
-                                      where_conditions=["file_id = %s"],
-                                      where_values=[update_data.file_id],
-                                      success_msg=f"Updated user files. File id: {update_data.file_id}",
-                                      warning_msg=f"User files update may have failed. File id: {update_data.file_id}",
-                                      error_msg=f"Update error. File id: {update_data.file_id}")
-
-    
-    # ------------------------------------------------------------------------------------------------
-    # 功能函数---删除表项目
-    # ------------------------------------------------------------------------------------------------ 
-    async def soft_delete_user_by_user_id(self, user_id: int) -> bool:
-        """
-        软删除用户：设为 'deleted' 并记录删除时间。
-
-        :param user_id: 用户ID
-            返回: 更新是否成功
-        """
-        
-        # 1. 将users 表中的 status 设置为 'deleted'
-        try:
-            res = await self.mysql_helper.update_one(
-                table="users",
-                data={"status": "deleted", "deleted_at": "CURRENT_TIMESTAMP"},
-                where_conditions=["user_id = %s"],
-                where_values=[user_id],
-                success_msg=f"Soft-deleted user ID: {user_id}",
-                warning_msg=f"Soft delete may have failed. User ID: {user_id}",
-                error_msg=f"Soft delete error. User ID: {user_id}"
-            )
-        except Exception as e:
-            self.logger.error(f"Soft delete failed! Error: {str(e)}")
-            return False
-        
-        if not res:
-            self.logger.warning(f"Soft delete may have failed. User ID: {user_id}")
-            return False
-        
-        return True
-        
-            
-    async def delete_user_by_user_id(self, user_id: int) -> bool:
-        """
-        根据 user_id 删除用户（包含自动删除 user_profile 中的关联记录）。
-
-        :param user_id: 用户ID
-        :return: 删除是否成功
-        """
-        
-        # 1. 删除 users 表中数据(根据user_id)
-        try:
-            success = await self.mysql_helper.delete_one(table="users",
-                                                     where_conditions=["user_id = %s"],
-                                                     where_values=[user_id])
-        except Exception as e:
-            self.logger.error(f"Delete failed! Error: {str(e)}")
-            return False
-
-        # 2. 删除 user_profile 表中数据
-        # 无需手动，因为user_id是 外键，下面的表同理
-        # 3. 删除 user_login_logs 表中数据
-        
-        # 4. 删除 user_settings 表中数据
-        
-        # 5. 删除 user_account_actions 表中数据
-        
-        # 6. 删除 user_notifications 表中数据
-        
-        # 7. 删除 user_files 表中数据
-        
-        return True
-
-        
-    async def hard_delete_expired_users(self)->bool:
-        """
-        物理删除已标记为 deleted 超过 30 天的用户。
-        """
-        sql = """
-            DELETE FROM users
-            WHERE status = 'deleted' AND deleted_at < (NOW() - INTERVAL 30 DAY);
-        """
-        payload = {
-            "id": self.db_connect_id,
-            "sql": sql,
-            "sql_args": []
-        }
-
-        try:
-            response = await self.client.post(
-                url=self.mysql_agent_url + "/database/mysql/delete",
-                json=payload,
-                timeout=120.0
-            )
-            response.raise_for_status()
-            response_data = response.json()
-
-            if response.status_code == 200:
-                self.logger.info("Expired deleted users purged.")
-            return True
-
-        except Exception as e:
-            self.logger.error(f"Hard delete failed! Error: {str(e)}")
-            return False
-        
-
     async def connect_to_database(self) -> int:
         """
         连接MySQL数据库
@@ -630,6 +208,507 @@ class UserAccountDataBaseAgent():
             self.logger.error(f"Connect to database '{self.database}' failed! Unexpected error: {e}")
             raise HTTPException(status_code=500, detail="Internal server error.")
         
+        
+    # ------------------------------------------------------------------------------------------------
+    # 功能函数---查询表项目
+    # ------------------------------------------------------------------------------------------------     
+    async def query_many(self, table: str,
+                        fields: Optional[List[str]] = None,
+                        where_conditions: Optional[List[str]] = None,
+                        where_values: Optional[List] = None,
+                        order_by: Optional[str] = None,
+                        limit: Optional[int] = None,
+                        offset: Optional[int] = None,
+                        success_msg: str = "Query success.",
+                        warning_msg: str = "Query may have failed.",
+                        error_msg: str = "Query error.") -> Optional[List[Dict]]:
+        """
+        执行 SELECT 查询并返回多条记录
+
+        :param table: 表名
+        :param fields: 要查询的字段
+        :param where_conditions: WHERE 条件
+        :param where_values: WHERE 条件对应的值
+        :param order_by: ORDER BY 子句
+        :param limit: LIMIT 子句
+        :param offset: OFFSET 子句
+        :param success_msg: 成功日志
+        :param warning_msg: 警告日志
+        :param error_msg: 错误日志
+        :return: 查询结果列表，失败时返回 None
+        """
+        sql, sql_args = self.sql_builder.build_query_sql(
+            table=table,
+            fields=fields,
+            where_conditions=where_conditions,
+            where_values=where_values,
+            order_by=order_by,
+            limit=limit,
+            offset=offset
+        )
+        url = self.mysql_agent_url + "/database/mysql/query"
+
+        self.logger.info(f"Executing query: {sql} with args: {sql_args}")
+
+        payload = {
+            "id": self.db_connect_id,
+            "sql": sql,
+            "sql_args": sql_args
+        }
+
+        try:
+            # 发送给MySQLAgent
+            response = await self.client.post(url=url, json=payload, timeout=60.0)
+            response.raise_for_status()
+            response_data = response.json()
+            
+            self.logger.debug(f"In query_many: Response: {response}")
+
+            if response.status_code == 200 and response_data.get("Result") is True:
+                self.logger.info(success_msg)
+                return response_data.get("Query Result") or []
+            else:
+                self.logger.warning(f"{warning_msg} | Response: {response_data}")
+                return None
+        except Exception as e:
+            self.logger.error(f"{error_msg}: {str(e)}")
+            return None
+
+
+    async def query_one(self, table: str,
+                    fields: Optional[List[str]] = None,
+                    where_conditions: Optional[List[str]] = None,
+                    where_values: Optional[List] = None,
+                    order_by: Optional[str] = None,
+                    warning_msg: str = "Query One Warning.",
+                    error_msg: str = "Query One Error.") -> Optional[Dict]:
+        """
+        执行 SELECT 查询并返回一条记录
+
+        :param table: 表名
+        :param fields: 要查询的列
+        :param where_conditions: WHERE 条件
+        :param where_values: WHERE 条件对应的值
+        :param order_by: ORDER BY 子句
+        :param warning_msg: 警告日志
+        :param error_msg: 错误日志
+        :return: 查询结果字典，失败时返回 None
+        """
+        # 转发
+        result = await self.query_many(table=table,
+                                       fields=fields,
+                                       where_conditions=where_conditions,
+                                       where_values=where_values,
+                                       limit=1,
+                                       order_by=order_by,
+                                       warning_msg=warning_msg,
+                                       error_msg=error_msg)
+        return result[0] if result else None
+
+
+    async def delete_one(self, table: str,
+                     where_conditions: List[str],
+                     where_values: List,
+                     success_msg: str = "Delete success.",
+                     warning_msg: str = "Delete warning.",
+                     error_msg: str = "Delete error.") -> bool:
+        """
+        删除一条记录
+
+        :param table: 表名
+        :param where_conditions: WHERE 条件表达式列表
+        :param where_values: 对应参数值
+        :param success_msg: 成功日志
+        :param warning_msg: 警告日志
+        :param error_msg: 错误日志
+        :return: 是否删除成功
+        """
+        sql, args = self.sql_builder.build_delete_sql(
+            table=table,
+            where_conditions=where_conditions,
+            where_values=where_values
+        )
+
+        url = self.mysql_agent_url + "/database/mysql/delete"
+        
+        return await self.sql_executor.execute_write_sql(
+            url=url,
+            sql=sql,
+            sql_args=args,
+            success_msg=success_msg,
+            warning_msg=warning_msg,
+            error_msg=error_msg
+        )
+    
+    # ------------------------------------------------------------------------------------------------
+    # 功能函数---插入表项目
+    # ------------------------------------------------------------------------------------------------
+    async def insert_users(self, insert_data: TableUsersInsertSchema) -> int | None:
+        """
+        插入 users 表项目
+
+        :param insert_data: TableUsersInsertSchema 对象，包含以下字段：
+                account: 用户账号
+                email: 用户邮箱
+                password_hash: 用户密码哈希
+                user_name: 用户昵称
+                file_folder_path: 用户文件夹路径
+
+        :return: 成功返回 user_id，失败返回 None
+        """
+        table = "users"
+        
+        # 清洗数据
+        data = filter_writable_fields(
+            schema=insert_data,
+            allowed_fields=get_allowed_fields(table=table, action="insert")
+        )
+        
+        # 2. 构造 SQL
+        try:
+            sql, sql_args = self.sql_builder.build_insert_sql(table, data)
+        except Exception as e:
+            self.logger.error(f"SQL构建失败: {e}")
+            return None
+        
+        # 构建请求URL
+        url = self.mysql_agent_url + "/database/mysql/insert"
+
+        # 执行插入
+        try:
+            response_dict = await self.sql_executor.execute_write_sql(url=url, sql=sql, sql_args=sql_args,
+                                                warning_msg=f"User info insert may have failed for account: {insert_data.account}",
+                                                success_msg=f"User info insert succeeded for account: {insert_data.account}",
+                                                error_msg=f"Insert error for account: {insert_data.account}")
+            
+            # 校验响应结构
+            insert_response = MySQLAgentInsertResponse.model_validate(response_dict)
+            
+            if insert_response.result is False:
+                self.logger.error(f"插入失败：{insert_response.message}")
+                return None
+
+            if not insert_response.data or insert_response.data.last_insert_id is None:
+                self.logger.warning("插入成功但未返回主键 ID")
+                return None
+    
+            return insert_response.data.last_insert_id
+        
+        except Exception as e:
+            self.logger.error(f"插入用户数据失败: {e}")
+            return None    
+
+
+    async def insert_user_profile(self, insert_data: TableUserProfileInsertSchema) -> bool:
+        return await self._insert_record(
+            table="user_profile",
+            insert_data=insert_data,
+            warning_msg=f"User profile insert may have failed. User id: {insert_data.user_id}",
+            success_msg=f"User profile insert succeeded. User id: {insert_data.user_id}",
+            error_msg=f"Insert error. User id: {insert_data.user_id}"
+        )
+
+    async def insert_user_login_logs(self, insert_data: TableUserLoginLogsInsertSchema) -> bool:
+        return await self._insert_record(
+            table="user_login_logs",
+            insert_data=insert_data,
+            warning_msg=f"User login log insert may have failed. User id: {insert_data.user_id}",
+            success_msg=f"User login log insert succeeded. User id: {insert_data.user_id}",
+            error_msg=f"Insert error. User id: {insert_data.user_id}"
+        )
+
+    async def insert_user_settings(self, insert_data: TableUserSettingsInsertSchema) -> bool:
+        return await self._insert_record(
+            table="user_settings",
+            insert_data=insert_data,
+            warning_msg=f"User settings insert may have failed. User id: {insert_data.user_id}",
+            success_msg=f"User settings insert succeeded. User id: {insert_data.user_id}",
+            error_msg=f"Insert error. User id: {insert_data.user_id}"
+        )
+
+    async def insert_user_account_actions(self, insert_data: TableUserAccountActionsInsertSchema) -> bool:
+        return await self._insert_record(
+            table="user_account_actions",
+            insert_data=insert_data,
+            warning_msg=f"User account action insert may have failed. User id: {insert_data.user_id}",
+            success_msg=f"User account action insert succeeded. User id: {insert_data.user_id}",
+            error_msg=f"Insert error. User id: {insert_data.user_id}"
+        )
+
+    async def insert_user_notifications(self, insert_data: TableUserNotificationsInsertSchema) -> bool:
+        return await self._insert_record(
+            table="user_notifications",
+            insert_data=insert_data,
+            warning_msg=f"User notification insert may have failed. User id: {insert_data.user_id}",
+            success_msg=f"User notification insert succeeded. User id: {insert_data.user_id}",
+            error_msg=f"Insert error. User id: {insert_data.user_id}"
+        )
+
+    async def insert_user_files(self, insert_data: TableUserFilesInsertSchema) -> bool:
+        return await self._insert_record(
+            table="user_files",
+            insert_data=insert_data,
+            warning_msg=f"User files insert may have failed. User id: {insert_data.user_id}",
+            success_msg=f"User files insert succeeded. User id: {insert_data.user_id}",
+            error_msg=f"Insert error. User id: {insert_data.user_id}"
+        )
+     
+     
+    async def _insert_record(
+        self,
+        table: str,
+        insert_data: BaseModel,
+        warning_msg: str,
+        success_msg: str,
+        error_msg: str
+    ) -> bool:
+        """
+        插入记录
+        
+        :param table: 表名
+        :param insert_data: 要插入的数据，必须是一个继承自 BaseModel 的对象
+        :param warning_msg: 警告日志信息
+        :param success_msg: 成功日志信息
+        :param error_msg: 错误日志信息
+        :return: 
+        """
+        # 清洗数据
+        data = filter_writable_fields(
+            schema=insert_data,
+            allowed_fields=get_allowed_fields(table=table, action="insert")
+        )
+        
+        # 构造 SQL
+        try:
+            sql, sql_args = self.sql_builder.build_insert_sql(table, data)
+        except Exception as e:
+            self.logger.error(f"SQL构建失败: {e}")
+            return False
+
+        # 构建请求URL
+        url = self.mysql_agent_url + "/database/mysql/insert"
+        
+        # 执行插入
+        try:
+            response_dict = await self.sql_executor.execute_write_sql(
+                url=url,
+                sql=sql,
+                sql_args=sql_args,
+                warning_msg=warning_msg,
+                success_msg=success_msg,
+                error_msg=error_msg
+            )
+            # 校验响应结构
+            insert_response = MySQLAgentInsertResponse.model_validate(response_dict)
+            
+            # 检查插入结果
+            if insert_response.result is False:
+                self.logger.warning(
+                    f"{error_msg}：{insert_response.message} | "
+                    f"错误码: {insert_response.err_code} | "
+                    f"字段错误: {insert_response.errors}"
+                )
+                return False
+            return True
+        except Exception as e:
+            self.logger.error(f"{error_msg}: {e}")
+            return False
+        
+    # ------------------------------------------------------------------------------------------------
+    # 功能函数---更新表项目
+    # ------------------------------------------------------------------------------------------------
+    async def update_users(self, update_data: TableUsersUpdateSchema) -> bool:
+        return await self._update_record(
+            table="users",
+            update_data=update_data,
+            warning_msg=f"User info update may have failed. User id: {update_data.user_id}",
+            success_msg=f"User info update succeeded. User id: {update_data.user_id}",
+            error_msg=f"Update error. User id: {update_data.user_id}"
+        )
+
+    async def update_user_profile(self, update_data: TableUserProfileUpdateSchema) -> bool:
+        return await self._update_record(
+            table="user_profile",
+            update_data=update_data,
+            warning_msg=f"User profile update may have failed. User id: {update_data.user_id}",
+            success_msg=f"User profile update succeeded. User id: {update_data.user_id}",
+            error_msg=f"Update error. User id: {update_data.user_id}"
+        )
+
+    async def update_user_settings(self, update_data: TableUserSettingsUpdateSchema) -> bool:
+        return await self._update_record(
+            table="user_settings",
+            update_data=update_data,
+            warning_msg=f"User settings update may have failed. User id: {update_data.user_id}",
+            success_msg=f"User settings update succeeded. User id: {update_data.user_id}",
+            error_msg=f"Update error. User id: {update_data.user_id}"
+        )
+
+    async def update_user_notifications(self, update_data: TableUserNotificationsUpdateSchema) -> bool:
+        return await self._update_record(
+            table="user_notifications",
+            update_data=update_data,
+            warning_msg=f"User notifications update may have failed. Notification id: {update_data.notification_id}",
+            success_msg=f"User notifications update succeeded. Notification id: {update_data.notification_id}",
+            error_msg=f"Update error. Notification id: {update_data.notification_id}"
+        )
+
+    async def update_user_files(self, update_data: TableUserFilesUpdateSchema) -> bool:
+        return await self._update_record(
+            table="user_files",
+            update_data=update_data,
+            warning_msg=f"User files update may have failed. File id: {update_data.file_id}",
+            success_msg=f"User files update succeeded. File id: {update_data.file_id}",
+            error_msg=f"Update error. File id: {update_data.file_id}"
+        )
+        
+    async def _update_record(
+        self,
+        table: str,
+        update_data: BaseModel,
+        warning_msg: str,
+        success_msg: str,
+        error_msg: str
+    ) -> bool:
+        """
+        更新指定表的记录
+        
+        :param  table: 表名
+        :param update_data: 要更新的数据，必须是一个继承自 BaseModel 的对象
+        :param warning_msg: 警告日志信息
+        :param success_msg: 成功日志信息
+        :param error_msg: 错误日志信息
+        :return: 是否更新成功
+        """
+        # 清洗数据
+        data = filter_writable_fields(
+            schema=update_data,
+            allowed_fields=get_allowed_fields(table=table, action="update")
+        )
+        # 构造 SQL
+        try:
+            sql, sql_args = self.sql_builder.build_update_sql(table, data)
+        except Exception as e:
+            self.logger.error(f"SQL构建失败: {e}")
+            return False
+
+        url = self.mysql_agent_url + "/database/mysql/update"
+        try:
+            response_dict = await self.sql_executor.execute_write_sql(
+                url=url,
+                sql=sql,
+                sql_args=sql_args,
+                warning_msg=warning_msg,
+                success_msg=success_msg,
+                error_msg=error_msg
+            )
+            update_response = MySQLAgentUpdateResponse.model_validate(response_dict)
+            if update_response.result is False:
+                self.logger.warning(
+                    f"{error_msg}：{update_response.message} | "
+                    f"错误码: {update_response.err_code} | "
+                    f"字段错误: {update_response.errors}"
+                )
+                return False
+            return True
+        except Exception as e:
+            self.logger.error(f"{error_msg}: {e}")
+            return False    
+        
+    # ------------------------------------------------------------------------------------------------
+    # 功能函数---删除表项目
+    # ------------------------------------------------------------------------------------------------ 
+    async def soft_delete_user_by_user_id(self, user_id: int) -> bool:
+        """
+        软删除用户：设为 'deleted' 并记录删除时间。
+
+        :param user_id: 用户ID
+        :return: 更新是否成功
+        """
+        
+        # 1. 将users 表中的 status 设置为 'deleted'
+        try:
+            res = await self.mysql_helper.update_one(
+                table="users",
+                data={"status": "deleted", "deleted_at": "CURRENT_TIMESTAMP"},
+                where_conditions=["user_id = %s"],
+                where_values=[user_id],
+                success_msg=f"Soft-deleted user ID: {user_id}",
+                warning_msg=f"Soft delete may have failed. User ID: {user_id}",
+                error_msg=f"Soft delete error. User ID: {user_id}"
+            )
+        except Exception as e:
+            self.logger.error(f"Soft delete failed! Error: {str(e)}")
+            return False
+        
+        if not res:
+            self.logger.warning(f"Soft delete may have failed. User ID: {user_id}")
+            return False
+        
+        return True
+        
+            
+    async def delete_user_by_user_id(self, user_id: int) -> bool:
+        """
+        根据 user_id 删除用户（包含自动删除 user_profile 中的关联记录）。
+
+        :param user_id: 用户ID
+        :return: 删除是否成功
+        """
+        
+        # 1. 删除 users 表中数据(根据user_id)
+        try:
+            success = await self.delete_one(table="users",
+                                                     where_conditions=["user_id = %s"],
+                                                     where_values=[user_id])
+        except Exception as e:
+            self.logger.error(f"Delete failed! Error: {str(e)}")
+            return False
+
+        # 2. 删除 user_profile 表中数据
+        # 无需手动，因为user_id是 外键，下面的表同理
+        # 3. 删除 user_login_logs 表中数据
+        # 4. 删除 user_settings 表中数据
+        # 5. 删除 user_account_actions 表中数据
+        # 6. 删除 user_notifications 表中数据
+        # 7. 删除 user_files 表中数据
+    
+        return True
+
+        
+    async def hard_delete_expired_users(self)->bool:
+        """
+        物理删除已标记为 deleted 超过 30 天的用户。
+        """
+        sql = """
+            DELETE FROM users
+            WHERE status = 'deleted' AND deleted_at < (NOW() - INTERVAL 30 DAY);
+        """
+        payload = {
+            "id": self.db_connect_id,
+            "sql": sql,
+            "sql_args": []
+        }
+
+        try:
+            response = await self.client.post(
+                url=self.mysql_agent_url + "/database/mysql/delete",
+                json=payload,
+                timeout=120.0
+            )
+            response.raise_for_status()
+            response_data = response.json()
+
+            if response.status_code == 200:
+                self.logger.info("Expired deleted users purged.")
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Hard delete failed! Error: {str(e)}")
+            return False
+        
+
+    
     # ------------------------------------------------------------------------------------------------
     # 封装的上层功能函数
     # ------------------------------------------------------------------------------------------------      
@@ -643,7 +722,7 @@ class UserAccountDataBaseAgent():
         """
 
         try:
-            res = await self.mysql_helper.query_one(
+            res = await self.query_one(
                 table="users",
                 fields=["user_id"],
                 where_conditions=["user_uuid = %s"],
@@ -891,4 +970,3 @@ class UserAccountDataBaseAgent():
             else:
                 self.logger.info(f"Success to update password. User id: {user_id}")
                 return True
-     
