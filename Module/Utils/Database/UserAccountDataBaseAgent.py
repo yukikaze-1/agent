@@ -306,39 +306,6 @@ class UserAccountDataBaseAgent():
         return result[0] if result else None
 
 
-    async def delete_one(self, table: str,
-                     where_conditions: List[str],
-                     where_values: List,
-                     success_msg: str = "Delete success.",
-                     warning_msg: str = "Delete warning.",
-                     error_msg: str = "Delete error.") -> bool:
-        """
-        删除一条记录
-
-        :param table: 表名
-        :param where_conditions: WHERE 条件表达式列表
-        :param where_values: 对应参数值
-        :param success_msg: 成功日志
-        :param warning_msg: 警告日志
-        :param error_msg: 错误日志
-        :return: 是否删除成功
-        """
-        sql, args = self.sql_builder.build_delete_sql(
-            table=table,
-            where_conditions=where_conditions,
-            where_values=where_values
-        )
-
-        url = self.mysql_agent_url + "/database/mysql/delete"
-        
-        return await self.sql_executor.execute_write_sql(
-            url=url,
-            sql=sql,
-            sql_args=args,
-            success_msg=success_msg,
-            warning_msg=warning_msg,
-            error_msg=error_msg
-        )
     
     # ------------------------------------------------------------------------------------------------
     # 功能函数---插入表项目
@@ -553,10 +520,15 @@ class UserAccountDataBaseAgent():
             error_msg=f"Update error. Notification id: {update_data.notification_id}"
         )
 
-    async def update_user_files(self, update_data: TableUserFilesUpdateSchema) -> bool:
+    async def update_user_files(self,
+                                update_data: TableUserFilesUpdateSchema,
+                                where_conditions: List[str],
+                                where_values: List[Any],) -> bool:
         return await self._update_record(
             table="user_files",
             update_data=update_data,
+            where_conditions=where_conditions,
+            where_values=where_values,
             warning_msg=f"User files update may have failed. File id: {update_data.file_id}",
             success_msg=f"User files update succeeded. File id: {update_data.file_id}",
             error_msg=f"Update error. File id: {update_data.file_id}"
@@ -566,6 +538,8 @@ class UserAccountDataBaseAgent():
         self,
         table: str,
         update_data: BaseModel,
+        where_conditions: List[str],
+        where_values: List[Any],
         warning_msg: str,
         success_msg: str,
         error_msg: str
@@ -575,24 +549,47 @@ class UserAccountDataBaseAgent():
         
         :param  table: 表名
         :param update_data: 要更新的数据，必须是一个继承自 BaseModel 的对象
+        :param where_conditions: WHERE 条件表达式列表
+        :param where_values: 对应的参数值列表
         :param warning_msg: 警告日志信息
         :param success_msg: 成功日志信息
         :param error_msg: 错误日志信息
         :return: 是否更新成功
         """
+        if not where_conditions or not where_values:
+            self.logger.error("WHERE 条件缺失，拒绝执行更新")
+            return False
+        
+        if len(where_conditions) != len(where_values):
+            self.logger.error("WHERE 条件与值长度不一致")
+            return False
+        
         # 清洗数据
         data = filter_writable_fields(
             schema=update_data,
             allowed_fields=get_allowed_fields(table=table, action="update")
         )
+        
+        if not data:
+            self.logger.warning(f"{warning_msg}：清洗后无可更新字段")
+            return False
+        
         # 构造 SQL
         try:
-            sql, sql_args = self.sql_builder.build_update_sql(table, data)
+            sql, sql_args = self.sql_builder.build_update_sql(
+                table=table,
+                data=data,
+                where_conditions=where_conditions,
+                where_values=where_values
+            )
         except Exception as e:
             self.logger.error(f"SQL构建失败: {e}")
             return False
-
+        
+        # 构建URL
         url = self.mysql_agent_url + "/database/mysql/update"
+        
+        # 执行SQL
         try:
             response_dict = await self.sql_executor.execute_write_sql(
                 url=url,
@@ -602,7 +599,9 @@ class UserAccountDataBaseAgent():
                 success_msg=success_msg,
                 error_msg=error_msg
             )
+            # 校验响应结构
             update_response = MySQLAgentUpdateResponse.model_validate(response_dict)
+            
             if update_response.result is False:
                 self.logger.warning(
                     f"{error_msg}：{update_response.message} | "
@@ -618,6 +617,58 @@ class UserAccountDataBaseAgent():
     # ------------------------------------------------------------------------------------------------
     # 功能函数---删除表项目
     # ------------------------------------------------------------------------------------------------ 
+    async def delete_one(self, table: str,
+                     where_conditions: List[str],
+                     where_values: List,
+                     success_msg: str = "Delete success.",
+                     warning_msg: str = "Delete warning.",
+                     error_msg: str = "Delete error.") -> bool:
+        """
+        删除一条记录
+
+        :param table: 表名
+        :param where_conditions: WHERE 条件表达式列表
+        :param where_values: 对应参数值
+        :param success_msg: 成功日志
+        :param warning_msg: 警告日志
+        :param error_msg: 错误日志
+        :return: 是否删除成功
+        """
+        
+        if not where_conditions or not where_values:
+            self.logger.error("Delete conditions and values cannot be empty.")
+            raise ValueError("Delete conditions and values cannot be empty.")
+        
+        if len(where_conditions) != len(where_values):
+            self.logger.error("Where conditions and values length mismatch.")
+            raise ValueError("Where conditions and values length mismatch.")
+        
+        # 构造 SQL
+        try:
+            sql, args = self.sql_builder.build_delete_sql(
+                table=table,
+                where_conditions=where_conditions,
+                where_values=where_values
+            )
+        except Exception as e:
+            self.logger.error(f"SQL构建失败: {e}")
+            return False
+        
+        # 构建请求URL
+        url = self.mysql_agent_url + "/database/mysql/delete"
+        
+        self.logger.info(f"Executing delete SQL: {sql} with args: {args} | Table: {table} | URL: {url}")
+        
+        return await self.sql_executor.execute_write_sql(
+            url=url,
+            sql=sql,
+            sql_args=args,
+            success_msg=success_msg,
+            warning_msg=warning_msg,
+            error_msg=error_msg
+        )
+    
+    
     async def soft_delete_user_by_user_id(self, user_id: int) -> bool:
         """
         软删除用户：设为 'deleted' 并记录删除时间。

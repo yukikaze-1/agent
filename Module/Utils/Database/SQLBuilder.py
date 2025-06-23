@@ -52,8 +52,8 @@ class SQLBuilder:
     def build_update_sql(self, 
                         table: str,
                         data: Dict,
-                        where_conditions: List[str] | None = None,
-                        where_values: List[Any] | None = None
+                        where_conditions: List[str],
+                        where_values: List[Any]
                         ) -> tuple[str, List[Any]]:
             """
             构造支持复杂 WHERE 条件的 UPDATE SQL 语句
@@ -66,26 +66,20 @@ class SQLBuilder:
             :return: (sql语句, 参数列表)
             """
             if not data:
-                raise ValueError("更新字段不能为空")
+                raise ValueError(f"UPDATE 失败：{table} 表 data 字段为空")
             
-            if where_conditions and where_values and len(where_conditions) != len(where_values):
-                raise ValueError("where_conditions 和 where_values 长度不一致")
+            if not where_conditions or not where_values:
+                raise ValueError(f"UPDATE 失败：{table} 表 WHERE 条件缺失")
+            
+            if len(where_conditions) != len(where_values):
+                raise ValueError(f"UPDATE 失败：{table} 表 WHERE 条件与值长度不一致")
 
 
             set_clause = ", ".join([f"{key} = %s" for key in data])
             values = list(data.values())
 
-            where_clause_parts = []
-
-            if where_conditions:
-                where_clause_parts.extend(where_conditions)
-                if where_values:
-                    values.extend(where_values)
-
-            if not where_clause_parts:
-                raise ValueError("WHERE 条件不能为空（防止全表更新）")
-
-            where_clause = " AND ".join(where_clause_parts)
+            where_clause = " AND ".join(where_conditions)
+            values.extend(where_values)
             
             sql = f"UPDATE {table} SET {set_clause} WHERE {where_clause};"
             
