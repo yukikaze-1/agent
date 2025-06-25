@@ -24,12 +24,12 @@ from Module.Utils.FormatValidate import is_email, is_account_name
 from Module.Utils.Database.SQLBuilder import SQLBuilder
 from Module.Utils.Database.SQLExecutor import SQLExecutor
 from Module.Utils.ToolFunctions import retry
-from Module.Utils.Database.MySQLAgentResponseType import (
-    MySQLAgentConnectDatabaseResponse, 
-    MySQLAgentInsertResponse, 
-    MySQLAgentUpdateResponse, 
-    MySQLAgentDeleteResponse, 
-    MySQLAgentQueryResponse
+from Module.Utils.Database.MySQLServiceResponseType import (
+    MySQLServiceConnectDatabaseResponse, 
+    MySQLServiceInsertResponse, 
+    MySQLServiceUpdateResponse, 
+    MySQLServiceDeleteResponse, 
+    MySQLServiceQueryResponse
 )
 from Module.Utils.Database.UserAccountDatabaseSQLParameterSchema import (
     SQL_REQUEST_ALLOWED_FIELDS,
@@ -58,7 +58,7 @@ class UserAccountDataBaseAgent():
         
         主要功能：
             1. 提供用户账户相关数据的增删改查接口
-            2. 保存MySQLAgent返回的数据库连接ID
+            2. 保存MySQLService返回的数据库连接ID
             3. 该类的所有方法都需要在数据库连接成功后才能调用
             4. 该类只为UserService提供服务，UserService会在需要时调用该类的方法
 
@@ -121,7 +121,7 @@ class UserAccountDataBaseAgent():
             timeout=httpx.Timeout(10.0, read=60.0)
         )
         
-        # 向MySQLAgent注册，返回一个MySQL数据库链接id，在MySQLAgent中存放着
+        # 向MySQLService注册，返回一个MySQL数据库链接id，在MySQLService中存放着
         # 一个(id, mysql数据库连接对象)的映射
         self.db_connect_id: int = -1
 
@@ -180,7 +180,7 @@ class UserAccountDataBaseAgent():
                 raise ValueError(f"Failed to connect to the database '{self.database}'")
             
             response_dict: Dict = response.json()
-            response_data = MySQLAgentConnectDatabaseResponse.model_validate(response_dict)
+            response_data = MySQLServiceConnectDatabaseResponse.model_validate(response_dict)
             
             if response_data.data is None:
                 self.logger.error(f"Failed to connect database '{self.database}.'")
@@ -201,7 +201,7 @@ class UserAccountDataBaseAgent():
         
         except httpx.RequestError as e:
             self.logger.error(f"Connect to database '{self.database}' failed! Request error: {e}")
-            raise HTTPException(status_code=503, detail="Failed to communicate with MySQLAgent.")
+            raise HTTPException(status_code=503, detail="Failed to communicate with MySQLService.")
         
         except Exception as e:
             self.logger.error(f"Connect to database '{self.database}' failed! Unexpected error: {e}")
@@ -300,7 +300,7 @@ class UserAccountDataBaseAgent():
         }
 
         try:
-            # 发送给MySQLAgent
+            # 发送给MySQLService
             response = await self.client.post(url=url, json=payload, timeout=60.0)
             response.raise_for_status()
             response_data = response.json()
@@ -495,7 +495,7 @@ class UserAccountDataBaseAgent():
                                                 error_msg=f"Insert error for account: {insert_data.account}")
             
             # 校验响应结构
-            insert_response = MySQLAgentInsertResponse.model_validate(response_dict)
+            insert_response = MySQLServiceInsertResponse.model_validate(response_dict)
             
             if insert_response.result is False:
                 self.logger.error(f"插入失败：{insert_response.message}")
@@ -610,7 +610,7 @@ class UserAccountDataBaseAgent():
                 error_msg=error_msg
             )
             # 校验响应结构
-            insert_response = MySQLAgentInsertResponse.model_validate(response_dict)
+            insert_response = MySQLServiceInsertResponse.model_validate(response_dict)
             
             # 检查插入结果
             if insert_response.result is False:
@@ -764,7 +764,7 @@ class UserAccountDataBaseAgent():
                 error_msg=error_msg
             )
             # 校验响应结构
-            update_response = MySQLAgentUpdateResponse.model_validate(response_dict)
+            update_response = MySQLServiceUpdateResponse.model_validate(response_dict)
             
             if update_response.result is False:
                 self.logger.warning(
@@ -936,7 +936,7 @@ class UserAccountDataBaseAgent():
                 error_msg=error_msg
             )
             # 校验响应结构
-            delete_response = MySQLAgentDeleteResponse.model_validate(response_dict)
+            delete_response = MySQLServiceDeleteResponse.model_validate(response_dict)
                         
             if delete_response.result is False:
                 self.logger.warning(

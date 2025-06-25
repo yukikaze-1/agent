@@ -2,11 +2,11 @@
 # Author:       yomu
 # Time:         2025/6/20
 # Version:      0.1
-# Description:  MySQLAgent Response Type Definitions
+# Description:  MySQLService Response Type Definitions
 
 
 """
-   MySQLAgent 各种回复的格式定义
+   MySQLService 各种回复的格式定义
 """
 
 from datetime import datetime
@@ -14,50 +14,61 @@ from enum import Enum, IntEnum
 from typing import Dict, List, Optional, Any
 from pydantic import BaseModel, EmailStr, constr, Field, model_validator
 
+class StrictBaseModel(BaseModel):
+    """
+    基础模型，所有模型都继承自此类
+    """
+    class Config:
+        extra = "forbid"  # 禁止额外字段
+        anystr_strip_whitespace = True  # 去除字符串两端空格
+        use_enum_values = True  # 使用枚举值而不是枚举对象
+        
 
-class MySQLAgentResponseErrorCode(IntEnum):
-    """  MySQLAgent Response 的错误代码类 """
+class MySQLServiceResponseErrorCode(IntEnum):
+    """  MySQLService Response 的错误代码类 """
     CONNECT_DATABASE_FAILED = 1001  # 连接数据库失败
-    CONNECT_ID_NOT_EXISTED = 1002  # 连接ID不存在
+    CONNECTION_ID_NOT_EXISTS = 1002  # 连接ID不存在
 
     QUERY_DATABASE_FAILED = 2001  # 查询数据库失败
     INSERT_DATABASE_FAILED = 3001  # 插入数据库失败
     DELETE_DATABASE_FAILED = 4001  # 删除数据库失败
     UPDATE_DATABASE_FAILED = 5001  # 更新数据库失败
+    
+    TRANSACTION_FAILED = 6001  # 事务执行失败
 
 
-class MySQLAgentErrorDetail(BaseModel):
-    """ MySQLAgent详细错误类 """
-    code: MySQLAgentResponseErrorCode = Field(..., description="错误代码")
+class MySQLServiceErrorDetail(BaseModel):
+    """ MySQLService详细错误类 """
+    code: MySQLServiceResponseErrorCode = Field(..., description="错误代码")
     message: str = Field(..., description="错误信息")
     field: str | None = Field(default=None, description="出错字段，比如 'email'")
     hint: str | None = Field(default=None, description="帮助提示")
 
 
-class MySQLAgentBaseResponse(BaseModel):
+class MySQLServiceBaseResponse(BaseModel):
     """ 基础回复格式 """
     operator: str = Field(..., description="操作")
     result: bool = Field(..., description="操作结果")
     message: str = Field(..., description="提示信息")
-    err_code:  MySQLAgentResponseErrorCode | None = Field(default=None, description="错误代码")
-    errors: List[MySQLAgentErrorDetail] | None = Field(default=None, description="详细错误列表")
+    err_code:  MySQLServiceResponseErrorCode | None = Field(default=None, description="错误代码")
+    errors: List[MySQLServiceErrorDetail] | None = Field(default=None, description="详细错误列表")
     elapsed_ms: int | None = Field(default=None, description="服务端处理耗时（毫秒）")
     timestamp: datetime = Field(default_factory=datetime.now, description="响应生成时间")
     level: str | None = Field(default=None, description="提示等级: info / warning / error")
     
     
     
-class MySQLAgentConnectDatabaseResponseData(BaseModel):
+class MySQLServiceConnectDatabaseResponseData(BaseModel):
     """  连接数据库 数据"""    
-    connection_id: int = Field(..., description="")
+    connection_id: int = Field(..., description="数据库连接ID")
     
-class MySQLAgentConnectDatabaseResponse(MySQLAgentBaseResponse):
+class MySQLServiceConnectDatabaseResponse(MySQLServiceBaseResponse):
     """ 连接数据库 Response """
-    data: MySQLAgentConnectDatabaseResponseData | None = Field(default=None, description="连接数据库附加数据")
+    data: MySQLServiceConnectDatabaseResponseData | None = Field(default=None, description="连接数据库附加数据")
 
 
 
-class MySQLAgentQueryResponseData(BaseModel):
+class MySQLServiceQueryResponseData(BaseModel):
     """ SQL查询 数据 """
     column_names: List[str] = Field(..., description="查询结果列名列表")
     rows: List[List[Any]] = Field(..., description="查询结果数据行列表，每行是一个列表")
@@ -66,47 +77,47 @@ class MySQLAgentQueryResponseData(BaseModel):
     page_size: int | None = Field(default=None, description="每页记录数（如果适用）")
     current_page: int | None = Field(default=None, description="当前页码（如果适用）")
 
-class MySQLAgentQueryResponse(MySQLAgentBaseResponse):
+class MySQLServiceQueryResponse(MySQLServiceBaseResponse):
     """ SQL查询 Response """
-    data : List[MySQLAgentQueryResponseData] | None = Field(default=None, description="查询结果数据列表")
+    data : List[MySQLServiceQueryResponseData] | None = Field(default=None, description="查询结果数据列表")
 
 
 
-class MySQLAgentInsertResponseData(BaseModel):
+class MySQLServiceInsertResponseData(BaseModel):
     """ SQL插入操作 Response 附加数据 """
     rows_affected: int = Field(..., description="插入的记录数")
     last_insert_id: int | None = Field(default=None, description="自增主键 ID（如果有）")
 
-class MySQLAgentInsertResponse(MySQLAgentBaseResponse):
+class MySQLServiceInsertResponse(MySQLServiceBaseResponse):
     """ SQL插入 Response """
-    data: MySQLAgentInsertResponseData | None = Field(default=None, description="插入数据附加信息")
+    data: MySQLServiceInsertResponseData | None = Field(default=None, description="插入数据附加信息")
     
     
     
-class MySQLAgentDeleteResponseData(BaseModel):
+class MySQLServiceDeleteResponseData(BaseModel):
     """ SQL删除 数据 """
     rows_affected: int = Field(default=-1, description="删除的记录数")
 
-class MySQLAgentDeleteResponse(MySQLAgentBaseResponse):
+class MySQLServiceDeleteResponse(MySQLServiceBaseResponse):
     """ SQL删除 Response """
-    data: MySQLAgentDeleteResponseData = Field(..., description="删除数据附加信息")
+    data: MySQLServiceDeleteResponseData = Field(..., description="删除数据附加信息")
     
     
     
-class MySQLAgentUpdateResponseData(BaseModel):
+class MySQLServiceUpdateResponseData(BaseModel):
     """ SQL更新 数据 """
     rows_affected: int = Field(..., description="更新的记录数")
 
-class MySQLAgentUpdateResponse(MySQLAgentBaseResponse):
+class MySQLServiceUpdateResponse(MySQLServiceBaseResponse):
     """ SQL更新 Response """
-    data: MySQLAgentUpdateResponseData | None = Field(default=None, description="更新数据附加信息")
+    data: MySQLServiceUpdateResponseData | None = Field(default=None, description="更新数据附加信息")
     
     
     
-class MySQLAgentTransactionResponseData(BaseModel):
+class MySQLServiceTransactionResponseData(BaseModel):
     """ 事务 数据 """
     pass
     
-class MySQLAgentTransactionResponse(MySQLAgentBaseResponse):
+class MySQLServiceTransactionResponse(MySQLServiceBaseResponse):
     """ 事务 Response """
-    data: List[MySQLAgentBaseResponse] | None = Field(default=None, description="事务中每个操作的响应列表")
+    data: List[MySQLServiceBaseResponse] | None = Field(default=None, description="事务中每个操作的响应列表")

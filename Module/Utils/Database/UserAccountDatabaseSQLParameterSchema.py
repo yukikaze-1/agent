@@ -20,19 +20,11 @@ from pydantic_core import PydanticCustomError
 # ------------------------------------------------------------------------------------------------ 
 
 """
-    注：StrictBaseModel为pydantic，作用为禁止额外字段。以下所有Schema均直接或间接继承StrictBaseModel。
-
-    A. 'users'
-        1. 基础Schema:
-            a. TableUsersSchema                          ← 完整表结构
-            b. TableUsersInsertSchema                    ← 用于插入（insert）
-            c. TableUsersUpdateSetSchema                 ← update 的 set 部分
-            d. TableUsersUpdateWhereSchema               ← update 的 where 部分
-            e. TableUsersDeleteWhereSchema               ← delete 的 where 条件
-            f. TableUsersQueryWhereSchema                ← query 的 where 条件
-            g. TableUsersQueryFieldsSchema               ← query 的 select 字段控制（如 FieldSelectionSchema） 
-
-        2. 业务Schema
+    注：StrictBaseModel为pydantic，作用为禁止额外字段。
+    以下所有Schema均直接或间接继承StrictBaseModel。
+    
+    # TODO 待实现
+        功能Schema
             a. SoftDeleteUserSchema                             users表 软删除一个用户(通过主键user_id)(将status置为'deleted',deleted_at字段会由触发器自动更新)
             b. HardDeleteUserSchema                             users表 应删除一个用户(通过主键user_id)(将用户数据从users表中删除，其余表格会自动删除相关数据，因为user_id是其他表的外键)
             c. ChangePasswordHashSchema                         users表 更新用户密码Hash(通过主键User_id)
@@ -41,6 +33,81 @@ from pydantic_core import PydanticCustomError
             f. DeleteExpiredUsersSchema                         users表 硬删除所有状态为'deleted'且deleted_at字段离现在超过x天的用户
             g. UpdateLastLoginTimeAndLastLoginIPSchema          users表 更新 last_login_time 和 last_login_ip 字段(通过user_id 主键)
 
+        业务Schema
+            a. UserLoginSchema
+            b. UserUnregisterSchema
+            c. UserChangePasswordSchema
+            d. UserRegisterSchema
+            e. UserUpdateProfileSchema
+            f. UserModifyNotificationSettingSchema
+            g. UserUploadFileSchema
+
+    A. 'users'
+        1. 基础Schema:
+            a. TableUsersSchema                                 ← 完整表结构
+            b. TableUsersInsertSchema                           ← 用于插入（insert）
+            c. TableUsersUpdateSetSchema                        ← update 的 set 部分
+            d. TableUsersUpdateWhereSchema                      ← update 的 where 部分
+            e. TableUsersDeleteWhereSchema                      ← delete 的 where 条件
+            f. TableUsersQueryWhereSchema                       ← query 的 where 条件
+        *   g. TableUsersQueryFieldsSchema                      ← query 的 select 字段控制。用FieldSelectionSchema + SQL_REQUEST_ALLOWED_FIELDS来实现
+
+        
+    B. 'user_profile'
+        1. 基础Schema:
+            a. TableUserProfileSchema                           ← 完整表结构
+            b. TableUserProfileInsertSchema                     ← 用于插入（insert）
+            c. TableUserProfileUpdateSetSchema                  ← update 的 set 部分
+            d. TableUserProfileUpdateWhereSchema                ← update 的 where 部分
+            e. TableUserProfileDeleteWhereSchema                ← delete 的 where 条件
+            f. TableUserProfileQueryWhereSchema                 ← query 的 where 条件
+        *   g. TableUserProfileQueryFieldsSchema                ← query 的 select 字段控制。用FieldSelectionSchema + SQL_REQUEST_ALLOWED_FIELDS来实现
+
+    C. 'user_login_logs'
+        1. 基础Schema:
+            a. TableUserLoginLogsSchema                         ← 完整表结构
+            b. TableUserLoginLogsInsertSchema                   ← 用于插入（insert）
+            c. TableUserLoginLogsDeleteWhereSchema              ← delete 的 where 条件
+            d. TableUserLoginLogsQueryWhereSchema               ← query 的 where 条件
+        *   e. TableUserLoginLogsQueryFieldsSchema              ← query 的 select 字段控制。用FieldSelectionSchema + SQL_REQUEST_ALLOWED_FIELDS来实现
+
+    D. 'user_settings'
+        1. 基础Schema:
+            a. TableUserSettingsSchema                          ← 完整表结构
+            b. TableUserSettingsInsertSchema                    ← 用于插入（insert）
+            c. TableUserSettingsUpdateSetSchema                 ← update 的 set 部分
+            d. TableUserSettingsUpdateWhereSchema               ← update 的 where 部分
+            e. TableUserSettingsDeleteWhereSchema               ← delete 的 where 条件
+            f. TableUserSettingsQueryWhereSchema                ← query 的 where 条件
+        *   g. TableUserSettingsQueryFieldsSchema               ← query 的 select 字段控制。用FieldSelectionSchema + SQL_REQUEST_ALLOWED_FIELDS来实现
+        
+    E. 'user_account_actions'
+        1. 基础Schema:
+            a. TableUserAccountActionsSchema                    ← 完整表结构
+            b. TableUserAccountActionsInsertSchema              ← 用于插入（insert）
+            c. TableUserAccountActionsDeleteWhereSchema         ← delete 的 where 条件
+            d. TableUserAccountActionsQueryWhereSchema          ← query 的 where 条件
+        *   e. TableUserAccountActionsQueryFieldsSchema         ← query 的 select 字段控制。用FieldSelectionSchema + SQL_REQUEST_ALLOWED_FIELDS来实现
+    
+    F. 'user_notifications'
+        1. 基础Schema:
+            a. TableUserNotificationsSchema                     ← 完整表结构
+            b. TableUserNotificationsInsertSchema               ← 用于插入（insert）
+            c. TableUserNotificationsUpdateSetSchema            ← update 的 set 部分
+            d. TableUserNotificationsUpdateWhereSchema          ← update 的 where 部分
+            e. TableUserNotificationsDeleteWhereSchema          ← delete 的 where 条件
+            f. TableUserNotificationsQueryWhereSchema           ← query 的 where 条件
+        *   g. TableUserNotificationsQueryFieldsSchema          ← query 的 select 字段控制。用FieldSelectionSchema + SQL_REQUEST_ALLOWED_FIELDS来实现
+        
+    G. 'user_files'
+        1. 基础Schema:
+            a. TableUserFilesSchema                             ← 完整表结构
+            b. TableUserFilesInsertSchema                       ← 用于插入（insert）
+            c. TableUserFilesUpdateSetSchema                    ← update 的 set 部分
+            d. TableUserFilesUpdateWhereSchema                  ← update 的 where 部分
+            e. TableUserFilesDeleteWhereSchema                  ← delete 的 where 条件
+            f. TableUserFilesQueryWhereSchema                   ← query 的 where 条件
+        *   g. TableUserFilesQueryFieldsSchema                  ← query 的 select 字段控制。用FieldSelectionSchema + SQL_REQUEST_ALLOWED_FIELDS来实现
 """
 
 
@@ -57,7 +124,11 @@ from pydantic_core import PydanticCustomError
         各业务需求有额外的白名单
         
         InsertSchema：
-            描述 “允许插入的新数据” —— 即表中可写字段，通常不包括主键（如自增 ID）
+            功能：描述 “允许插入的新数据” —— 即表中可写字段，通常不包括主键（如自增 ID）
+            用途：
+                a. 校验前端插入请求
+                b. 生成 INSERT INTO table (col1, col2) VALUES (%s, %s)
+                
             1. 在InsertSchema中的所有字段均必须手动赋值，没有默认值。
             2. 在InsertSchema中没有，但是在表中有的字段表示：
                 a. 系统维护字段。该字段只能由数据库自动插入（这些字段都在数据库层面由默认值）。eg. 每张表的created_at字段，有默认值DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP。
@@ -70,21 +141,41 @@ from pydantic_core import PydanticCustomError
             用途：
                 a. 校验前端更新请求
                 b. 生成 UPDATE table SET col1=%s WHERE where_conditions = where_values
-            1. 在UpdateSchema中的所有字段值均可以为None，但不能同时全部为None。
-            2. 在UpdateSchema中值为None的字段表示不更新该字段。具体转换在构建update sql语句时进行(跳过值为None的字段)。
-            3. 在UpdateSchema中某些字段需要进行格式校验。eg. users表中的file_folder_path字段。
-            4. 在表中有但在UpdateSchema中没有的字段表示：
-                a. 该字段只能由数据库进行更新。eg.每张表的updated_at字段。
-            
-            
+                
+            UpdateSetSchema:
+                1. 在UpdateSetSchema中的所有字段值均可以为None，但不能同时全部为None。
+                2. 在UpdateSetSchema中值为None的字段表示不更新该字段。具体转换在构建update sql语句时进行(跳过值为None的字段)。
+                3. 在UpdateSetSchema中某些字段需要进行格式校验。eg. users表中的file_folder_path字段。
+                4. 在表中有但在UpdateSetSchema中没有的字段表示：
+                    a. 该字段只能由数据库进行更新。eg.每张表的updated_at字段。
+                    
+            UpdateWhereSchema:
+                1. 在UpdateWhereSchema中，所有字段均为where条件（即: WHERE key = value）
+                2. 字段值可为None但不可全部同时为None
+                3. 部分表的参数存在互斥。
+                    eg. users 和 表的 user_id 和 (user_name + user_suffix) 不能同时出现。
+                4. 最终 WHERE 语句仅使用不为 None 的字段构造
+
         DeleteSchema:
+            功能: 描述 “删除的条件”
+            用途：
+                a. 校验前端删除请求
+                b. 生成 DELETE FROM table WHERE where_conditions = where_values
+                
             DeleteWhereSchema：
                 1. 内含的所有字段均为where条件（即: WHERE key = value）
                 2. 字段值可为None但不可全部同时为None
                 3. 部分字段存在互斥or组合
+                    eg. users 和 表的 user_id 和 (user_name + user_suffix) 不能同时出现。
                 4. 最终 WHERE 语句仅使用不为 None 的字段构造
        
+       
         QuerySchema:
+            功能：描述 “查询的条件 + 查询的字段”
+            用途：
+                a. 校验前端查询请求
+                b. 生成 SELECT col1, col2 FROM table WHERE where_conditions = where_values
+                
             QueryWhereSchema:
                 1. 内含的所有字段均为where条件（即: WHERE key = value）
                 2. 字段值可为None但不可全部同时为None
@@ -218,9 +309,11 @@ SQL_REQUEST_ALLOWED_FIELDS = {
 # ------------------------------------------------------------------------------------------------ 
 
 class StrictBaseModel(BaseModel):
-    """ pydantic 禁止额外字段 """
+    """ 基础pydantic模型，所有模型都继承自此类 """
     class Config:
-        extra = "forbid"
+        extra = "forbid"  # 禁止额外字段
+        anystr_strip_whitespace = True  # 去除字符串两端空格
+        use_enum_values = True  # 使用枚举值而不是枚举对象
         
         
 class FieldSelectionSchema(StrictBaseModel):
@@ -333,7 +426,7 @@ class TableUsersInsertSchema(StrictBaseModel):
     """ 用户主表 Insert Schema 没有的字段要么是系统维护，要么是插入时不能赋值，只能更新"""
     user_uuid: str = Field(..., min_length=36, max_length=36, description="用户UUID")
     user_name: str = Field(..., min_length=4, max_length=64,  description="用户名")
-    user_suffix: int = Field(..., description="用户名唯一数字后缀")
+    user_suffix: int = Field(..., ge=0, description="用户名唯一数字后缀")
     account: str = Field(..., min_length=4, max_length=255, description="用户账号")
     password_hash: str = Field(..., min_length=6, max_length=255, description="密码哈希值")
     email: EmailStr = Field(..., description="用户邮箱")
@@ -359,7 +452,7 @@ class TableUsersUpdateSetSchema(StrictBaseModel):
     """ 用户主表 Update SET Schema """
     status: UserStatus | None = Field(default=None, description="用户状态")
     user_name: str | None = Field(default=None, min_length=4, max_length=64,  description="用户名")
-    user_suffix: int | None = Field(default=None, description="用户名唯一数字后缀")
+    user_suffix: int | None = Field(default=None, ge=0, description="用户名唯一数字后缀")
     password_hash: str | None = Field(default=None, min_length=6, max_length=255, description="密码哈希值")
     last_login_time: datetime | None = Field(default=None, description="最后登录时间")
     last_login_ip: IPvAnyAddress | None = Field(default=None, description="最后登录IP")
@@ -380,23 +473,39 @@ class TableUsersUpdateSetSchema(StrictBaseModel):
     
 class TableUsersUpdateWhereSchema(StrictBaseModel):
     """ 用户主表 Update WHERE Schema """
-    user_id: int | None = Field(..., description="用户内部ID（主键）")
+    user_id: int | None = Field(..., ge=0, description="用户内部ID（主键）")
     user_uuid: str | None = Field(..., description="用户UUID")
     account: str | None = Field(default=None, min_length=4, max_length=255, description="用户账号")
     email: EmailStr | None = Field(default=None, description="用户邮箱")
     status: UserStatus | None = Field(default=None, description="用户状态")
     user_name: str | None = Field(default=None, min_length=4, max_length=64,  description="用户名")
-    user_suffix: int | None = Field(default=None, description="用户名唯一数字后缀")
+    user_suffix: int | None = Field(default=None, ge=0, description="用户名唯一数字后缀")
     last_login_time: datetime | None = Field(default=None, description="最后登录时间")
     created_at: datetime | None = Field(default=None, description="创建时间")
     deleted_at: datetime | None = Field(default=None, description="删除时间")
+    
+    @model_validator(mode="after")
+    def validate_all(self) -> 'TableUsersUpdateWhereSchema':
+        # 1. 至少提供一个字段
+        if not any([self.user_id, self.user_uuid, self.account, self.email, self.status, self.user_name, self.user_suffix, self.last_login_time, self.created_at, self.deleted_at]):
+            raise ValueError("至少需要提供一个定位更新的字段（user_id、user_uuid、account、email、status、user_name、user_suffix、last_login_time、created_at、deleted_at）")
+
+        # 2. user_id 和 (user_name + user_suffix) 不能同时出现
+        if self.user_id is not None and (self.user_name is not None and self.user_suffix is not None):
+            raise ValueError("不能同时提供 user_id 和 (user_name + user_suffix)")
+        
+        # 3. user_name 与 user_suffix 要么都提供，要么都不提供
+        if (self.user_name is not None) != (self.user_suffix is not None):
+            raise ValueError("如果提供了 user_name，则必须同时提供 user_suffix，反之亦然")
+
+        return self
 
 
 class TableUsersDeleteWhereSchema(StrictBaseModel):
     """ 用户主表 Delete WHERE Schema """
-    user_id: int | None = Field(default=None, description="用户内部ID（主键）")
+    user_id: int | None = Field(default=None, ge=0, description="用户内部ID（主键）")
     user_name: str | None = Field(default=None, min_length=4, max_length=64,  description="用户名")
-    user_suffix: int | None = Field(default=None, description="用户名唯一数字后缀")
+    user_suffix: int | None = Field(default=None, ge=0, description="用户名唯一数字后缀")
     status: UserStatus | None = Field(default=None, description="用户状态")
     deleted_at: datetime | None = Field(default=None, description="删除时间")
     
@@ -419,13 +528,13 @@ class TableUsersDeleteWhereSchema(StrictBaseModel):
 
 class TableUsersQueryWhereSchema(StrictBaseModel):
     """ 用于查询 users 表的筛选条件（WHERE 部分）"""
-    user_id: Optional[int] = Field(None, description="用户ID")
-    user_uuid: Optional[str] = Field(None, description="UUID")
-    status: Optional[UserStatus] = Field(None, description="用户状态")
-    account: Optional[str] = Field(None, description="账号")
-    email: Optional[EmailStr] = Field(None, description="邮箱")
-    created_at: Optional[datetime] = Field(None, description="创建时间")
-    
+    user_id: int | None = Field(default=None, ge=0, description="用户ID")
+    user_uuid: str | None = Field(default=None, description="UUID")
+    status: UserStatus | None = Field(default=None, description="用户状态")
+    account: str | None = Field(default=None, description="账号")
+    email: EmailStr | None = Field(default=None, description="邮箱")
+    created_at: datetime | None = Field(default=None, description="创建时间")
+
 """
 
 ### 2. 用户扩展资料 (`user_profile`)
@@ -482,7 +591,7 @@ class TableUserProfileInsertSchema(StrictBaseModel):
     用户扩展资料 Insert Schema 
     注意：user_id 为主键+外键，由调用方从 users 表插入后获取 user_id 后再插入本表。
     """
-    user_id: int = Field(..., description="用户ID（主键+外键）")
+    user_id: int = Field(..., ge=0, description="用户ID（主键+外键）")
     profile_picture_path: str | None = Field(default=None, description="头像URL地址")
     signature: str | None = Field(default=None,max_length=255, description="用户个性签名")
 
@@ -531,17 +640,17 @@ class TableUserProfileUpdateSetSchema(StrictBaseModel):
     
 class TableUserProfileUpdateWhereSchema(StrictBaseModel):
     """  用户扩展资料 Update WHERE Schema """
-    user_id: int = Field(..., description="用户ID（主键+外键）")
+    user_id: int = Field(..., ge=0, description="用户ID（主键+外键）")
     
 
 class TableUserProfileDeleteSchema(StrictBaseModel):
     """ 用户扩展资料 Delete Schema """
-    user_id: int = Field(..., description="用户ID（主键+外键）")# 因为是删除，需要user_id来定位删除的位置
+    user_id: int = Field(..., ge=0, description="用户ID（主键+外键）")# 因为是删除，需要user_id来定位删除的位置
 
 
 class TableUserProfileQueryWhereSchema(StrictBaseModel):
     """ 用户扩展资料 Query WHERE Schema """
-    user_id: int | None = Field(default=None, description="用户ID（主键+外键）")
+    user_id: int | None = Field(default=None, ge=0, description="用户ID（主键+外键）")
 
 """
 
@@ -594,7 +703,7 @@ class TableUserLoginLogsSchema(StrictBaseModel):
 
 class TableUserLoginLogsInsertSchema(StrictBaseModel):
     """ 用户登录日志 Insert Schema """
-    user_id: int = Field(..., description="用户ID（外键）")
+    user_id: int = Field(..., ge=0, description="用户ID（外键）")
     ip_address: IPvAnyAddress = Field(..., description="登录IP地址")
     agent: str = Field(..., description="浏览器代理")
     device: str = Field(..., description="登录设备")
@@ -605,7 +714,7 @@ class TableUserLoginLogsInsertSchema(StrictBaseModel):
 class TableUserLoginLogsDeleteWhereSchema(StrictBaseModel):
     """ 用户登录日志 Delete WHERE Schema """
     login_id: int | None = Field(default=None, description="日志ID（主键）")
-    user_id: int | None = Field(default=None, description="用户ID（外键）") 
+    user_id: int | None = Field(default=None, ge=0, description="用户ID（外键）") 
     login_time: datetime | None = Field(default=None, description="登录时间")
     login_success: bool | None = Field(default=None, description="登录是否成功")
     created_at: datetime | None = Field(default=None, description="创建时间")
@@ -619,8 +728,8 @@ class TableUserLoginLogsDeleteWhereSchema(StrictBaseModel):
 
 class TableUserLoginLogsQueryWhereSchema(StrictBaseModel):
     """ 用户登录日志 Query WHERE Schema """
-    login_id: int | None = Field(default=None, description="日志ID（主键）")
-    user_id: int | None = Field(default=None, description="用户ID（外键）")
+    login_id: int | None = Field(default=None, ge=0, description="日志ID（主键）")
+    user_id: int | None = Field(default=None, ge=0, description="用户ID（外键）")
     login_time: datetime | None = Field(default=None, description="登录时间")
     login_success: bool | None = Field(default=None, description="登录是否成功")
     created_at: datetime | None = Field(default=None, description="创建时间")
@@ -671,7 +780,7 @@ class TableUserSettingsSchema(StrictBaseModel):
 
 class TableUserSettingsInsertSchema(StrictBaseModel):
     """ 用户自定义设置 Insert Schema """
-    user_id: int = Field(..., description="用户ID（主键+外键）")
+    user_id: int = Field(..., ge=0, description="用户ID（主键+外键）")
     language: UserLanguage = Field(..., description="用户语言偏好")
     configure: dict = Field(..., description="用户配置")
     notification_setting: dict = Field(..., description="用户通知设置")
@@ -692,17 +801,17 @@ class TableUserSettingsUpdateSetSchema(StrictBaseModel):
 
 class TableUserSettingsUpdateWhereSchema(StrictBaseModel):
     """ 用户自定义设置 Update WHERE Schema """
-    user_id: int = Field(..., description="用户ID（主键+外键）")
+    user_id: int = Field(..., ge=0, description="用户ID（主键+外键）")
     
 
 class TableUserSettingsDeleteWhereSchema(StrictBaseModel):
     """ 用户自定义设置 Delete WHERE Schema """
-    user_id: int = Field(..., description="用户ID（主键+外键）")
+    user_id: int = Field(..., ge=0, description="用户ID（主键+外键）")
 
 
 class TableUserSettingsQueryWhereSchema(StrictBaseModel):
     """ 用户自定义设置 Query WHERE Schema """
-    user_id: int | None = Field(default=None, description="用户ID（主键+外键）")
+    user_id: int | None = Field(default=None, ge=0, description="用户ID（主键+外键）")
     language: UserLanguage | None = Field(default=None, description="用户语言偏好")
     configure: dict | None = Field(default=None, description="用户配置")
     notification_setting: dict | None = Field(default=None, description="用户通知设置")
@@ -755,15 +864,15 @@ class TableUserAccountActionsSchema(StrictBaseModel):
 
 class TableUserAccountActionsInsertSchema(StrictBaseModel):
     """ 用户账户行为 Insert Schema """
-    user_id: int = Field(..., description="用户ID（外键）")
+    user_id: int = Field(..., ge=0, description="用户ID（外键）")
     action_type: UserAccountActionType = Field(..., description="用户账户操作类型")
     action_detail: str = Field(..., max_length=512, description="用户账户操作细节")
     
 
 class TableUserAccountActionsDeleteWhereSchema(StrictBaseModel):
     """ 用户账户行为 Delete Schema """
-    user_id: int | None = Field(default=None, description="用户ID（外键）")  # 因为是删除，需要user_id来定位删除的位置
-    action_id: int | None = Field(default=None, description="主键")
+    user_id: int | None = Field(default=None, ge=0, description="用户ID（外键）")  # 因为是删除，需要user_id来定位删除的位置
+    action_id: int | None = Field(default=None, ge=0, description="主键")
     created_at: datetime | None = Field(default=None, description="创建时间")
     
     @model_validator(mode="after")
@@ -775,8 +884,8 @@ class TableUserAccountActionsDeleteWhereSchema(StrictBaseModel):
 
 class TableUserAccountActionsQueryWhereSchema(StrictBaseModel):
     """ 用户账户行为 Query WHERE Schema """
-    action_id: int | None = Field(default=None, description="主键")
-    user_id: int | None = Field(default=None, description="用户ID（外键）")
+    action_id: int | None = Field(default=None, ge=0, description="主键")
+    user_id: int | None = Field(default=None, ge=0, description="用户ID（外键）")
     action_type: UserAccountActionType | None = Field(default=None, description="用户账户操作类型")
     created_at: datetime | None = Field(default=None, description="创建时间")
     updated_at: datetime | None = Field(default=None, description="更新时间")
@@ -834,7 +943,7 @@ class TableUserNotificationsSchema(StrictBaseModel):
 
 class TableUserNotificationsInsertSchema(StrictBaseModel):
     """ 用户通知与消息 Insert Schema """
-    user_id: int = Field(..., description="用户ID（外键）")
+    user_id: int = Field(..., ge=0, description="用户ID（外键）")
     notification_type: UserNotificationType = Field(..., description="通知类型")
     notification_title: str = Field(..., description="通知标题")
     notification_content: str = Field(..., description="通知内容")
@@ -857,16 +966,22 @@ class TableUserNotificationsUpdateSetSchema(StrictBaseModel):
 
 class TableUserNotificationsUpdateWhereSchema(StrictBaseModel):
     """ 用户通知与消息 Update WHERE Schema """
-    user_id: int | None = Field(default=None, description="用户ID（外键）")
-    notification_id: int | None = Field(default=None, description="通知ID（主键）")
+    user_id: int | None = Field(default=None, ge=0, description="用户ID（外键）")
+    notification_id: int | None = Field(default=None, ge=0, description="通知ID（主键）")
     is_read: bool | None = Field(default=None, description="是否已读")
     created_at: datetime | None = Field(default=None, description="创建时间")
+    
+    @model_validator(mode="after")
+    def at_least_one_field_must_be_present(self) -> 'TableUserNotificationsUpdateWhereSchema':
+        if not (self.user_id or self.notification_id or self.is_read or self.created_at):
+            raise ValueError("至少需要提供一个定位更新的字段（user_id、notification_id、is_read或created_at）")
+        return self
 
 
 class TableUserNotificationsDeleteWhereSchema(StrictBaseModel):
     """ 用户通知与消息 Delete WHERE Schema """
-    user_id: int | None = Field(default=None, description="用户ID（外键）")  # 因为是删除，需要user_id来定位删除的位置
-    notification_id: int | None = Field(default=None, description="通知ID（主键）")
+    user_id: int | None = Field(default=None, ge=0, description="用户ID（外键）")  # 因为是删除，需要user_id来定位删除的位置
+    notification_id: int | None = Field(default=None, ge=0, description="通知ID（主键）")
     notification_type: UserNotificationType | None = Field(default=None, description="通知类型")
     notification_title: str | None = Field(default=None, description="通知标题")
     is_read: bool | None = Field(default=None, description="是否已读")
@@ -881,8 +996,8 @@ class TableUserNotificationsDeleteWhereSchema(StrictBaseModel):
 
 class TableUserNotificationsQueryWhereSchema(StrictBaseModel):
     """ 用户通知与消息 Query WHERE Schema """
-    user_id: int | None = Field(default=None, description="用户ID（外键）")
-    notification_id: int | None = Field(default=None, description="通知ID（主键）")
+    user_id: int | None = Field(default=None, ge=0, description="用户ID（外键）")
+    notification_id: int | None = Field(default=None, ge=0, description="通知ID（主键）")
     notification_type: UserNotificationType | None = Field(default=None, description="通知类型")
     notification_title: str | None = Field(default=None, description="通知标题")
     is_read: bool | None = Field(default=None, description="是否已读")
@@ -939,11 +1054,11 @@ class TableUserFilesSchema(StrictBaseModel):
 
 class TableUserFilesInsertSchema(StrictBaseModel):
     """ 用户文件 Insert Schema """
-    user_id: int = Field(..., description="用户ID（外键）")
+    user_id: int = Field(..., ge=0, description="用户ID（外键）")
     file_path: str = Field(..., min_length=1, max_length=512, description="文件相对路径")
     file_name: str = Field(..., min_length=1, max_length=255, description="原始文件名")
     file_type: str = Field(..., min_length=1, max_length=255, description="文件类型（如 .png）")
-    file_size: int = Field(..., description="文件大小")
+    file_size: int = Field(..., ge=0, description="文件大小")
     upload_time: datetime = Field(..., description="上传时间") 
     is_deleted: bool = Field(default=False, description="是否删除")
     
@@ -953,7 +1068,7 @@ class TableUserFilesUpdateSetSchema(StrictBaseModel):
     file_path: str | None = Field(default=None, min_length=1, max_length=512, description="文件相对路径")
     file_name: str | None = Field(default=None, min_length=1, max_length=255, description="原始文件名")
     file_type: str | None = Field(default=None, min_length=1, max_length=255, description="文件类型（如 .png）")
-    file_size: int | None = Field(default=None, description="文件大小")
+    file_size: int | None = Field(default=None, ge=0, description="文件大小")
     upload_time: datetime | None = Field(default=None, description="上传时间")
     is_deleted: bool | None = Field(default=None, description="是否删除")
 
@@ -965,18 +1080,23 @@ class TableUserFilesUpdateSetSchema(StrictBaseModel):
 
 class TableUserFilesUpdateWhereSchema(StrictBaseModel):
     """ 用户文件 Update WHERE Schema """
-    file_id: int | None = Field(default=None, description="文件ID（主键）")
-    user_id: int | None = Field(default=None, description="用户ID（外键）")
+    file_id: int | None = Field(default=None, ge=0, description="文件ID（主键）")
+    user_id: int | None = Field(default=None, ge=0, description="用户ID（外键）")
     file_type: str | None = Field(default=None, min_length=1, max_length=255, description="文件类型（如 .png）")
     is_deleted: bool | None = Field(default=None, description="是否删除")
     created_at: datetime | None = Field(default=None, description="创建时间")
     upload_time: datetime | None = Field(default=None, description="上传时间")
     
+    @model_validator(mode="after")
+    def at_least_one_field_must_be_present(self) -> 'TableUserFilesUpdateWhereSchema':
+        if not (self.file_id or self.user_id or self.file_type or self.is_deleted or self.created_at or self.upload_time):
+            raise ValueError("至少需要提供一个定位更新的字段（file_id、user_id、file_type、is_deleted、created_at或upload_time）")
+        return self
 
 class TableUserFilesDeleteSchema(StrictBaseModel):
     """ 用户文件 Delete Schema """
-    user_id: int | None = Field(default=None, description="用户ID（外键）")  
-    file_id: int | None = Field(default=None, description="文件ID（主键）")
+    user_id: int | None = Field(default=None, ge=0, description="用户ID（外键）")  
+    file_id: int | None = Field(default=None, ge=0, description="文件ID（主键）")
     upload_time: datetime | None = Field(default=None, description="上传时间")
     created_at: datetime | None = Field(default=None, description="创建时间")
     is_deleted: bool | None = Field(default=None, description="是否删除")
@@ -990,11 +1110,11 @@ class TableUserFilesDeleteSchema(StrictBaseModel):
 
 class TableUserFilesQueryWhereSchema(StrictBaseModel):
     """ 用户文件 Query WHERE Schema """
-    file_id: int | None = Field(default=None, description="文件ID（主键）")
-    user_id: int | None = Field(default=None, description="用户ID（外键）")
+    file_id: int | None = Field(default=None, ge=0, description="文件ID（主键）")
+    user_id: int | None = Field(default=None, ge=0, description="用户ID（外键）")
     file_name: str | None = Field(default=None, min_length=1, max_length=255, description="原始文件名")
     file_type: str | None = Field(default=None, min_length=1, max_length=255, description="文件类型（如 .png）")
-    file_size: int | None = Field(default=None, description="文件大小")
+    file_size: int | None = Field(default=None, ge=0, description="文件大小")
     is_deleted: bool | None = Field(default=None, description="是否删除")
     created_at: datetime | None = Field(default=None, description="创建时间")
     upload_time: datetime | None = Field(default=None, description="上传时间")
@@ -1039,7 +1159,7 @@ class TableConversationsSchema(StrictBaseModel):
 
 class TableConversationsInsertSchema(StrictBaseModel):
     """ 会话表 Insert Schema """
-    user_id: int = Field(..., description="用户内部 ID（外键）")
+    user_id: int = Field(..., ge=0, description="用户内部 ID（外键）")
     title: str = Field(..., description="会话标题")
     message_count: int = Field(default=0, description="消息数量")
 
