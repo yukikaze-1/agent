@@ -37,15 +37,16 @@ class MySQLServiceResponseErrorCode(IntEnum):
     TRANSACTION_FAILED = 6001  # 事务执行失败
 
 
-class MySQLServiceErrorDetail(BaseModel):
+class MySQLServiceErrorDetail(StrictBaseModel):
     """ MySQLService详细错误类 """
     code: MySQLServiceResponseErrorCode = Field(..., description="错误代码")
     message: str = Field(..., description="错误信息")
     field: str | None = Field(default=None, description="出错字段，比如 'email'")
+    sql: List[str] | None= Field(default=None, description="出错的SQL语句")
     hint: str | None = Field(default=None, description="帮助提示")
 
 
-class MySQLServiceBaseResponse(BaseModel):
+class MySQLServiceBaseResponse(StrictBaseModel):
     """ 基础回复格式 """
     operator: str = Field(..., description="操作")
     result: bool = Field(..., description="操作结果")
@@ -58,17 +59,21 @@ class MySQLServiceBaseResponse(BaseModel):
     
     
     
-class MySQLServiceConnectDatabaseResponseData(BaseModel):
-    """  连接数据库 数据"""    
+class MySQLServiceConnectDatabaseResponseData(StrictBaseModel):
+    """  
+    连接数据库 附加数据 
+    如果connection_id == -1 则表示连接失败
+    """    
     connection_id: int = Field(..., description="数据库连接ID")
+    
     
 class MySQLServiceConnectDatabaseResponse(MySQLServiceBaseResponse):
     """ 连接数据库 Response """
-    data: MySQLServiceConnectDatabaseResponseData | None = Field(default=None, description="连接数据库附加数据")
+    data: MySQLServiceConnectDatabaseResponseData = Field(..., description="连接数据库附加数据")
 
 
 
-class MySQLServiceQueryResponseData(BaseModel):
+class MySQLServiceQueryResponseData(StrictBaseModel):
     """ SQL查询 数据 """
     column_names: List[str] = Field(..., description="查询结果列名列表")
     rows: List[List[Any]] = Field(..., description="查询结果数据行列表，每行是一个列表")
@@ -83,7 +88,7 @@ class MySQLServiceQueryResponse(MySQLServiceBaseResponse):
 
 
 
-class MySQLServiceInsertResponseData(BaseModel):
+class MySQLServiceInsertResponseData(StrictBaseModel):
     """ SQL插入操作 Response 附加数据 """
     rows_affected: int = Field(..., description="插入的记录数")
     last_insert_id: int | None = Field(default=None, description="自增主键 ID（如果有）")
@@ -92,9 +97,9 @@ class MySQLServiceInsertResponse(MySQLServiceBaseResponse):
     """ SQL插入 Response """
     data: MySQLServiceInsertResponseData | None = Field(default=None, description="插入数据附加信息")
     
-    
-    
-class MySQLServiceDeleteResponseData(BaseModel):
+
+
+class MySQLServiceDeleteResponseData(StrictBaseModel):
     """ SQL删除 数据 """
     rows_affected: int = Field(default=-1, description="删除的记录数")
 
@@ -102,9 +107,9 @@ class MySQLServiceDeleteResponse(MySQLServiceBaseResponse):
     """ SQL删除 Response """
     data: MySQLServiceDeleteResponseData = Field(..., description="删除数据附加信息")
     
-    
-    
-class MySQLServiceUpdateResponseData(BaseModel):
+
+
+class MySQLServiceUpdateResponseData(StrictBaseModel):
     """ SQL更新 数据 """
     rows_affected: int = Field(..., description="更新的记录数")
 
@@ -113,11 +118,21 @@ class MySQLServiceUpdateResponse(MySQLServiceBaseResponse):
     data: MySQLServiceUpdateResponseData | None = Field(default=None, description="更新数据附加信息")
     
     
-    
-class MySQLServiceTransactionResponseData(BaseModel):
-    """ 事务 数据 """
-    pass
-    
+class MySQLServiceSQLExecutionResult(StrictBaseModel):
+    """  事务单条SQL执行结果 """
+    index: int = Field(..., ge=0, description="执行结果索引")
+    sql: str = Field(..., description="执行的SQL语句")
+    affected_rows: int = Field(..., ge=0, description="受影响的行数")
+
+
+class MySQLServiceTransactionResponseData(StrictBaseModel):
+    """ 事务 Response 附加数据 """
+    sql_count: int = Field(..., ge=0, description="事务中执行的 SQL 语句数量")
+    transaction_results: List[MySQLServiceSQLExecutionResult] = Field(..., description="事务中每个操作的执行结果列表")
+
+
 class MySQLServiceTransactionResponse(MySQLServiceBaseResponse):
     """ 事务 Response """
-    data: List[MySQLServiceBaseResponse] | None = Field(default=None, description="事务中每个操作的响应列表")
+    data: MySQLServiceTransactionResponseData | None = Field(default=None, description="事务中每个操作的响应列表")
+    
+    

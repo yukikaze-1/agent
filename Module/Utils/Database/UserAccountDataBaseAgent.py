@@ -24,6 +24,12 @@ from Module.Utils.FormatValidate import is_email, is_account_name
 from Module.Utils.Database.SQLBuilder import SQLBuilder
 from Module.Utils.Database.SQLExecutor import SQLExecutor
 from Module.Utils.ToolFunctions import retry
+
+from Module.Utils.Database.MySQLServiceRequestType import (
+    MySQLServiceConnectRequest,
+    MySQLServiceTransactionRequest,
+    MySQLServiceTransactionSQL
+)
 from Module.Utils.Database.MySQLServiceResponseType import (
     MySQLServiceConnectDatabaseResponse, 
     MySQLServiceInsertResponse, 
@@ -32,14 +38,16 @@ from Module.Utils.Database.MySQLServiceResponseType import (
     MySQLServiceQueryResponse
 )
 from Module.Utils.Database.UserAccountDatabaseSQLParameterSchema import (
-    SQL_REQUEST_ALLOWED_FIELDS,
-    get_allowed_fields,
-    filter_writable_fields,
-    FieldSelectionSchema,
+    get_allowed_query_select_fields,
+    InsertSchema,
+    QueryWhereSchema,
+    DeleteWhereSchema,
+    UpdateWhereSchema,
+    UpdateSetSchema,
     StrictBaseModel,
     UserStatus,
     TableUsersSchema, TableUsersInsertSchema, TableUsersUpdateSetSchema, TableUsersUpdateWhereSchema, TableUsersDeleteWhereSchema, TableUsersQueryWhereSchema,
-    TableUserProfileSchema, TableUserProfileInsertSchema, TableUserProfileUpdateSetSchema, TableUserProfileUpdateWhereSchema, TableUserProfileDeleteSchema, TableUserProfileQueryWhereSchema,
+    TableUserProfileSchema, TableUserProfileInsertSchema, TableUserProfileUpdateSetSchema, TableUserProfileUpdateWhereSchema, TableUserProfileDeleteWhereSchema, TableUserProfileQueryWhereSchema,
     TableUserLoginLogsSchema, TableUserLoginLogsInsertSchema, TableUserLoginLogsDeleteWhereSchema, TableUserLoginLogsQueryWhereSchema,
     UserLanguage,
     TableUserSettingsSchema, TableUserSettingsInsertSchema, TableUserSettingsUpdateSetSchema, TableUserSettingsUpdateWhereSchema, TableUserSettingsDeleteWhereSchema, TableUserSettingsQueryWhereSchema,
@@ -47,7 +55,7 @@ from Module.Utils.Database.UserAccountDatabaseSQLParameterSchema import (
     TableUserAccountActionsSchema, TableUserAccountActionsInsertSchema, TableUserAccountActionsDeleteWhereSchema, TableUserAccountActionsQueryWhereSchema,
     UserNotificationType,
     TableUserNotificationsSchema, TableUserNotificationsInsertSchema, TableUserNotificationsUpdateSetSchema, TableUserNotificationsUpdateWhereSchema, TableUserNotificationsDeleteWhereSchema, TableUserNotificationsQueryWhereSchema,
-    TableUserFilesSchema, TableUserFilesInsertSchema, TableUserFilesUpdateSetSchema, TableUserFilesUpdateWhereSchema, TableUserFilesDeleteSchema, TableUserFilesQueryWhereSchema,
+    TableUserFilesSchema, TableUserFilesInsertSchema, TableUserFilesUpdateSetSchema, TableUserFilesUpdateWhereSchema, TableUserFilesDeleteWhereSchema, TableUserFilesQueryWhereSchema,
     TableConversationsSchema, TableConversationsInsertSchema, TableConversationsUpdateSchema, TableConversationsDeleteSchema
 )
 
@@ -103,13 +111,13 @@ class UserAccountDataBaseAgent():
         self.config = load_config(config_path=self.config_path, config_name='UserAccountDataBaseAgent', logger=self.logger)
         
         # 验证配置文件
-        required_keys = [ "mysql_host", "mysql_port", "mysql_agent_url", "mysql_user",  "mysql_password", "database", "charset"]
+        required_keys = [ "mysql_host", "mysql_port", "mysql_service_url", "mysql_user",  "mysql_password", "database", "charset"]
         validate_config(required_keys, self.config, self.logger)
         
         # MySQL配置
         self.mysql_host = self.config.get("mysql_host", "")
         self.mysql_port = self.config.get("mysql_port", "")
-        self.mysql_agent_url = self.config.get("mysql_agent_url", "")
+        self.mysql_service_url = self.config.get("mysql_service_url", "")
         self.mysql_user = self.config.get("mysql_user", "")
         self.mysql_password = self.config.get("mysql_password", "")  
         self.database = self.config.get("database","")
@@ -151,6 +159,7 @@ class UserAccountDataBaseAgent():
                 self.logger.info(f"db_connect_id = {self.db_connect_id}")
                 # 同步到 SQLExecutor
                 self.sql_executor.db_connect_id = self.db_connect_id
+                
         except Exception as e:
             self.logger.error(f"Failed to init connection: {e}")
             raise
@@ -159,20 +168,24 @@ class UserAccountDataBaseAgent():
     async def connect_to_database(self) -> int:
         """
         连接MySQL数据库
-        返回: 连接ID
+        返回: 成功时连接ID(非负)，失败时返回-1
         """
-        headers = {"Content-Type": "application/json"}
-        url = self.mysql_agent_url + "/database/mysql/connect"
-        payload = {
-            "host": self.mysql_host,
-            "port": self.mysql_port,
-            "user": self.mysql_user,
-            "password": self.mysql_password,
-            "database": self.database,
-            "charset":  self.charset
-        }
+        
+        url = self.mysql_service_url + "/database/mysql/connect"
+        
+        request = MySQLServiceConnectRequest(
+            host=self.mysql_host,
+            port=self.mysql_port,
+            user=self.mysql_user,
+            password=self.mysql_password,
+            database=self.database,
+            charset=self.charset
+        )
+        
+        payload = request.model_dump(mode="json", exclude_none=True)
+        
         try:
-            response = await self.client.post(url=url, json=payload, headers=headers, timeout=120.0)
+            response = await self.client.post(url=url, json=payload, timeout=120.0)
             response.raise_for_status()
             
             if response.status_code != 200:
@@ -182,18 +195,7 @@ class UserAccountDataBaseAgent():
             response_dict: Dict = response.json()
             response_data = MySQLServiceConnectDatabaseResponse.model_validate(response_dict)
             
-            if response_data.data is None:
-                self.logger.error(f"Failed to connect database '{self.database}.'")
-                raise HTTPException(status_code=500, detail=f"Internal server error. Failed to connect database '{self.database}.'")
-            else:
-                id = response_data.data.connection_id
-                if id == -1:
-                    self.logger.error(f"Failed connect to the database '{self.database}'. Message: '{response_data}'")
-                    raise HTTPException(status_code=500, detail="Internal server error. Get the default wrong ConnectionID: -1")
-                else: 
-                    self.logger.info(f"Success connect to the database '{self.database}'. Message: '{response_data}'")
-                    return id
-                
+            return response_data.data.connection_id 
                 
         except httpx.HTTPStatusError as e:
             self.logger.error(f"Connect to database '{self.database}' failed! HTTP error: {e.response.status_code}, {e.response.text}")
@@ -208,160 +210,41 @@ class UserAccountDataBaseAgent():
             raise HTTPException(status_code=500, detail="Internal server error.")
         
    
-    def extract_where_from_schema(self, schema: StrictBaseModel, keys: List[str]) -> tuple[List[str], List[Any]]:
+    def extract_where_from_schema(self, schema: QueryWhereSchema | UpdateWhereSchema | DeleteWhereSchema) -> tuple[list[str], list[Any]]:
         """
-        从 Pydantic 模型(xxxDeleteSchema or xxxUpdtaeSchema ...)中提取 WHERE 条件和参数值
+        从 Pydantic 模型中提取 WHERE 条件和参数值。
 
-        :param schema: Pydantic 模型实例（如 DeleteSchema）
-        :param keys: 需要构造 WHERE 条件的字段名列表
+        :param schema: Pydantic 模型实例（如 QueryWhereSchema | UpdateWhereSchema | DeleteWhereSchema）
         :return: (条件表达式列表, 参数值列表)
         """
         conditions = []
         values = []
 
-        for key in keys:
-            value = getattr(schema, key)
-            if value is None:
-                raise ValueError(f"字段 {key} 不能为 None")
+        for key, value in schema.model_dump(exclude_none=True).items():
             conditions.append(f"{key} = %s")
             values.append(value)
 
-        return conditions, values
-       
-    
-    def extract_select_fields_from_schema(self, schema: FieldSelectionSchema, allowed_keys: List[str])-> Optional[List[str]]:
-        """
-        从 Pydantic 模型(FieldSelectionSchema)中提取 SELECT 值
-        如果传入的FieldSelectionSchema中的fields字段为None，则返回None
-        如果经过筛选后没有字段剩余，则返回None
-        
-        :param schema: Pydantic 模型FieldSelectionSchema实例
-        :param allowed_keys: 允许的查询字段(即SELECT字段)
-        :return: (条件表达式列表, 参数值列表)
-        """
-        if schema.fields is None:   
-            return None
-        
-        allowed_fields = [field for field in schema.fields if field in allowed_keys]
-    
-        disallowed_fields = set(schema.fields) - set(allowed_fields)
-        for field in disallowed_fields:
-            self.logger.warning(f"Field '{field}' is not allowed in this context. Skipping.")
-
-        return allowed_fields or None
-        
+        return conditions, values        
         
      
     # ------------------------------------------------------------------------------------------------
     # 功能函数---查询表项目
     # ------------------------------------------------------------------------------------------------     
-    async def query_many(self, table: str,
-                        fields: Optional[List[str]] = None,
-                        where_conditions: Optional[List[str]] = None,
-                        where_values: Optional[List] = None,
-                        order_by: Optional[str] = None,
-                        limit: Optional[int] = None,
-                        offset: Optional[int] = None,
-                        success_msg: str = "Query success.",
-                        warning_msg: str = "Query may have failed.",
-                        error_msg: str = "Query error.") -> Optional[List[Dict]]:
-        """
-        执行 SELECT 查询并返回多条记录
-
-        :param table: 表名
-        :param fields: 要查询的字段
-        :param where_conditions: WHERE 条件
-        :param where_values: WHERE 条件对应的值
-        :param order_by: ORDER BY 子句
-        :param limit: LIMIT 子句
-        :param offset: OFFSET 子句
-        :param success_msg: 成功日志
-        :param warning_msg: 警告日志
-        :param error_msg: 错误日志
-        :return: 查询结果列表，失败时返回 None
-        """
-        sql, sql_args = self.sql_builder.build_query_sql(
-            table=table,
-            fields=fields,
-            where_conditions=where_conditions,
-            where_values=where_values,
-            order_by=order_by,
-            limit=limit,
-            offset=offset
-        )
-        url = self.mysql_agent_url + "/database/mysql/query"
-
-        self.logger.info(f"Executing query: {sql} with args: {sql_args}")
-
-        payload = {
-            "id": self.db_connect_id,
-            "sql": sql,
-            "sql_args": sql_args
-        }
-
-        try:
-            # 发送给MySQLService
-            response = await self.client.post(url=url, json=payload, timeout=60.0)
-            response.raise_for_status()
-            response_data = response.json()
-            
-            self.logger.debug(f"In query_many: Response: {response}")
-
-            if response.status_code == 200 and response_data.get("Result") is True:
-                self.logger.info(success_msg)
-                return response_data.get("Query Result") or []
-            else:
-                self.logger.warning(f"{warning_msg} | Response: {response_data}")
-                return None
-        except Exception as e:
-            self.logger.error(f"{error_msg}: {str(e)}")
-            return None
-
-    async def query_one(self, table: str,
-                    fields: Optional[List[str]] = None,
-                    where_conditions: Optional[List[str]] = None,
-                    where_values: Optional[List] = None,
-                    order_by: Optional[str] = None,
-                    warning_msg: str = "Query One Warning.",
-                    error_msg: str = "Query One Error.") -> Optional[Dict]:
-        """
-        执行 SELECT 查询并返回一条记录
-
-        :param table: 表名
-        :param fields: 要查询的列
-        :param where_conditions: WHERE 条件
-        :param where_values: WHERE 条件对应的值
-        :param order_by: ORDER BY 子句
-        :param warning_msg: 警告日志
-        :param error_msg: 错误日志
-        :return: 查询结果字典，失败时返回 None
-        """
-        # 转发
-        result = await self.query_many(table=table,
-                                       fields=fields,
-                                       where_conditions=where_conditions,
-                                       where_values=where_values,
-                                       limit=1,
-                                       order_by=order_by,
-                                       warning_msg=warning_msg,
-                                       error_msg=error_msg)
-        return result[0] if result else None
-
-    async def _query_record_by_schema(
+    async def query_record_by_schema(
         self,
         table: str,
-        query_schema: StrictBaseModel,
-        select_schema: FieldSelectionSchema,
-        order_by: Optional[str] = None,
-        limit: Optional[int] = None,
-        offset: Optional[int] = None,
+        query_where: QueryWhereSchema,
+        select_fields: List[str] | None= None,
+        order_by: str | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
     ) -> List[dict]:
         """
         根据 Schema 执行查询（自动提取 WHERE）
 
         :param table: 表名
-        :param query_schema: Pydantic 对象，用于生成 WHERE 条件
-        :param select_fields: 允许的 WHERE 字段白名单（一般通过 get_allowed_fields(table, "query")）
+        :param query_where: Pydantic 对象，用于生成 WHERE 条件
+        :param select_fields: 允许的 WHERE 字段列表
         :param fields: 要查询的字段（如果为 None 则返回全部字段）
         :param order_by: 排序字段
         :param limit: 限制数量
@@ -370,25 +253,12 @@ class UserAccountDataBaseAgent():
         """
         # 提取 WHERE 条件
         try:
-            where_conditions, where_values = self.extract_where_from_schema(
-                schema=query_schema,
-                keys=list(get_allowed_fields(table=table, action="query"))
-            )
+            where_conditions, where_values = self.extract_where_from_schema(schema=query_where)
         except Exception as e:
             self.logger.error(f"从 QuerySchema 提取 WHERE 条件失败: {e}")
             return []
         
-        # 提取 SELECT 字段
-        try:
-            select_fields = self.extract_select_fields_from_schema(
-                schema=select_schema,
-                allowed_keys=list(get_allowed_fields(table=table, action="query"))
-            )
-        except Exception as e:
-            self.logger.error(f"从 FieldSelectionSchema 提取 SELECT 字段失败: {e}")
-            return []
-
-        if select_fields is None:
+        if not select_fields:
             select_fields = ["*"]  # 如果未指定字段，则查询所有字段
 
         return await self._query_record(
@@ -437,7 +307,7 @@ class UserAccountDataBaseAgent():
             self.logger.error(f"构建 SELECT SQL 失败: {e}")
             return []
 
-        url = self.mysql_agent_url + "/database/mysql/select"
+        url = self.mysql_service_url + "/database/mysql/select"
 
         try:
             response_dict = await self.sql_executor.execute_query_sql(
@@ -471,12 +341,13 @@ class UserAccountDataBaseAgent():
         """
         table = "users"
         
-        # 清洗数据
-        data = filter_writable_fields(
-            schema=insert_data,
-            allowed_fields=get_allowed_fields(table=table, action="insert")
-        )
-        
+        # # 清洗数据
+        # data = filter_writable_fields(
+        #     schema=insert_data,
+        #     allowed_fields=get_allowed_fields(table=table, action="insert")
+        # )
+
+        data = insert_data.model_dump(exclude_none=True)
         # 2. 构造 SQL
         try:
             sql, sql_args = self.sql_builder.build_insert_sql(table, data)
@@ -485,7 +356,7 @@ class UserAccountDataBaseAgent():
             return None
         
         # 构建请求URL
-        url = self.mysql_agent_url + "/database/mysql/insert"
+        url = self.mysql_service_url + "/database/mysql/insert"
 
         # 执行插入
         try:
@@ -568,36 +439,38 @@ class UserAccountDataBaseAgent():
     async def _insert_record(
         self,
         table: str,
-        insert_data: BaseModel,
+        insert_data: InsertSchema,
         warning_msg: str,
         success_msg: str,
         error_msg: str
     ) -> bool:
         """
-        插入记录
+        插入记录。
         
         :param table: 表名
-        :param insert_data: 要插入的数据，必须是一个继承自 BaseModel 的对象
+        :param insert_data: 要插入的数据，必须是一个继承自 InsertSchema 的对象
         :param warning_msg: 警告日志信息
         :param success_msg: 成功日志信息
         :param error_msg: 错误日志信息
         :return: 
         """
-        # 清洗数据
-        data = filter_writable_fields(
-            schema=insert_data,
-            allowed_fields=get_allowed_fields(table=table, action="insert")
-        )
+        # # 清洗数据
+        # data = filter_writable_fields(
+        #     schema=insert_data,
+        #     allowed_fields=get_allowed_fields(table=table, action="insert")
+        # )
         
         # 构造 SQL
+        data = insert_data.model_dump(exclude_none=True)
+        
         try:
-            sql, sql_args = self.sql_builder.build_insert_sql(table, data)
+            sql, sql_args = self.sql_builder.build_insert_sql(table=table, data=data)
         except Exception as e:
             self.logger.error(f"SQL构建失败: {e}")
             return False
 
         # 构建请求URL
-        url = self.mysql_agent_url + "/database/mysql/insert"
+        url = self.mysql_service_url + "/database/mysql/insert"
         
         # 执行插入
         try:
@@ -629,14 +502,12 @@ class UserAccountDataBaseAgent():
     # 功能函数---更新表项目
     # ------------------------------------------------------------------------------------------------
     async def update_users(self, 
-                           update_data: TableUsersUpdateSetSchema,
-                           where_conditions: List[str],
-                           where_values: List[Any]) -> bool:
+                           update_data: TableUsersUpdateSetSchema, 
+                           update_where: TableUsersUpdateWhereSchema) -> bool:
         return await self._update_record(
             table="users",
             update_data=update_data,
-            where_conditions=where_conditions,
-            where_values=where_values,
+            update_where=update_where,
             warning_msg=f"User info update may have failed. ",
             success_msg=f"User info update succeeded.",
             error_msg=f"Update error."
@@ -644,13 +515,11 @@ class UserAccountDataBaseAgent():
 
     async def update_user_profile(self, 
                                   update_data: TableUserProfileUpdateSetSchema,
-                                  where_conditions: List[str],
-                                  where_values: List[Any]) -> bool:
+                                  update_where: TableUserProfileUpdateWhereSchema) -> bool:
         return await self._update_record(
             table="user_profile",
             update_data=update_data,
-            where_conditions=where_conditions,
-            where_values=where_values,
+            update_where=update_where,
             warning_msg=f"User profile update may have failed.",
             success_msg=f"User profile update succeeded.",
             error_msg=f"Update error."
@@ -658,13 +527,11 @@ class UserAccountDataBaseAgent():
 
     async def update_user_settings(self, 
                                    update_data: TableUserSettingsUpdateSetSchema,
-                                   where_conditions: List[str],
-                                    where_values: List[Any]) -> bool:
+                                   update_where: TableUserSettingsUpdateWhereSchema) -> bool:
         return await self._update_record(
             table="user_settings",
             update_data=update_data,
-            where_conditions=where_conditions,
-            where_values=where_values,
+            update_where=update_where,
             warning_msg=f"User settings update may have failed.",
             success_msg=f"User settings update succeeded.",
             error_msg=f"Update error."
@@ -672,27 +539,22 @@ class UserAccountDataBaseAgent():
 
     async def update_user_notifications(self, 
                                         update_data: TableUserNotificationsUpdateSetSchema,
-                                        where_conditions: List[str],
-                                        where_values: List[Any]) -> bool:
+                                        update_where: TableUserNotificationsUpdateWhereSchema) -> bool:
         return await self._update_record(
             table="user_notifications",
             update_data=update_data,
-            where_conditions=where_conditions,
-            where_values=where_values,
+            update_where=update_where,
             warning_msg=f"User notifications update may have failed. ",
             success_msg=f"User notifications update succeeded. ",
             error_msg=f"Update error. "
         )
 
-    async def update_user_files(self,
-                                update_data: TableUserFilesUpdateSetSchema,
-                                where_conditions: List[str],
-                                where_values: List[Any]) -> bool:
+    async def update_user_files(self, update_data: TableUserFilesUpdateSetSchema, 
+                                update_where: TableUserFilesUpdateWhereSchema) -> bool:
         return await self._update_record(
             table="user_files",
             update_data=update_data,
-            where_conditions=where_conditions,
-            where_values=where_values,
+            update_where=update_where,
             warning_msg=f"User files update may have failed.",
             success_msg=f"User files update succeeded.",
             error_msg=f"Update error."
@@ -701,9 +563,8 @@ class UserAccountDataBaseAgent():
     async def _update_record(
         self,
         table: str,
-        update_data: BaseModel,
-        where_conditions: List[str],
-        where_values: List[Any],
+        update_data: UpdateSetSchema,
+        update_where: UpdateWhereSchema,
         warning_msg: str,
         success_msg: str,
         error_msg: str
@@ -712,7 +573,7 @@ class UserAccountDataBaseAgent():
         更新指定表的记录(该函数不会抛出异常)
         
         :param  table: 表名
-        :param update_data: 要更新的数据，必须是一个继承自 BaseModel 的对象
+        :param update_data: 要更新的数据，必须是一个继承自 StrictBaseModel 的对象
         :param where_conditions: WHERE 条件表达式列表
         :param where_values: 对应的参数值列表
         :param warning_msg: 警告日志信息
@@ -720,24 +581,15 @@ class UserAccountDataBaseAgent():
         :param error_msg: 错误日志信息
         :return: 是否更新成功
         """
-        if not where_conditions or not where_values:
-            self.logger.error("WHERE 条件缺失，拒绝执行更新")
-            return False
+        # # 清洗数据
+        # data = filter_writable_fields(
+        #     schema=update_data,
+        #     allowed_fields=get_allowed_fields(table=table, action="update")
+        # )
         
-        if len(where_conditions) != len(where_values):
-            self.logger.error("WHERE 条件与值长度不一致")
-            return False
-        
-        # 清洗数据
-        data = filter_writable_fields(
-            schema=update_data,
-            allowed_fields=get_allowed_fields(table=table, action="update")
-        )
-        
-        if not data:
-            self.logger.warning(f"{warning_msg}：清洗后无可更新字段")
-            return False
-        
+        where_conditions, where_values = self.extract_where_from_schema(schema=update_where)
+
+        data = update_data.model_dump()
         # 构造 SQL
         try:
             sql, sql_args = self.sql_builder.build_update_sql(
@@ -751,7 +603,7 @@ class UserAccountDataBaseAgent():
             return False
         
         # 构建URL
-        url = self.mysql_agent_url + "/database/mysql/update"
+        url = self.mysql_service_url + "/database/mysql/update"
         
         # 执行SQL
         try:
@@ -784,16 +636,16 @@ class UserAccountDataBaseAgent():
     async def delete_users(self, delete_data: TableUsersDeleteWhereSchema) -> bool:
         return await self._delete_record_by_schema(
             table="users",
-            schema=delete_data,
+            delete_where=delete_data,
             success_msg=f"删除用户成功",
             warning_msg=f"删除用户时未命中任何记录",
             error_msg=f"删除用户失败"
         )
     
-    async def delete_user_profile(self, delete_data: TableUserProfileDeleteSchema) -> bool:
+    async def delete_user_profile(self, delete_data: TableUserProfileDeleteWhereSchema) -> bool:
         return await self._delete_record_by_schema(
             table="user_profile",
-            schema=delete_data,
+            delete_where=delete_data,
             success_msg=f"删除用户扩展资料成功",
             warning_msg=f"删除用户扩展资料时未命中任何记录",
             error_msg=f"删除用户扩展资料失败"
@@ -802,7 +654,7 @@ class UserAccountDataBaseAgent():
     async def delete_user_login_logs(self, delete_data: TableUserLoginLogsDeleteWhereSchema) -> bool:
         return await self._delete_record_by_schema(
             table="user_login_logs",
-            schema=delete_data,
+            delete_where=delete_data,
             success_msg=f"删除用户登录日志成功",
             warning_msg=f"删除用户登录日志时未命中任何记录",
             error_msg=f"删除用户登录日志失败"
@@ -811,7 +663,7 @@ class UserAccountDataBaseAgent():
     async def delete_user_settings(self, delete_data: TableUserSettingsDeleteWhereSchema) -> bool:
         return await self._delete_record_by_schema(
             table="user_settings",
-            schema=delete_data,
+            delete_where=delete_data,
             success_msg=f"删除用户设置成功",
             warning_msg=f"删除用户设置时未命中任何记录",
             error_msg=f"删除用户设置失败"
@@ -820,7 +672,7 @@ class UserAccountDataBaseAgent():
     async def delete_user_account_actions(self, delete_data: TableUserAccountActionsDeleteWhereSchema) -> bool:
         return await self._delete_record_by_schema(
             table="user_account_actions",
-            schema=delete_data,
+            delete_where=delete_data,
             success_msg=f"删除用户账户行为成功",
             warning_msg=f"删除用户账户行为时未命中任何记录",
             error_msg=f"删除用户账户行为失败"
@@ -829,16 +681,16 @@ class UserAccountDataBaseAgent():
     async def delete_user_notifications(self, delete_data: TableUserNotificationsDeleteWhereSchema) -> bool:
         return await self._delete_record_by_schema(
             table="user_notifications",
-            schema=delete_data,
+            delete_where=delete_data,
             success_msg=f"删除用户通知成功",
             warning_msg=f"删除用户通知时未命中任何记录",
             error_msg=f"删除用户通知失败"
         )
         
-    async def delete_user_files(self, delete_data: TableUserFilesDeleteSchema) -> bool:
+    async def delete_user_files(self, delete_data: TableUserFilesDeleteWhereSchema) -> bool:
         return await self._delete_record_by_schema(
             table="user_files",
-            schema=delete_data,
+            delete_where=delete_data,
             success_msg=f"删除用户文件成功",
             warning_msg=f"删除用户文件时未命中任何记录",
             error_msg=f"删除用户文件失败"
@@ -846,7 +698,7 @@ class UserAccountDataBaseAgent():
     
     async def _delete_record_by_schema(self,
                                   table: str,
-                                  schema: StrictBaseModel,
+                                  delete_where: DeleteWhereSchema,
                                   success_msg: str = "Delete success.",
                                   warning_msg: str = "Delete warning.",
                                   error_msg: str = "Delete error.") -> bool:
@@ -856,10 +708,7 @@ class UserAccountDataBaseAgent():
         """
         
         try:
-            where_conditions, where_values = self.extract_where_from_schema(
-                schema=schema,
-                keys=list(get_allowed_fields(table=table, action="delete"))
-            )
+            where_conditions, where_values = self.extract_where_from_schema(schema=delete_where)
         except Exception as e:
             self.logger.error(f"提取 WHERE 条件失败: {e}")
             return False
@@ -921,7 +770,7 @@ class UserAccountDataBaseAgent():
             return -1
         
         # 构建请求URL
-        url = self.mysql_agent_url + "/database/mysql/delete"
+        url = self.mysql_service_url + "/database/mysql/delete"
         
         self.logger.info(f"Executing delete SQL: {sql} with args: {args} | Table: {table} | URL: {url}")
         
@@ -963,15 +812,11 @@ class UserAccountDataBaseAgent():
         :param user_id: 用户ID
         :return: 更新是否成功
         """
-        update_data= TableUsersUpdateSetSchema(
-            status=UserStatus.deleted
-        )
         # 1. 将users 表中的 status 设置为 'deleted'
         try:
             res = await self.update_users(
-                update_data=update_data,
-                where_conditions=["user_id = %s"],
-                where_values=[user_id]
+                update_data=TableUsersUpdateSetSchema(status=UserStatus.deleted),
+                update_where=TableUsersUpdateWhereSchema(user_id=user_id)
             )
         except Exception as e:
             self.logger.error(f"Soft delete failed! Error: {str(e)}")
@@ -1049,61 +894,55 @@ class UserAccountDataBaseAgent():
     # ------------------------------------------------------------------------------------------------
     # 封装的上层功能函数
     # ------------------------------------------------------------------------------------------------      
-    async def fetch_user_id_by_uuid(self, uuid: str) -> Optional[int]:
+    async def fetch_user_id_by_uuid(self, user_uuid: str) -> Optional[int]:
         """
         通过 UUID 在 users 表中查询 user_id
 
-        :param uuid: 用户的 UUID
+        :param user_uuid: 用户的 UUID
 
         :return: user_id ，如果未找到则返回 None
         """
 
         try:
-            res = await self.query_one(
-                table="users",
-                fields=["user_id"],
-                where_conditions=["user_uuid = %s"],
-                where_values=[uuid]
+            res = await self.query_record_by_schema(
+                table='users',
+                query_where=TableUsersQueryWhereSchema(user_uuid=user_uuid),
+                select_fields=['user_id']
             )
+            
         except Exception as e:
             self.logger.error(f"Query failed! Error:{str(e)}")
             return None
 
         if res is None:
-            self.logger.warning(f"No user found with UUID: {uuid}")
+            self.logger.warning(f"No user found with UUID: {user_uuid}")
             return None
-
-        return res["user_id"]
+        # TODO 这里的返回值方式有问题，待修改
+        return res[0]["user_id"]
     
 
-    async def fetch_user_id_and_password_by_email_or_account(self, identifier: str)-> Optional[tuple[int, str]]:
+    async def fetch_user_id_and_password_hash_by_email_or_account(self, identifier: str)-> Optional[tuple[int, str]]:
         """
-        通过 email 或 account 在 users 表中查询 用户id 和 密码哈希
+        通过 email 或 account 在 users 表中查询 用户id 和 密码hash
 
         :param identifier: 用户的 email 或 account
 
         :return: (user_id, password_hash) 元组，如果未找到则返回 None
         """
-        fields = ["user_id", "password_hash"]
-        where_conditions = []
-        where_values = []
+        select_fields = ["user_id", "password_hash"]
         
-        if is_email(identifier):
-            where_conditions.append("email = %s")
-            where_values.append(identifier)
-        elif is_account_name(identifier):
-            where_conditions.append("account = %s")
-            where_values.append(identifier)
-        else:
+        if not is_email(identifier) and not is_account_name(identifier):
             self.logger.warning(f"Invalid identifier: {identifier}. Need email or valid account.")
             return None
 
         try:
-            res = await self.query_one(
-                table="users",
-                fields=fields,
-                where_conditions=where_conditions,
-                where_values=where_values
+            res = await self.query_record_by_schema(
+                table='users',
+                query_where=TableUsersQueryWhereSchema(
+                    email=identifier if is_email(identifier) else None,
+                    account=identifier if is_account_name(identifier) else None
+                ),
+                select_fields=select_fields,
             )
         except Exception as e:
             self.logger.error(f"{str(e)}")
@@ -1113,7 +952,7 @@ class UserAccountDataBaseAgent():
             self.logger.warning(f"No user found with identifier: {identifier}")
             return None
 
-        return res["user_id"], res["password_hash"]
+        return res[0]["user_id"], res[0]["password_hash"]
 
 
     async def fetch_uuid_by_user_id(self, user_id: int) -> str | None:
@@ -1125,11 +964,10 @@ class UserAccountDataBaseAgent():
         :return: 用户UUID，如果未找到则返回 None
         """
         try:
-            res = await self.query_one(
-                table="users",
-                fields=["user_uuid"],
-                where_conditions=["user_id = %s"],
-                where_values=[user_id]
+            res = await self.query_record_by_schema(
+                table='users',
+                query_where=TableUsersQueryWhereSchema(user_id=user_id),
+                select_fields=['user_uuid'],
             )
         except Exception as e:
             self.logger.error(f"Query failed! Error:{str(e)}")
@@ -1139,7 +977,7 @@ class UserAccountDataBaseAgent():
             self.logger.warning(f"No user found with user_id: {user_id}")
             return None
 
-        return res["user_uuid"]
+        return res[0]["user_uuid"]
 
     
     async def insert_new_user(self, account: str, email: str, password_hash: str, user_name: str) -> Optional[int]:
@@ -1163,75 +1001,50 @@ class UserAccountDataBaseAgent():
         # 默认用户文件夹路径
         file_folder_path = f"Users/Files/{user_uuid}/"
         
+        user_suffix = 1234
+        
         # 开启事务
         # TODO: 这里可以考虑使用事务来确保数据一致性
         
         # 1. 插入 users 表
-        # 构建插入数据
-        insert_data_users = TableUsersInsertSchema(
-            user_uuid=user_uuid,
-            account=account,
-            email=email,
-            password_hash=password_hash,
-            file_folder_path=file_folder_path
-        )  
+        sql, args = self.sql_builder.build_insert_sql(
+                table="users",
+                data=TableUsersInsertSchema(
+                        user_uuid=user_uuid,
+                        user_name=user_name,
+                        user_suffix=user_suffix,
+                        account=account,
+                        password_hash=password_hash,
+                        email=email,
+                        file_folder_path=file_folder_path
+                    ).model_dump(exclude_none=True)
+        )
         
-        try:
-            user_id = await self.insert_users(insert_data=insert_data_users)
-        except Exception as e:
-            self.logger.error(f"Insert users Failed. Error: {e}")
-            return None
+        insert_users_sql = MySQLServiceTransactionSQL(
+            sql=sql,
+            sql_args=args
+        )
         
-        if user_id is not None:
-            self.logger.info(f"Insert users success. user_id: {user_id}")
-        else:
-            self.logger.warning(f"Insert users Failed. user_id: {user_id}")
-            return None
         
         # 2. 插入 user_profile 表（使用默认头像）
         # 构建插入数据
-        insert_data_user_profile = TableUserProfileInsertSchema(
-            user_id=user_id,  # 这里使用上面插入成功的 user_id
-            profile_picture_path=None,  # 默认头像
-            signature=""  # 默认签名为空
+        sql, args = self.sql_builder.build_insert_sql(
+                table="user_profile",
+                data=TableUserProfileInsertSchema(
+                        user_uuid=user_uuid,
+                        user_name=user_name,
+                        user_suffix=user_suffix,
+                        account=account,
+                        password_hash=password_hash,
+                        email=email,
+                        file_folder_path=file_folder_path
+                    ).model_dump(exclude_none=True)
         )
-        
-        try:
-            res_insert_user_profile = await self.insert_user_profile(insert_data=insert_data_user_profile)
-        except Exception as e:
-            self.logger.error(f"Insert user profile Failed. Error: {e}")
-            return None
-        
-        if res_insert_user_profile:
-            self.logger.info(f"Inserted user profile. User ID: {user_id}")
-        else:
-            self.logger.warning(f"User profile insert may have failed. User ID: {user_id}")
-            return None
         
         
         # 3. 插入 user_settings 表 (使用默认配置)
         # 构建插入数据
-        insert_data_user_settings = TableUserSettingsInsertSchema(
-            user_id=user_id,
-            language=UserLanguage.zh,  # 默认语言
-            configure={},  # 默认配置为空
-            notification_setting={
-                "notifications_enabled": True,# TODO 待在表中增加字段，到时候修改
-                "settings_json": {}
-            }  # 默认通知设置
-        )
         
-        try:
-            res_insert_user_settings = await self.insert_user_settings(insert_data=insert_data_user_settings)
-        except Exception as e:
-            self.logger.error(f"Insert user settings Failed. Error: {e}")
-            return None
-
-        if res_insert_user_settings:
-            self.logger.info(f"Inserted user settings. User ID: {user_id}")
-        else:
-            self.logger.warning(f"User settings insert may have failed. User ID: {user_id}")
-            return None
         
  
     # TODO 待修改，是否需要统一接口参数为 TableUsersInsertSchema?

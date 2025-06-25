@@ -43,6 +43,7 @@ from Module.Utils.Database.MySQLServiceResponseType import (
     MySQLServiceDeleteResponse,
     MySQLServiceUpdateResponseData,
     MySQLServiceUpdateResponse,
+    MySQLServiceSQLExecutionResult,
     MySQLServiceTransactionResponseData,
     MySQLServiceTransactionResponse
 )
@@ -200,7 +201,6 @@ class MySQLService:
     # --------------------------------
     # 功能函数
     # --------------------------------     
-    # TODO 将这里的sql_requests: List[MySQLServiceSQLRequest]修改为使用事务请求的专门的参数，而不是sqlrequest的列表
     async def _transaction(self, 
                            connection_id: int, 
                            statements: List[MySQLServiceTransactionSQL]
@@ -232,13 +232,25 @@ class MySQLService:
             )
         
         try:
+            results = []
             with connection.cursor() as cursor:
                  # 显式开启事务
                 connection.begin()
-                # 执行每个 SQL 请求
-                for sql_request in statements:
-                    cursor.execute(sql_request.sql, sql_request.sql_args)
                 
+                # 执行每个 SQL 请求
+                for i, sql_request in enumerate(statements):
+                    cursor.execute(sql_request.sql, sql_request.sql_args or [])
+                    # 记录执行结果
+                    self.logger.debug(f"[Transaction] Executed: {sql_request.sql} | args={sql_request.sql_args}")
+                    # 将执行结果添加到结果列表
+                    results.append(
+                        MySQLServiceSQLExecutionResult(
+                            index=i,
+                            sql=sql_request.sql,
+                            affected_rows=cursor.rowcount
+                        )
+                    )
+
                 # 提交事务
                 connection.commit()
                 self.logger.info(f"Transaction success. connection_id: {connection_id}")
@@ -247,28 +259,37 @@ class MySQLService:
             return MySQLServiceTransactionResponse(
                 operator=operator,
                 message="Transaction success.",
-                result=True
+                result=True,
+                data=MySQLServiceTransactionResponseData(
+                    sql_count=len(statements),
+                    transaction_results=results
+                )
             )
             
         except Exception as e:
             connection.rollback()
-            self.logger.error(f"Transaction failed. connection_id: {connection_id}, error: {e}")
+            self.logger.error(
+                f"Transaction failed while executing SQL statements:{[sql_request.sql for sql_request in statements]}."
+                f"connection_id: {connection_id}, error: {e}"
+            )
 
             return MySQLServiceTransactionResponse(
                 operator=operator,
-                message="Transaction failed.",
+                message=f"Transaction failed.",
                 result=False,
-                err_code=MySQLServiceResponseErrorCode.QUERY_DATABASE_FAILED,
-                errors=[MySQLServiceErrorDetail(
-                    code=MySQLServiceResponseErrorCode.QUERY_DATABASE_FAILED,
-                    message=str(e),
-                    field="sql",
-                    hint="Please check the SQL syntax and parameters or try again later."
-                )]
+                err_code=MySQLServiceResponseErrorCode.TRANSACTION_FAILED,
+                errors=[
+                    MySQLServiceErrorDetail(
+                        code=MySQLServiceResponseErrorCode.TRANSACTION_FAILED,
+                        message=str(e),
+                        field="transaction",
+                        sql=[sql_request.sql for sql_request in statements],
+                        hint="Please check the SQL syntax and parameters or try again later."
+                    )
+                ]
             )
             
             
-
     async def _query(self, connection_id: int, sql: str, sql_args: List[Any]) -> MySQLServiceQueryResponse:
         """
         查询
@@ -620,9 +641,14 @@ class MySQLService:
             raise
            
     
-    async def _connect_database(self, host: str, port: int, user: str, password: str, database: str, charset: str) -> MySQLServiceConnectDatabaseResponse:
+    async def _connect_database(self,
+                                host: str, port: int, 
+                                user: str, password: str, 
+                                database: str, charset: str
+                                ) -> MySQLServiceConnectDatabaseResponse:
         """
         创建一个新的 MySQL 数据库连接，并返回其 ID。
+        如果失败，重试三次。最终如果失败，则返回一个错误响应，而不会返回ID。
 
         :param host: 数据库主机名
         :param user: 数据库用户名
@@ -670,14 +696,17 @@ class MySQLService:
                     message=message,
                     field="database",
                     hint="Please check the database parameters or try again later."
-                )]
+                )],
+                data=MySQLServiceConnectDatabaseResponseData(connection_id=-1)  # -1表示连接失败
             )
     
     
     @retry(retries=3, delay=1.0, backoff=2.0, exceptions=(pymysql.MySQLError,), on_failure=lambda e: print(f"[ERROR] 最终重试失败: {e}"))  
-    async def _connect_database_with_retry(self, host: str, port: int,
-                                user: str, password: str,
-                                database: str, charset: str) -> Tuple[int, Connection]:
+    async def _connect_database_with_retry(self, 
+                                           host: str, port: int,
+                                           user: str, password: str,
+                                           database: str, charset: str
+                                           ) -> Tuple[int, Connection]:
         """
         创建一个新的 MySQL 数据库连接，并返回其 (ID, Connection)。
 
