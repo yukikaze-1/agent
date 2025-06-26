@@ -27,8 +27,12 @@ from Module.Utils.ToolFunctions import retry
 
 from Module.Utils.Database.MySQLServiceRequestType import (
     MySQLServiceConnectRequest,
-    MySQLServiceTransactionRequest,
-    MySQLServiceTransactionSQL
+    MySQLServiceStaticTransactionRequest,
+    MySQLServiceStaticTransactionSQL,
+    MySQLServiceDynamicTransactionStartRequest,
+    MySQLServiceDynamicTransactionCommitRequest,
+    MySQLServiceDynamicTransactionRollbackRequest,
+    MySQLServiceDynamicTransactionExecuteSQLRequest
 )
 from Module.Utils.Database.MySQLServiceResponseType import (
     MySQLServiceConnectDatabaseResponse, 

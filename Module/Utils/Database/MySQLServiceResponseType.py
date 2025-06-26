@@ -6,7 +6,7 @@
 
 
 """
-   MySQLService 各种回复的格式定义
+   MySQLService 各种响应的格式定义
 """
 
 from datetime import datetime
@@ -16,7 +16,7 @@ from pydantic import BaseModel, EmailStr, constr, Field, model_validator
 
 class StrictBaseModel(BaseModel):
     """
-    基础模型，所有模型都继承自此类
+    基础模型，所有模型都直接或间接继承自此类
     """
     class Config:
         extra = "forbid"  # 禁止额外字段
@@ -47,7 +47,7 @@ class MySQLServiceErrorDetail(StrictBaseModel):
 
 
 class MySQLServiceBaseResponse(StrictBaseModel):
-    """ 基础回复格式 """
+    """ 基础响应格式 所有 MySQLService响应都继承自此类 """
     operator: str = Field(..., description="操作")
     result: bool = Field(..., description="操作结果")
     message: str = Field(..., description="提示信息")
@@ -57,8 +57,11 @@ class MySQLServiceBaseResponse(StrictBaseModel):
     timestamp: datetime = Field(default_factory=datetime.now, description="响应生成时间")
     level: str | None = Field(default=None, description="提示等级: info / warning / error")
     
-    
-    
+# ------------------------------------------------------------------------------------------------
+# 数据库连接响应
+# ------------------------------------------------------------------------------------------------
+
+
 class MySQLServiceConnectDatabaseResponseData(StrictBaseModel):
     """  
     连接数据库 附加数据 
@@ -70,8 +73,12 @@ class MySQLServiceConnectDatabaseResponseData(StrictBaseModel):
 class MySQLServiceConnectDatabaseResponse(MySQLServiceBaseResponse):
     """ 连接数据库 Response """
     data: MySQLServiceConnectDatabaseResponseData = Field(..., description="连接数据库附加数据")
+    
+    
 
-
+# ------------------------------------------------------------------------------------------------
+# 单条CURD响应
+# ------------------------------------------------------------------------------------------------ 
 
 class MySQLServiceQueryResponseData(StrictBaseModel):
     """ SQL查询 数据 """
@@ -118,21 +125,56 @@ class MySQLServiceUpdateResponse(MySQLServiceBaseResponse):
     data: MySQLServiceUpdateResponseData | None = Field(default=None, description="更新数据附加信息")
     
     
-class MySQLServiceSQLExecutionResult(StrictBaseModel):
-    """  事务单条SQL执行结果 """
+    
+# ------------------------------------------------------------------------------------------------
+# 静态事务响应
+# ------------------------------------------------------------------------------------------------    
+    
+class MySQLServiceStaticTransactionSQLExecutionResult(StrictBaseModel):
+    """  静态事务单条SQL执行结果 """
     index: int = Field(..., ge=0, description="执行结果索引")
     sql: str = Field(..., description="执行的SQL语句")
     affected_rows: int = Field(..., ge=0, description="受影响的行数")
 
 
-class MySQLServiceTransactionResponseData(StrictBaseModel):
-    """ 事务 Response 附加数据 """
-    sql_count: int = Field(..., ge=0, description="事务中执行的 SQL 语句数量")
-    transaction_results: List[MySQLServiceSQLExecutionResult] = Field(..., description="事务中每个操作的执行结果列表")
+class MySQLServiceStaticTransactionResponseData(MySQLServiceBaseResponse):
+    """ 静态事务 Response 附加数据 """
+    sql_count: int = Field(..., ge=0, description="静态事务中执行的 SQL 语句数量")
+    transaction_results: List[MySQLServiceStaticTransactionSQLExecutionResult] = Field(..., description="静态事务中每个操作的执行结果列表")
 
 
-class MySQLServiceTransactionResponse(MySQLServiceBaseResponse):
-    """ 事务 Response """
-    data: MySQLServiceTransactionResponseData | None = Field(default=None, description="事务中每个操作的响应列表")
+class MySQLServiceStaticTransactionResponse(MySQLServiceBaseResponse):
+    """ 静态事务 Response """
+    data: MySQLServiceStaticTransactionResponseData | None = Field(default=None, description="静态事务中每个操作的响应列表")
     
     
+    
+    
+# ------------------------------------------------------------------------------------------------
+# 动态事务响应
+# ------------------------------------------------------------------------------------------------ 
+class MySQLServiceDynamicTransactionStartResponse(MySQLServiceBaseResponse):
+    """ 动态事务开始 Response """
+    session_id: str | None = Field(default=None, description="事务上下文 ID")
+
+
+class MySQLServiceDynamicTransactionExecuteSQLResponse(MySQLServiceBaseResponse):
+    """ 动态事务执行单条SQL的响应 """
+    affected_rows: int | None = Field(default=None, description="受影响的行数")
+    last_insert_id: int | None = Field(default=None, description="最后插入的ID")
+
+    
+class MySQLServiceDynamicTransactionCommitResponse(MySQLServiceBaseResponse):
+    """ 动态事务提交 Response """
+    session_id: str | None = Field(default=None, description="事务上下文 ID")
+    commit_time: datetime | None = Field(default_factory=datetime.now, description="提交时间")
+    affected_rows: int | None = Field(default=None, ge=0, description="受影响的行数")
+    executed_sql_count: int | None = Field(default=None, ge=0, description="执行的 SQL 语句数量")
+
+
+class MySQLServiceDynamicTransactionRollbackResponse(MySQLServiceBaseResponse):
+    """ 动态事务回滚 Response """
+    session_id: str | None = Field(default=None, description="事务上下文 ID")
+    message: str | None = Field(default=None, description="回滚操作的提示信息")
+    result: bool | None = Field(default=True, description="回滚操作结果，通常为 True")
+    level: str | None = Field(default="info", description="提示等级，通常为 info")

@@ -20,7 +20,10 @@ class StrictBaseModel(BaseModel):
         extra = "forbid"  # 禁止额外字段
         anystr_strip_whitespace = True  # 去除字符串两端空格
         use_enum_values = True  # 使用枚举值而不是枚举对象
-        
+
+# ------------------------------------------------------------------------------------------------
+# 单条CURD请求
+# ------------------------------------------------------------------------------------------------         
 
 class MySQLServiceSQLRequest(StrictBaseModel):
     """ SQL请求格式 """
@@ -35,7 +38,10 @@ class MySQLServiceSQLRequest(StrictBaseModel):
         if not any(self.sql.upper().startswith(cmd) for cmd in allowed_prefixes):
             raise ValueError("仅支持 SELECT, INSERT, UPDATE, DELETE 语句")
         return self
-
+    
+# ------------------------------------------------------------------------------------------------
+# 连接数据库请求
+# ------------------------------------------------------------------------------------------------ 
 
 class MySQLServiceConnectRequest(StrictBaseModel):
     """ 连接数据库请求格式 """
@@ -45,14 +51,18 @@ class MySQLServiceConnectRequest(StrictBaseModel):
     password: str = Field(..., description="数据库密码")
     database: str = Field(..., description="数据库名称")
     charset: str = Field(..., description="数据库字符集")
+    
+# ------------------------------------------------------------------------------------------------
+# 静态事务请求
+# ------------------------------------------------------------------------------------------------ 
 
-
-class MySQLServiceTransactionSQL(StrictBaseModel):
+class MySQLServiceStaticTransactionSQL(StrictBaseModel):
+    """ 静态事务中的 SQL 请求格式 """
     sql: str = Field(..., description="要执行的 SQL")
     sql_args: Optional[List[Any] | Dict[str, Any]] = Field(default_factory=list)
 
     @model_validator(mode="after")
-    def check_args(self) -> 'MySQLServiceTransactionSQL':
+    def check_args(self) -> 'MySQLServiceStaticTransactionSQL':
         self.sql = self.sql.strip()  # 避免多余空格或换行符
         # 检查 sql 字段是否为空
         if not self.sql:
@@ -70,8 +80,33 @@ class MySQLServiceTransactionSQL(StrictBaseModel):
         return self
 
 
-class MySQLServiceTransactionRequest(StrictBaseModel):
-    """ 事务请求格式 """
+class MySQLServiceStaticTransactionRequest(StrictBaseModel):
+    """ 静态事务请求格式 """
     connection_id: int = Field(..., ge=0, description="数据库连接ID")
-    sql_requests: List[MySQLServiceTransactionSQL] = Field(..., min_length=1, max_length=100, description="事务中执行的一组 SQL")
+    sql_requests: List[MySQLServiceStaticTransactionSQL] = Field(..., min_length=1, max_length=100, description="事务中执行的一组 SQL")
 
+
+# ------------------------------------------------------------------------------------------------
+# 动态事务请求
+# ------------------------------------------------------------------------------------------------ 
+
+class MySQLServiceDynamicTransactionStartRequest(StrictBaseModel):
+    """ 动态事务start请求格式 """
+    connection_id: int = Field(..., ge=0, description="数据库连接ID")
+
+
+class MySQLServiceDynamicTransactionExecuteSQLRequest(StrictBaseModel):
+    """ 动态事务执行 SQL 请求格式 """
+    session_id: str = Field(..., description="事务上下文 ID")
+    sql: str = Field(..., description="SQL 语句")
+    sql_args: List[Any] | Dict[str, Any] | None = Field(default_factory=list)
+    
+    
+class MySQLServiceDynamicTransactionCommitRequest(StrictBaseModel):
+    """ 动态事务commit请求格式 """
+    session_id: str = Field(..., description="事务上下文 ID")
+
+
+class MySQLServiceDynamicTransactionRollbackRequest(StrictBaseModel):
+    """ 动态事务rollback请求格式 """
+    session_id: str = Field(..., description="事务上下文 ID")

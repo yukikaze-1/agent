@@ -7,8 +7,10 @@
 import uvicorn
 import httpx
 import asyncio
+import uuid
 import pymysql
 import traceback
+from datetime import datetime
 from pymysql import Connection
 from pymysql.cursors import Cursor
 from logging import Logger
@@ -43,28 +45,52 @@ from Module.Utils.Database.MySQLServiceResponseType import (
     MySQLServiceDeleteResponse,
     MySQLServiceUpdateResponseData,
     MySQLServiceUpdateResponse,
-    MySQLServiceSQLExecutionResult,
-    MySQLServiceTransactionResponseData,
-    MySQLServiceTransactionResponse
+    MySQLServiceStaticTransactionSQLExecutionResult,
+    MySQLServiceStaticTransactionResponseData,
+    MySQLServiceStaticTransactionResponse,
+    MySQLServiceDynamicTransactionExecuteSQLResponse,
+    MySQLServiceDynamicTransactionStartResponse,
+    MySQLServiceDynamicTransactionCommitResponse,
+    MySQLServiceDynamicTransactionRollbackResponse,
 )
 from Module.Utils.Database.MySQLServiceRequestType import (
     MySQLServiceSQLRequest, 
     MySQLServiceConnectRequest,
-    MySQLServiceTransactionSQL,
-    MySQLServiceTransactionRequest
+    MySQLServiceStaticTransactionSQL,
+    MySQLServiceStaticTransactionRequest,
+    MySQLServiceDynamicTransactionStartRequest,
+    MySQLServiceDynamicTransactionCommitRequest,
+    MySQLServiceDynamicTransactionRollbackRequest,
+    MySQLServiceDynamicTransactionExecuteSQLRequest
 )
+
+class MySQLServiceDynamicTransactionSession:
+    """  动态事务会话类，用于管理 MySQL 事务。"""
+    def __init__(self, connection: pymysql.connections.Connection):
+        self.connection = connection
+        self.cursor = connection.cursor()
+        self.in_transaction = True
+        self.executed_sql_count: int = 0    # 记录执行的SQL语句数量
+        self.affected_rows_total: int = 0   # 记录总的受影响行数
+
+    def close(self):
+        self.cursor.close()
+        self.connection.close()
+        
 
 class MySQLService:
     """
-    MySQL代理
+    MySQL fastapi 微服务类
     用于管理 MySQL 数据库连接池。
+    提供单条SQL语句的执行。
+    提供静态、动态事务执行。
     """
     def __init__(self):
         self.logger = setup_logger(name="MySQLService", log_path="InternalModule")
 
         # 加载环境变量和配置
-        self.env_vars = dotenv_values("/home/yomu/agent/Module/Utils/Database/.env") 
-        self.config_path = self.env_vars.get("MYSQL_AGENT_CONFIG_PATH","") 
+        self.env_vars = dotenv_values("/home/yomu/agent/Module/Utils/Database/.env")
+        self.config_path = self.env_vars.get("MYSQL_AGENT_CONFIG_PATH", "")
         self.config: Dict = load_config(config_path=self.config_path, config_name='MySQLService', logger=self.logger)
         
         # 验证配置文件
@@ -89,9 +115,12 @@ class MySQLService:
         # MySQLService连接mysql的序号，每连接一个mysql数据库，该ids++
         self.ids = 0
         
-        # 存储 (connection_id, connection) 的列表
+        # 存储 (connection_id, connection对象) 的字典
         self.connections: Dict[int, pymysql.connections.Connection] = {}
         
+        # 存储动态事务会话(transaction session token, transaction session对象) 的字典
+        self.dynamic_transaction_sessions: Dict[str, MySQLServiceDynamicTransactionSession] = {}
+
         # 初始化 httpx.AsyncClient
         self.client:  httpx.AsyncClient   # 在lifespan中初始化
         
@@ -168,45 +197,267 @@ class MySQLService:
             return {"status": "healthy"}
         
         
-        @self.app.post("/database/mysql/insert", summary="插入接口")
+        @self.app.post("/database/mysql/insert", summary="插入接口", response_model=MySQLServiceInsertResponse)
         async def insert(payload: MySQLServiceSQLRequest) -> MySQLServiceInsertResponse:
             return await self._insert(payload.connection_id, payload.sql, payload.sql_args)
 
         
-        @self.app.post("/database/mysql/update", summary="更新接口")
+        @self.app.post("/database/mysql/update", summary="更新接口", response_model=MySQLServiceUpdateResponse)
         async def update(payload: MySQLServiceSQLRequest) -> MySQLServiceUpdateResponse:
             return await self._update(payload.connection_id, payload.sql, payload.sql_args)
 
 
-        @self.app.post("/database/mysql/delete", summary= "删除接口")
+        @self.app.post("/database/mysql/delete", summary= "删除接口", response_model=MySQLServiceDeleteResponse)
         async def delete(payload: MySQLServiceSQLRequest) -> MySQLServiceDeleteResponse:
             return await self._delete(payload.connection_id, payload.sql, payload.sql_args)
 
 
-        @self.app.post("/database/mysql/query", summary= "查询接口")
+        @self.app.post("/database/mysql/query", summary= "查询接口", response_model=MySQLServiceQueryResponse)
         async def query(payload: MySQLServiceSQLRequest) -> MySQLServiceQueryResponse:
             return await self._query(payload.connection_id, payload.sql, payload.sql_args)
 
 
-        @self.app.post("/database/mysql/connect", summary= "连接接口")
+        @self.app.post("/database/mysql/connect", summary= "连接接口", response_model=MySQLServiceConnectDatabaseResponse)
         async def connect(payload: MySQLServiceConnectRequest) -> MySQLServiceConnectDatabaseResponse:
             return await self._connect_database(payload.host, payload.port, payload.user, payload.password, payload.database,  payload.charset)
-        
-        
-        @self.app.post("/database/mysql/transaction", summary="事务接口")
-        async def transaction(payload: MySQLServiceTransactionRequest)-> MySQLServiceTransactionResponse:
-            return await self._transaction(payload.connection_id, payload.sql_requests)
-            
-        
+
+
+        @self.app.post("/database/mysql/static_transaction", summary="静态事务接口", response_model=MySQLServiceStaticTransactionResponse)
+        async def transaction(payload: MySQLServiceStaticTransactionRequest)-> MySQLServiceStaticTransactionResponse:
+            return await self._static_transaction(payload.connection_id, payload.sql_requests)
+
+
+        @self.app.post("/database/mysql/dynamic_transaction/start", response_model=MySQLServiceDynamicTransactionStartResponse)
+        async def start_dynamic_transaction(req: MySQLServiceDynamicTransactionStartRequest):
+            return await self._start_dynamic_transaction(req.connection_id)
+
+
+        @self.app.post("/database/mysql/dynamic_transaction/execute", response_model=MySQLServiceDynamicTransactionExecuteSQLResponse)
+        async def execute_sql(req: MySQLServiceDynamicTransactionExecuteSQLRequest):
+            return await self._execute_sql(req.session_id, req.sql, req.sql_args)
+
+
+        @self.app.post("/database/mysql/dynamic_transaction/commit", response_model=MySQLServiceDynamicTransactionCommitResponse)
+        async def commit_transaction(req: MySQLServiceDynamicTransactionCommitRequest):
+            return await self._commit_transaction(req.session_id)
+
+
+        @self.app.post("/database/mysql/dynamic_transaction/rollback", response_model=MySQLServiceDynamicTransactionRollbackResponse)
+        async def rollback_transaction(req: MySQLServiceDynamicTransactionRollbackRequest):
+            return await self._rollback_transaction(req.session_id)
+
     # --------------------------------
     # 功能函数
-    # --------------------------------     
-    async def _transaction(self, 
-                           connection_id: int, 
-                           statements: List[MySQLServiceTransactionSQL]
-                           ) -> MySQLServiceTransactionResponse:
+    # --------------------------------
+    async def _start_dynamic_transaction(self, connection_id: int) -> MySQLServiceDynamicTransactionStartResponse:
         """
-        处理一组 SQL 请求作为一个事务。
+        开始一个动态事务。
+        
+        :param connection_id: 数据库连接ID
+        """
+        operator = "Transaction"
+
+        # 获取链接对象
+        connection = self.connections.get(connection_id)
+
+        # 链接ID不存在
+        if connection is None:
+            return MySQLServiceDynamicTransactionStartResponse(
+                operator=operator,
+                message=f"Transaction failed",
+                result=False,
+                err_code=MySQLServiceResponseErrorCode.CONNECTION_ID_NOT_EXISTS,
+                errors=[MySQLServiceErrorDetail(
+                    code=MySQLServiceResponseErrorCode.CONNECTION_ID_NOT_EXISTS,
+                    message=f"Connection ID '{connection_id}' does not exist.",
+                    field="connection_id",
+                    hint="Please check if the connection ID is correct."
+                )]
+            )
+
+        try:
+            # 创建一个新的事务上下文、
+            
+            # 创建事务会话id
+            while session_id in self.dynamic_transaction_sessions:
+                session_id = str(uuid.uuid4())
+                
+            # 创建事务会话
+            session = MySQLServiceDynamicTransactionSession(connection=connection)
+            
+            # 开启事务
+            connection.begin()
+            self.dynamic_transaction_sessions[session_id] = session
+
+            self.logger.info(f"Dynamic transaction started. session_id: {session_id}")
+
+            return MySQLServiceDynamicTransactionStartResponse(
+                operator=operator,
+                message="Transaction started.",
+                result=True,
+                session_id=session_id
+            )
+
+        except Exception as e:
+            self.logger.error(
+                f"Failed to start dynamic transaction. connection_id: {connection_id}, error: {e}"
+            )
+            return MySQLServiceDynamicTransactionStartResponse(
+                operator=operator,
+                message="Transaction failed.",
+                result=False,
+                err_code=MySQLServiceResponseErrorCode.TRANSACTION_FAILED,
+                errors=[MySQLServiceErrorDetail(
+                    code=MySQLServiceResponseErrorCode.TRANSACTION_FAILED,
+                    message="Failed to start dynamic transaction.",
+                    hint="Please try again later."
+                )]   
+            )
+            
+
+    async def _execute_sql(self, 
+                           session_id: str,
+                           sql: str,
+                           sql_args: List[Any] | Dict[str, Any] | None = None
+                           ) -> MySQLServiceDynamicTransactionExecuteSQLResponse:
+        """
+        在动态事务中执行 SQL 语句。
+        
+        :param session_id: 事务上下文 ID
+        :param sql: 要执行的 SQL 语句
+        :param sql_args: SQL 语句参数
+        """
+        operator = "Transaction Execute SQL"
+        
+        # 获取事务会话对象
+        transaction_session = self.dynamic_transaction_sessions.get(session_id)
+
+        # 会话不存在
+        if transaction_session is None:
+            return MySQLServiceDynamicTransactionExecuteSQLResponse(
+                operator=operator,
+                message=f"Transaction failed",
+                result=False,
+                err_code=MySQLServiceResponseErrorCode.TRANSACTION_FAILED,
+                errors=[MySQLServiceErrorDetail(
+                    code=MySQLServiceResponseErrorCode.TRANSACTION_FAILED,
+                    message=f"Session ID '{session_id}' does not exist.",
+                    field="session_id",
+                    hint="Please check if the session ID is correct."
+                )]
+            )
+
+        try:
+            # 执行 SQL 语句
+            with transaction_session.connection.cursor() as cursor:
+                cursor.execute(sql, sql_args or [])
+                transaction_session.executed_sql_count += 1
+                affected_rows = cursor.rowcount
+                last_insert_id = cursor.lastrowid      
+                transaction_session.affected_rows_total += affected_rows
+                          
+                self.logger.info(f"Executed SQL in dynamic transaction. session_id: {session_id}, sql: {sql}")
+
+            return MySQLServiceDynamicTransactionExecuteSQLResponse(
+                operator=operator,
+                message="SQL executed successfully.",
+                result=True,
+                affected_rows=affected_rows,
+                last_insert_id=last_insert_id,
+            )
+
+        except Exception as e:
+            self.logger.error(
+                f"Failed to execute SQL. session_id: {session_id}, error: {e}\n{traceback.format_exc()}"
+            )
+            # 回滚事务
+            transaction_session.connection.rollback()
+            # 关闭会话
+            transaction_session.close()
+            # 从会话列表中移除
+            self.dynamic_transaction_sessions.pop(session_id, None)
+            return MySQLServiceDynamicTransactionExecuteSQLResponse(
+                operator=operator,
+                message="Failed to execute SQL.",
+                result=False,
+                err_code=MySQLServiceResponseErrorCode.TRANSACTION_FAILED,
+                errors=[MySQLServiceErrorDetail(
+                    code=MySQLServiceResponseErrorCode.TRANSACTION_FAILED,
+                    message=str(e),
+                    field="sql",
+                    hint="Please check the SQL syntax and parameters or try again later."
+                )]
+            )
+    
+    
+    async def _commit_transaction(self, session_id: str) -> MySQLServiceDynamicTransactionCommitResponse:
+        """
+        提交动态事务。
+        
+        :param session_id: 事务上下文 ID
+        """
+        operator = "Transaction Commit"
+        
+        # 获取事务会话对象
+        transaction_session = self.dynamic_transaction_sessions.get(session_id)
+
+        # 会话不存在
+        if transaction_session is None:
+            return MySQLServiceDynamicTransactionCommitResponse(
+                operator=operator,
+                message=f"Transaction commit failed",
+                result=False,
+                err_code=MySQLServiceResponseErrorCode.TRANSACTION_FAILED,
+                errors=[MySQLServiceErrorDetail(
+                    code=MySQLServiceResponseErrorCode.TRANSACTION_FAILED,
+                    message=f"Session ID '{session_id}' does not exist.",
+                    field="session_id",
+                    hint="Please check if the session ID is correct."
+                )]
+            )
+
+        try:
+            transaction_session.connection.commit()
+            self.logger.info(f"Dynamic transaction committed. session_id: {session_id}")
+
+            result = MySQLServiceDynamicTransactionCommitResponse(
+                operator=operator,
+                message="Transaction committed successfully.",
+                result=True,
+                session_id=session_id,
+                commit_time=datetime.now(),
+                affected_rows=transaction_session.affected_rows_total,
+                executed_sql_count=transaction_session.executed_sql_count
+            )
+        except Exception as e:
+            self.logger.error(
+                f"Failed to commit dynamic transaction. session_id: {session_id}, error: {e}"
+            )
+            result = MySQLServiceDynamicTransactionCommitResponse(
+                operator=operator,
+                message="Transaction commit failed.",
+                result=False,
+                err_code=MySQLServiceResponseErrorCode.TRANSACTION_FAILED,
+                errors=[MySQLServiceErrorDetail(
+                    code=MySQLServiceResponseErrorCode.TRANSACTION_FAILED,
+                    message=str(e),
+                    field="commit",
+                    hint="Please check connection or server status"
+                )]
+            )
+        finally:
+            transaction_session.close()
+            self.dynamic_transaction_sessions.pop(session_id, None)
+
+        return result
+
+    
+    async def _static_transaction(self,
+                           connection_id: int,
+                           statements: List[MySQLServiceStaticTransactionSQL]
+                           ) -> MySQLServiceStaticTransactionResponse:
+        """
+        处理一组 SQL 请求作为一个静态事务。
         
         :param connection_id: 数据库连接ID
         :param statements: 要执行的 SQL 请求列表，每个请求包含 SQL 语句和参数
@@ -218,7 +469,7 @@ class MySQLService:
         
         # 链接ID不存在
         if connection is None:
-            return MySQLServiceTransactionResponse(
+            return MySQLServiceStaticTransactionResponse(
                 operator=operator,
                 message=f"Transaction failed",
                 result=False,
@@ -244,7 +495,7 @@ class MySQLService:
                     self.logger.debug(f"[Transaction] Executed: {sql_request.sql} | args={sql_request.sql_args}")
                     # 将执行结果添加到结果列表
                     results.append(
-                        MySQLServiceSQLExecutionResult(
+                        MySQLServiceStaticTransactionSQLExecutionResult(
                             index=i,
                             sql=sql_request.sql,
                             affected_rows=cursor.rowcount
@@ -256,11 +507,14 @@ class MySQLService:
                 self.logger.info(f"Transaction success. connection_id: {connection_id}")
 
             # 执行成功，返回Response
-            return MySQLServiceTransactionResponse(
+            return MySQLServiceStaticTransactionResponse(
                 operator=operator,
                 message="Transaction success.",
                 result=True,
-                data=MySQLServiceTransactionResponseData(
+                data=MySQLServiceStaticTransactionResponseData(
+                    operator="static transaction",
+                    result=True,
+                    message=f"Static transaction execute success.",
                     sql_count=len(statements),
                     transaction_results=results
                 )
@@ -273,7 +527,7 @@ class MySQLService:
                 f"connection_id: {connection_id}, error: {e}"
             )
 
-            return MySQLServiceTransactionResponse(
+            return MySQLServiceStaticTransactionResponse(
                 operator=operator,
                 message=f"Transaction failed.",
                 result=False,
@@ -287,6 +541,50 @@ class MySQLService:
                         hint="Please check the SQL syntax and parameters or try again later."
                     )
                 ]
+            )
+            
+   
+    async def _rollback_transaction(self, session_id: str) -> MySQLServiceDynamicTransactionRollbackResponse:
+        """
+        回滚动态事务。
+        
+        :param session_id: 事务上下文 ID
+        """
+        operator = "Transaction Rollback"
+        
+        # 获取事务会话对象
+        transaction_session = self.dynamic_transaction_sessions.get(session_id)
+
+        # 会话不存在
+        if transaction_session is None:
+            return MySQLServiceDynamicTransactionRollbackResponse(
+                operator=operator,
+                message=f"Transaction rollback failed",
+                result=False,
+                err_code=MySQLServiceResponseErrorCode.TRANSACTION_FAILED,
+                errors=[MySQLServiceErrorDetail(
+                    code=MySQLServiceResponseErrorCode.TRANSACTION_FAILED,
+                    message=f"Session ID '{session_id}' does not exist.",
+                    field="session_id",
+                    hint="Please check if the session ID is correct."
+                )]
+            )
+
+        try:
+            # 回滚事务
+            transaction_session.connection.rollback()
+            self.logger.info(f"Dynamic transaction rolled back. session_id: {session_id}")
+            
+        finally:
+            # 关闭会话
+            transaction_session.close()
+            # 从会话列表中移除
+            self.dynamic_transaction_sessions.pop(session_id, None)
+
+            return MySQLServiceDynamicTransactionRollbackResponse(
+                operator=operator,
+                message="Transaction rolled back successfully.",
+                result=True
             )
             
             
