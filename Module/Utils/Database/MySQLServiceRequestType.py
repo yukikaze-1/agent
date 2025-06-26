@@ -89,24 +89,28 @@ class MySQLServiceStaticTransactionRequest(StrictBaseModel):
 # ------------------------------------------------------------------------------------------------
 # 动态事务请求
 # ------------------------------------------------------------------------------------------------ 
+class MySQLServiceDynamicTransactionBaseRequest(StrictBaseModel):
+    """ 所有的 MySQL 动态事务请求都要继承此类 """
+    # mysql_service_url : str = Field(..., description="MySQL微服务的URL")
+    # endpoint: str = Field(..., description="MySQL微服务的API端点")
 
-class MySQLServiceDynamicTransactionStartRequest(StrictBaseModel):
+class MySQLServiceDynamicTransactionStartRequest(MySQLServiceDynamicTransactionBaseRequest):
     """ 动态事务start请求格式 """
     connection_id: int = Field(..., ge=0, description="数据库连接ID")
 
 
-class MySQLServiceDynamicTransactionExecuteSQLRequest(StrictBaseModel):
+class MySQLServiceDynamicTransactionExecuteSQLRequest(MySQLServiceDynamicTransactionBaseRequest):
     """ 动态事务执行 SQL 请求格式 """
     session_id: str = Field(..., description="事务上下文 ID")
     sql: str = Field(..., description="SQL 语句")
     sql_args: List[Any] | Dict[str, Any] | None = Field(default_factory=list)
     
     
-class MySQLServiceDynamicTransactionCommitRequest(StrictBaseModel):
+class MySQLServiceDynamicTransactionCommitRequest(MySQLServiceDynamicTransactionBaseRequest):
     """ 动态事务commit请求格式 """
     session_id: str = Field(..., description="事务上下文 ID")
 
 
-class MySQLServiceDynamicTransactionRollbackRequest(StrictBaseModel):
+class MySQLServiceDynamicTransactionRollbackRequest(MySQLServiceDynamicTransactionBaseRequest):
     """ 动态事务rollback请求格式 """
     session_id: str = Field(..., description="事务上下文 ID")

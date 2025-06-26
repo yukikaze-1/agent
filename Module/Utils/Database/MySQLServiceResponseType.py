@@ -89,6 +89,7 @@ class MySQLServiceQueryResponseData(StrictBaseModel):
     page_size: int | None = Field(default=None, description="每页记录数（如果适用）")
     current_page: int | None = Field(default=None, description="当前页码（如果适用）")
 
+
 class MySQLServiceQueryResponse(MySQLServiceBaseResponse):
     """ SQL查询 Response """
     data : List[MySQLServiceQueryResponseData] | None = Field(default=None, description="查询结果数据列表")

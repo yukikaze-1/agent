@@ -112,6 +112,9 @@ class MySQLService:
         self.service_id = self.config.get("service_id", f"{self.service_name}-{self.host}:{self.port}")
         self.health_check_url = self.config.get("health_check_url", f"http://{self.host}:{self.port}/health")
         
+        # 存储MySQLService的地址
+        self.mysql_service_url: str     
+           
         # MySQLService连接mysql的序号，每连接一个mysql数据库，该ids++
         self.ids = 0
         
@@ -144,19 +147,19 @@ class MySQLService:
             )
             self.logger.info("Async HTTP Client Initialized")
 
-            # 注册服务到 Consul
-            self.logger.info("Registering service to Consul...")
-            tags = ["MySQLService"]
-            await register_service_to_consul(consul_url=self.consul_url,
-                                             client=self.client,
-                                             logger=self.logger,
-                                             service_name=self.service_name,
-                                             service_id=self.service_id,
-                                             address=self.host,
-                                             port=self.port,
-                                             tags=tags,
-                                             health_check_url=self.health_check_url)
-            self.logger.info("Service registered to Consul.")
+            # # 注册服务到 Consul
+            # self.logger.info("Registering service to Consul...")
+            # tags = ["MySQLService"]
+            # await register_service_to_consul(consul_url=self.consul_url,
+            #                                  client=self.client,
+            #                                  logger=self.logger,
+            #                                  service_name=self.service_name,
+            #                                  service_id=self.service_id,
+            #                                  address=self.host,
+            #                                  port=self.port,
+            #                                  tags=tags,
+            #                                  health_check_url=self.health_check_url)
+            # self.logger.info("Service registered to Consul.")
 
             yield  # 应用正常运行
 
@@ -166,15 +169,15 @@ class MySQLService:
 
         finally:                
             # 注销服务从 Consul
-            try:
-                self.logger.info("Deregistering service from Consul...")
-                await unregister_service_from_consul(consul_url=self.consul_url,
-                                                     client=self.client,
-                                                     logger=self.logger,
-                                                     service_id=self.service_id)
-                self.logger.info("Service deregistered from Consul.")
-            except Exception as e:
-                self.logger.error(f"Error while deregistering service: {e}")    
+            # try:
+            #     self.logger.info("Deregistering service from Consul...")
+            #     await unregister_service_from_consul(consul_url=self.consul_url,
+            #                                          client=self.client,
+            #                                          logger=self.logger,
+            #                                          service_id=self.service_id)
+            #     self.logger.info("Service deregistered from Consul.")
+            # except Exception as e:
+            #     self.logger.error(f"Error while deregistering service: {e}")    
              
             # 关闭所有数据库连接    
             self.close_all()
@@ -198,51 +201,51 @@ class MySQLService:
         
         
         @self.app.post("/database/mysql/insert", summary="插入接口", response_model=MySQLServiceInsertResponse)
-        async def insert(payload: MySQLServiceSQLRequest) -> MySQLServiceInsertResponse:
+        async def insert(payload: MySQLServiceSQLRequest):
             return await self._insert(payload.connection_id, payload.sql, payload.sql_args)
 
         
         @self.app.post("/database/mysql/update", summary="更新接口", response_model=MySQLServiceUpdateResponse)
-        async def update(payload: MySQLServiceSQLRequest) -> MySQLServiceUpdateResponse:
+        async def update(payload: MySQLServiceSQLRequest):
             return await self._update(payload.connection_id, payload.sql, payload.sql_args)
 
 
         @self.app.post("/database/mysql/delete", summary= "删除接口", response_model=MySQLServiceDeleteResponse)
-        async def delete(payload: MySQLServiceSQLRequest) -> MySQLServiceDeleteResponse:
+        async def delete(payload: MySQLServiceSQLRequest):
             return await self._delete(payload.connection_id, payload.sql, payload.sql_args)
 
 
         @self.app.post("/database/mysql/query", summary= "查询接口", response_model=MySQLServiceQueryResponse)
-        async def query(payload: MySQLServiceSQLRequest) -> MySQLServiceQueryResponse:
+        async def query(payload: MySQLServiceSQLRequest):
             return await self._query(payload.connection_id, payload.sql, payload.sql_args)
 
 
         @self.app.post("/database/mysql/connect", summary= "连接接口", response_model=MySQLServiceConnectDatabaseResponse)
-        async def connect(payload: MySQLServiceConnectRequest) -> MySQLServiceConnectDatabaseResponse:
+        async def connect(payload: MySQLServiceConnectRequest):
             return await self._connect_database(payload.host, payload.port, payload.user, payload.password, payload.database,  payload.charset)
 
 
         @self.app.post("/database/mysql/static_transaction", summary="静态事务接口", response_model=MySQLServiceStaticTransactionResponse)
-        async def transaction(payload: MySQLServiceStaticTransactionRequest)-> MySQLServiceStaticTransactionResponse:
+        async def transaction(payload: MySQLServiceStaticTransactionRequest):
             return await self._static_transaction(payload.connection_id, payload.sql_requests)
 
 
-        @self.app.post("/database/mysql/dynamic_transaction/start", response_model=MySQLServiceDynamicTransactionStartResponse)
+        @self.app.post("/database/mysql/dynamic_transaction/start", summary="开始动态事务",response_model=MySQLServiceDynamicTransactionStartResponse)
         async def start_dynamic_transaction(req: MySQLServiceDynamicTransactionStartRequest):
             return await self._start_dynamic_transaction(req.connection_id)
 
 
-        @self.app.post("/database/mysql/dynamic_transaction/execute", response_model=MySQLServiceDynamicTransactionExecuteSQLResponse)
+        @self.app.post("/database/mysql/dynamic_transaction/execute", summary="执行动态事务", response_model=MySQLServiceDynamicTransactionExecuteSQLResponse)
         async def execute_sql(req: MySQLServiceDynamicTransactionExecuteSQLRequest):
             return await self._execute_sql(req.session_id, req.sql, req.sql_args)
 
 
-        @self.app.post("/database/mysql/dynamic_transaction/commit", response_model=MySQLServiceDynamicTransactionCommitResponse)
+        @self.app.post("/database/mysql/dynamic_transaction/commit", summary="提交动态事务", response_model=MySQLServiceDynamicTransactionCommitResponse)
         async def commit_transaction(req: MySQLServiceDynamicTransactionCommitRequest):
             return await self._commit_transaction(req.session_id)
 
 
-        @self.app.post("/database/mysql/dynamic_transaction/rollback", response_model=MySQLServiceDynamicTransactionRollbackResponse)
+        @self.app.post("/database/mysql/dynamic_transaction/rollback", summary="回滚动态事务", response_model=MySQLServiceDynamicTransactionRollbackResponse)
         async def rollback_transaction(req: MySQLServiceDynamicTransactionRollbackRequest):
             return await self._rollback_transaction(req.session_id)
 

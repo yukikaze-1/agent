@@ -10,6 +10,7 @@
 import httpx
 from typing import Dict, List, Any
 from logging import Logger
+from Module.Utils.Database.MySQLServiceRequestType import MySQLServiceSQLRequest
 
 class SQLExecutor:
     """
@@ -74,11 +75,11 @@ class SQLExecutor:
         
         self.logger.info(f"{log_prefix} SQL: {sql} | Args: {sql_args} | URL: {url}")
         
-        payload = {
-            "id": self.db_connect_id,
-            "sql": sql,
-            "sql_args": sql_args
-        }
+        payload = MySQLServiceSQLRequest(
+            connection_id=self.db_connect_id,
+            sql=sql,
+            sql_args=sql_args
+        ).model_dump(mode="json")
         
         try:
             response = await self.client.post(url=url, json=payload, timeout=timeout)

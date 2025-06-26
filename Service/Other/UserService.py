@@ -13,6 +13,7 @@ import httpx
 import asyncio
 import concurrent.futures
 import os
+import ipaddress
 from typing import Dict, List, Any, AsyncGenerator, Optional
 from fastapi import FastAPI, Form, HTTPException, status, Depends, Request, UploadFile, File
 from fastapi.security import OAuth2PasswordBearer
@@ -22,8 +23,10 @@ from passlib.context import CryptContext
 from jose import jwt, JWTError
 from datetime import datetime, timedelta
 from pathlib import Path
+from pydantic import IPvAnyAddress 
 
 from Module.Utils.Database.UserAccountDataBaseAgent import  UserAccountDataBaseAgent
+from Module.Utils.Database.UserAccountDatabaseSQLParameterSchema import TableUserLoginLogsInsertSchema, TableUsersQueryWhereSchema
 from Module.Utils.Logger import setup_logger
 from Module.Utils.ConfigTools import load_config, validate_config
 from Module.Utils.ToolFunctions import retry
@@ -62,6 +65,16 @@ from Service.Other.UserServiceResponseType import (
     ModifySettingResponse,
     ModifyNotificationSettingsData,
     ModifyNotificationSettingsResponse
+)
+from Module.Utils.Database.UserAccountDatabaseSQLParameterSchema import (
+    TableUsersUpdateWhereSchema,
+    TableUsersUpdateSetSchema,
+    TableUserLoginLogsInsertSchema,
+    UserAccountActionType,
+    TableUserAccountActionsInsertSchema,
+    TableUserProfileUpdateSetSchema,
+    TableUserProfileUpdateWhereSchema,
+    
 )
 
 # from Service.Other.EnvironmentManagerClient import EnvironmentManagerClient
@@ -199,15 +212,15 @@ class UserService:
             await self.db_user_account.client.aclose()
             
             # 注销服务从 Consul
-            try:
-                self.logger.info("Deregistering service from Consul...")
-                await unregister_service_from_consul(consul_url=self.consul_url,
-                                                     client=self.client,
-                                                     logger=self.logger,
-                                                     service_id=self.service_id)
-                self.logger.info("Service deregistered from Consul.")
-            except Exception as e:
-                self.logger.error(f"Error while deregistering service: {e}")
+            # try:
+            #     self.logger.info("Deregistering service from Consul...")
+            #     await unregister_service_from_consul(consul_url=self.consul_url,
+            #                                          client=self.client,
+            #                                          logger=self.logger,
+            #                                          service_id=self.service_id)
+            #     self.logger.info("Service deregistered from Consul.")
+            # except Exception as e:
+            #     self.logger.error(f"Error while deregistering service: {e}")
                 
             # 关闭 AsyncClient
             self.logger.info("Shutting down Async HTTP Client")
@@ -374,7 +387,7 @@ class UserService:
         
         # 1. 查询数据库
         try:
-            res = await self.db_user_account.fetch_user_id_and_password_by_email_or_account(identifier=identifier)
+            res = await self.db_user_account.fetch_user_id_and_password_hash_by_email_or_account(identifier=identifier)
         except Exception as e:
             self.logger.error(f"Function:'fetch_user_id_and_password_by_email_or_account' occurr exception.for user '{identifier}': {e}")
             erros = UserServiceErrorDetail(
@@ -414,12 +427,14 @@ class UserService:
             self.logger.info(message)
             try:
                 success = await self.db_user_account.insert_user_login_logs(
-                    user_id=user_id,
-                    ip_address=ip_address,
-                    agent=agent,
-                    device=device,
-                    os=os,
-                    login_success=False
+                    insert_data=TableUserLoginLogsInsertSchema(
+                        user_id=user_id,
+                        ip_address=ipaddress.ip_address(ip_address),
+                        agent=agent,
+                        device=device,
+                        os=os,
+                        login_success=False
+                    )
                 )
             except Exception as e:
                 self.logger.error(f"Failed to insert login log for user {user_id}: {e}")
@@ -436,13 +451,12 @@ class UserService:
         access_token = self.create_access_token(user_id=user_id)
 
         # 4. 将token更新到 users 表
-        update_data = {"access_token": access_token}
-        where_conditions =["user_id = %s"]
-        where_values = [user_id]
         try:
-            res_update = await self.db_user_account.mysql_helper.update_one(table="users", data=update_data,
-                                                         where_conditions=where_conditions,
-                                                         where_values=where_values)
+            res_update = await self.db_user_account.update_users(
+                update_data=TableUsersUpdateSetSchema(session_token=access_token),
+                update_where=TableUsersUpdateWhereSchema(user_id=user_id)
+            )
+
         except Exception as e:
             self.logger.error(f"Token update error for user {user_id}: {e}")
         
@@ -454,12 +468,14 @@ class UserService:
         # 5. 生成登入log，插入user_login_logs 表中
         try:
             res_insert = await self.db_user_account.insert_user_login_logs(
-                user_id=user_id,
-                ip_address=ip_address,
-                agent=agent,
-                device=device,
-                os=os,
-                login_success=True
+                insert_data=TableUserLoginLogsInsertSchema(
+                    user_id=user_id,
+                    ip_address=ipaddress.ip_address(ip_address),
+                    agent=agent,
+                    device=device,
+                    os=os,
+                    login_success=True
+                )
             )
         except Exception as e:
             self.logger.error(f"Failed to insert login log for user {user_id}: {e}")
@@ -490,13 +506,12 @@ class UserService:
 
         :return: RegisterResponse
         """
-        
         operator = 'usr_register'
-        # TODO 将下面的操作集成到MySQL事务中一起完成
+        
         # 1. 检查是否已被注册        
         # 先通过email查询
         try:
-            res_email = await self.db_user_account.fetch_user_id_and_password_by_email_or_account(
+            res_email = await self.db_user_account.fetch_user_id_and_password_hash_by_email_or_account(
                 identifier=email
             )
         except Exception as e:
@@ -509,7 +524,7 @@ class UserService:
             )
 
         # 如果已注册
-        if res_email:
+        if res_email is not None:
             message = f"Register failed! Email '{email}' already exists!"
             self.logger.info(f"Operator:'{operator}', Result:'False', Email:'{email}', Message:'{message}'")
             # 返回注册失败的Response
@@ -522,7 +537,7 @@ class UserService:
 
         # 再通过account查询
         try:
-            res_account = await self.db_user_account.fetch_user_id_and_password_by_email_or_account(
+            res_account = await self.db_user_account.fetch_user_id_and_password_hash_by_email_or_account(
                 identifier=account
             )
         except Exception as e:
@@ -535,7 +550,7 @@ class UserService:
             )
 
         # 如果已注册
-        if res_account:
+        if res_account is not None:
             message = f"Register failed! Account '{account}' already exists!"
             self.logger.info(f"Operator:'{operator}', Result:'False', Account:'{account}', Message:'{message}'")
             return RegisterResponse(
@@ -546,9 +561,27 @@ class UserService:
             )
 
         # 2. 注册
+        
+        # 2.1 检查用户名是否已存在
+        # sql =f"SELECT MAX(suffix) FROM users WHERE user_name = %s;"
+        # sql_args = [user_name]
+
+        res = await self.db_user_account.query_record_by_schema(
+            table="users",
+            query_where=TableUsersQueryWhereSchema(user_name=user_name),
+            select_fields=["MAX(suffix)"]
+        )
+        if res['data']['rows'][0][0] is not None:
+            # 如果存在，获取最大后缀
+            suffix  = res['data']['rows'][0][0] + 1
+        else:
+            # 如果不存在，后缀为0
+            suffix = 0
+
         try:
             res_insert_new_user = await self.db_user_account.insert_new_user(
                 user_name=user_name,
+                user_suffix=suffix,
                 account=account,
                 password_hash=self.pwd_context.hash(password),
                 email=email
@@ -564,7 +597,7 @@ class UserService:
 
         # 注册成功
         if res_insert_new_user:
-            self.logger.info(f"Operator:'{operator}', Result: True, Username:'{user_name}', Message:")
+            self.logger.info(f"Operator:'{operator}', Result: True, Username:'{user_name}#{suffix}', Message:")
             return RegisterResponse(
                 operator=operator,
                 result=True,
@@ -609,8 +642,6 @@ class UserService:
 
         # 3. 更新密码hash到 users表中
         try:
-            # loop = asyncio.get_event_loop()
-            # res = await loop.run_in_executor(self.executor, self.db_user_account.update_user_password, username, password)
             result = await self.db_user_account.update_user_password_by_user_id(
                 user_id=user_id, new_password_hash=new_password_hash
             )
@@ -627,13 +658,14 @@ class UserService:
             return {"result": False, "message": "Internal server error.", "user_id": None}
 
         # 4. 插入 log 到 user_account_actions 中
-        action_data = {
-            "user_id": user_id,
-            "action_type": "change_password",
-            "action_detail": "Changed password.",
-        }
         try:
-            await self.db_user_account.mysql_helper.insert_one(table="user_account_actions", data=action_data)
+            await self.db_user_account.insert_user_account_actions(
+                insert_data=TableUserAccountActionsInsertSchema(
+                    user_id=user_id,
+                    action_type=UserAccountActionType.password_update,
+                    action_details="Changed password.",
+                )
+            )
         except Exception as e:
             self.logger.error(f"Database error during action log insert for user id'{user_id}': {e}")
 
@@ -685,7 +717,7 @@ class UserService:
         
     async def _usr_modify_profile(self, session_token: str,
                                   user_name: str | None = None,
-                                  profile_picture_url: str | None = None, 
+                                  profile_picture_path: str | None = None, 
                                   signature: str | None = None) -> Dict:
         """
         用户修改个人信息
@@ -698,10 +730,11 @@ class UserService:
         # 2. 更新数据库对应条目
         try:
             res = await self.db_user_account.update_user_profile(
-                user_id=user_id,
-                user_name=user_name,
-                profile_picture_url=profile_picture_url,
-                signature=signature
+                update_data=TableUserProfileUpdateSetSchema(
+                    profile_picture_path=profile_picture_path,
+                    signature=signature
+                ),
+                update_where=TableUserProfileUpdateWhereSchema(user_id=user_id)
             )
         except Exception as e:
             self.logger.error(f"Database error during profile update for user id'{user_id}': {e}")

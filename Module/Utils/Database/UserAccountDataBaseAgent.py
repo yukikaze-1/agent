@@ -29,6 +29,7 @@ from Module.Utils.Database.MySQLServiceRequestType import (
     MySQLServiceConnectRequest,
     MySQLServiceStaticTransactionRequest,
     MySQLServiceStaticTransactionSQL,
+    MySQLServiceDynamicTransactionBaseRequest,
     MySQLServiceDynamicTransactionStartRequest,
     MySQLServiceDynamicTransactionCommitRequest,
     MySQLServiceDynamicTransactionRollbackRequest,
@@ -39,7 +40,11 @@ from Module.Utils.Database.MySQLServiceResponseType import (
     MySQLServiceInsertResponse, 
     MySQLServiceUpdateResponse, 
     MySQLServiceDeleteResponse, 
-    MySQLServiceQueryResponse
+    MySQLServiceQueryResponse,
+    MySQLServiceDynamicTransactionStartResponse,
+    MySQLServiceDynamicTransactionCommitResponse,
+    MySQLServiceDynamicTransactionRollbackResponse,
+    MySQLServiceDynamicTransactionExecuteSQLResponse
 )
 from Module.Utils.Database.UserAccountDatabaseSQLParameterSchema import (
     get_allowed_query_select_fields,
@@ -242,7 +247,7 @@ class UserAccountDataBaseAgent():
         order_by: str | None = None,
         limit: int | None = None,
         offset: int | None = None,
-    ) -> List[dict]:
+    ) -> Dict:
         """
         根据 Schema 执行查询（自动提取 WHERE）
 
@@ -260,7 +265,7 @@ class UserAccountDataBaseAgent():
             where_conditions, where_values = self.extract_where_from_schema(schema=query_where)
         except Exception as e:
             self.logger.error(f"从 QuerySchema 提取 WHERE 条件失败: {e}")
-            return []
+            return {}
         
         if not select_fields:
             select_fields = ["*"]  # 如果未指定字段，则查询所有字段
@@ -275,6 +280,7 @@ class UserAccountDataBaseAgent():
             offset=offset
         )
         
+        
     async def _query_record(
         self,
         table: str,
@@ -284,7 +290,7 @@ class UserAccountDataBaseAgent():
         order_by: Optional[str] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
-    ) -> List[dict]:
+    ) -> Dict:
         """
         通用查询函数
 
@@ -309,9 +315,9 @@ class UserAccountDataBaseAgent():
             )
         except Exception as e:
             self.logger.error(f"构建 SELECT SQL 失败: {e}")
-            return []
+            return {}
 
-        url = self.mysql_service_url + "/database/mysql/select"
+        url = self.mysql_service_url + "/database/mysql/query"
 
         try:
             response_dict = await self.sql_executor.execute_query_sql(
@@ -325,7 +331,7 @@ class UserAccountDataBaseAgent():
             return response_dict.get("data", {}).get("records", [])
         except Exception as e:
             self.logger.error(f"执行 SELECT 失败: {e}")
-            return []
+            return {}
         
     # ------------------------------------------------------------------------------------------------
     # 功能函数---插入表项目
@@ -893,8 +899,95 @@ class UserAccountDataBaseAgent():
             return False
 
         
+    # ------------------------------------------------------------------------------------------------
+    # 动态事务相关功能函数
+    # ------------------------------------------------------------------------------------------------   
+    async def _send_dynamic_transaction_request(self, request: MySQLServiceDynamicTransactionBaseRequest)-> httpx.Response:
+        """
+        向 MySQL Service 发送动态事务的请求。
 
+        自动根据请求类型路由到正确的接口。
+        """
+        # 映射：类型 -> endpoint path
+        endpoint_map = {
+            MySQLServiceDynamicTransactionStartRequest: "/database/mysql/dynamic_transaction/start",
+            MySQLServiceDynamicTransactionCommitRequest: "/database/mysql/dynamic_transaction/commit",
+            MySQLServiceDynamicTransactionRollbackRequest: "/database/mysql/dynamic_transaction/rollback",
+            MySQLServiceDynamicTransactionExecuteSQLRequest: "/database/mysql/dynamic_transaction/execute",
+        }
+
+        request_type = type(request)
+        endpoint = endpoint_map.get(request_type)
+
+        if not endpoint:
+            self.logger.error(f"[Dynamic Transaction] Unsupported request type: {request_type}")
+            raise ValueError(f"Unsupported request type: {request_type}")
+
+        url = f"{self.mysql_service_url}{endpoint}"
+
+        try:
+            response = await self.client.post(url=url, json=request.model_dump(mode="json", exclude_none=False))
+            response.raise_for_status()
+            return response
+        
+        except httpx.HTTPStatusError as e:
+            self.logger.error(f"HTTP error during dynamic transaction: {e.response.status_code}, {e.response.text}")
+            raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+        except httpx.RequestError as e:
+            self.logger.error(f"Request error during dynamic transaction: {e}")
+            raise HTTPException(status_code=503, detail="Failed to communicate with MySQLService.")
+        except Exception as e:
+            self.logger.error(f"Unexpected error during dynamic transaction: {e}")
+            raise HTTPException(status_code=500, detail="Internal server error.")
     
+    
+    async def _execute_transaction_sql(self, session_id: str, sql: str, sql_args: list | dict | None = None) -> Optional[int]:
+        """
+            执行一条 SQL 语句。
+            
+            返回：
+                - 如果是 INSERT，则返回 last_insert_id（可能为 0）
+                - 如果是 UPDATE/DELETE，返回 1 表示成功
+                - 如果失败，返回 None
+        """
+        req = MySQLServiceDynamicTransactionExecuteSQLRequest(
+            session_id=session_id,
+            sql=sql,
+            sql_args=sql_args or []
+        )
+        res = await self._send_dynamic_transaction_request(request=req)
+        result = res.json()
+        if not result.get("result", False):
+            self.logger.error(f"[Execute SQL] Failed: {result}")
+            return None
+        return result.get("last_insert_id")  # 可能为 None（非 INSERT 语句）
+    
+    
+    async def _start_transaction(self, connection_id: int) -> Optional[str]:
+        """ 开始一个动态事务 """
+        req = MySQLServiceDynamicTransactionStartRequest(connection_id=connection_id)
+        res = await self._send_dynamic_transaction_request(request=req)
+        session_id = res.json().get("session_id")
+        if not session_id:
+            self.logger.error("[Start Transaction] session_id missing in response")
+            return None
+        return session_id
+    
+    
+    async def _commit_transaction(self, session_id: str) -> bool:
+        """ 提交事务 """
+        req = MySQLServiceDynamicTransactionCommitRequest(session_id=session_id)
+        res = await self._send_dynamic_transaction_request(request=req)
+        result = res.json()
+        return result.get("result", False)
+
+
+    async def _rollback_transaction(self, session_id: str) -> None:
+        """事务失败时回滚"""
+        rollback_req = MySQLServiceDynamicTransactionRollbackRequest(session_id=session_id)
+        await self._send_dynamic_transaction_request(request=rollback_req)    
+        
+        
     # ------------------------------------------------------------------------------------------------
     # 封装的上层功能函数
     # ------------------------------------------------------------------------------------------------      
@@ -984,7 +1077,8 @@ class UserAccountDataBaseAgent():
         return res[0]["user_uuid"]
 
     
-    async def insert_new_user(self, account: str, email: str, password_hash: str, user_name: str) -> Optional[int]:
+    async def insert_new_user(self, account: str, email: str, password_hash: str,
+                             user_suffix: int, user_name: str) -> Optional[int]:
         """
         插入用户注册信息所有表。
             1. users 表
@@ -995,63 +1089,113 @@ class UserAccountDataBaseAgent():
         :param: email   用户邮箱(必须)
         :param: password_hash   用户密码hash值(必须)
         :param: user_name   用户名(必须)
+        :param: user_suffix 用户名后缀(必须)
 
         返回 user_id（成功）或 None（失败）
         """
-        
-        # 生成用户UUID
-        user_uuid = str(uuid.uuid4())
-        
-        # 默认用户文件夹路径
-        file_folder_path = f"Users/Files/{user_uuid}/"
-        
-        user_suffix = 1234
-        
-        # 开启事务
-        # TODO: 这里可以考虑使用事务来确保数据一致性
-        
-        # 1. 插入 users 表
-        sql, args = self.sql_builder.build_insert_sql(
+        operator = "Insert New User"
+        session_id = None
+        try:
+            # 生成用户UUID
+            user_uuid = str(uuid.uuid4())
+            
+            # 默认用户文件夹路径
+            file_folder_path = f"Users/Files/{user_uuid}/"
+            
+            # 开启事务
+            session_id = await self._start_transaction(connection_id=self.db_connect_id)
+            if not session_id:
+                self.logger.error("Failed to start dynamic transaction")
+                return None
+
+            # 1. 插入 users 表
+            # 构建插入数据
+            # 使用 TableUsersInsertSchema 来构建插入数据
+            users_data = TableUsersInsertSchema(
+                account=account,
+                email=email,
+                password_hash=password_hash,
+                user_suffix=user_suffix,
+                user_name=user_name,
+                user_uuid=user_uuid,
+                file_folder_path=file_folder_path
+            ).model_dump(exclude_none=True)
+            
+            insert_users_sql, insert_users_sql_args = self.sql_builder.build_insert_sql(
                 table="users",
-                data=TableUsersInsertSchema(
-                        user_uuid=user_uuid,
-                        user_name=user_name,
-                        user_suffix=user_suffix,
-                        account=account,
-                        password_hash=password_hash,
-                        email=email,
-                        file_folder_path=file_folder_path
-                    ).model_dump(exclude_none=True)
-        )
-        
-        insert_users_sql = MySQLServiceTransactionSQL(
-            sql=sql,
-            sql_args=args
-        )
-        
-        
-        # 2. 插入 user_profile 表（使用默认头像）
-        # 构建插入数据
-        sql, args = self.sql_builder.build_insert_sql(
+                data=users_data
+            )
+            
+            user_id = await self._execute_transaction_sql(
+                session_id=session_id, 
+                sql=insert_users_sql, 
+                sql_args=insert_users_sql_args
+            )
+            
+            if not user_id:
+                self.logger.error(f"[{operator}] Insert users failed, rolling back.")
+                await self._rollback_transaction(session_id)
+                return None
+
+            # 2. 插入 user_profile 表（使用默认头像）
+            # 构建插入数据
+            profile_data = TableUserProfileInsertSchema(user_id=user_id).model_dump(exclude_none=True)
+            insert_profile_sql, insert_profile_sql_args = self.sql_builder.build_insert_sql(
                 table="user_profile",
-                data=TableUserProfileInsertSchema(
-                        user_uuid=user_uuid,
-                        user_name=user_name,
-                        user_suffix=user_suffix,
-                        account=account,
-                        password_hash=password_hash,
-                        email=email,
-                        file_folder_path=file_folder_path
-                    ).model_dump(exclude_none=True)
-        )
+                data=profile_data
+            )
+
+            insert_profile_res = await self._execute_transaction_sql(
+                session_id=session_id,
+                sql=insert_profile_sql,
+                sql_args=insert_profile_sql_args
+            )
+            if not insert_profile_res:
+                self.logger.error(f"[{operator}] Insert profile failed, rolling back.")
+                await self._rollback_transaction(session_id)
+                return None
+            
+            # 3. 插入 user_settings 表 (使用默认配置)
+            # 构建插入数据
+            user_setting_data = TableUserSettingsInsertSchema(
+                    user_id=user_id,
+                    configure={},
+                    notification_setting={}
+                ).model_dump(exclude_none=True)
+            
+            insert_settings_sql, insert_settings_sql_args = self.sql_builder.build_insert_sql(
+                table="user_settings",
+                data=user_setting_data
+            )
+
+            insert_settings_res = await self._execute_transaction_sql(
+                session_id=session_id,
+                sql=insert_settings_sql,
+                sql_args=insert_settings_sql_args
+            )
+            if not insert_settings_res:
+                self.logger.error(f"[{operator}] Insert settings failed, rolling back.")
+                await self._rollback_transaction(session_id)
+                return None
+
+            commit_res = await self._commit_transaction(session_id)
+            if not commit_res:
+                self.logger.error(f"[{operator}] Commit failed.")
+                return None
+
+            self.logger.info(f"[{operator}] User inserted successfully. user_id={user_id}")
+            return user_id
+    
+        except Exception as e:
+            self.logger.error(f"[{operator}] Exception occurred: {e}")
+            try:
+                if session_id:
+                    await self._rollback_transaction(session_id)
+            except Exception as rollback_err:
+                self.logger.error(f"[{operator}] Rollback failed: {rollback_err}")
+            return None
         
         
-        # 3. 插入 user_settings 表 (使用默认配置)
-        # 构建插入数据
-        
-        
- 
-    # TODO 待修改，是否需要统一接口参数为 TableUsersInsertSchema?
     async def update_user_password_by_user_id(self, user_id: int, new_password_hash: str) -> bool:
         """
         根据 user_id 更新用户密码哈希，并记录操作日志。
@@ -1064,36 +1208,24 @@ class UserAccountDataBaseAgent():
         :return: 是否成功
         """
         # 1. 更新 users 表
-        update_success = await self._update_record(
-            table="users",
+        success = await self.update_users(
             update_data=TableUsersUpdateSetSchema(password_hash=new_password_hash),
-            where_conditions=["user_id = %s"],
-            where_values=[user_id],
-            success_msg="用户密码更新成功",
-            warning_msg="用户密码更新可能未生效",
-            error_msg="更新用户密码失败"
+            update_where=TableUsersUpdateWhereSchema(user_id=user_id)
         )
-
-        if not update_success:
-            self.logger.error(f"用户密码更新失败，user_id={user_id}")
+        if not success:
+            self.logger.warning(f"用户密码更新可能失败，user_id={user_id}")
             return False
 
         # 2. 插入到 user_account_actions 表
-        insert_success = await self._insert_record(
-            table="user_account_actions",
+        insert_success = await self.insert_user_account_actions(
             insert_data=TableUserAccountActionsInsertSchema(
                 user_id=user_id,
-                action_type=UserAccountActionType.password_change,
-                action_detail=f"Password updated to {new_password_hash}"
-            ),
-            success_msg="用户行为记录插入成功",
-            warning_msg="行为记录可能未插入成功",
-            error_msg="插入用户行为记录失败"
+                action_type=UserAccountActionType.password_update,
+                action_details=f"用户密码已更新，user_id={user_id}",
+            )
         )
-
         if not insert_success:
-            self.logger.error(f"用户行为记录插入失败，user_id={user_id}")
-            return False
+            self.logger.error(f"用户密码已更新,但用户行为记录插入失败，user_id={user_id}")
 
         self.logger.info(f"用户密码更新完成，user_id={user_id}")
         return True

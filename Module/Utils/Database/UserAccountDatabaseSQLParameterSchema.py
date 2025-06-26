@@ -566,6 +566,7 @@ class TableUsersQueryWhereSchema(QueryWhereSchema):
     """ 用于查询 users 表的筛选条件（WHERE 部分）"""
     user_id: int | None = Field(default=None, ge=0, description="用户ID")
     user_uuid: str | None = Field(default=None, description="UUID")
+    user_name:str | None = Field(default=None, min_length=4, max_length=64,  description="用户名")
     status: UserStatus | None = Field(default=None, description="用户状态")
     account: str | None = Field(default=None, description="账号")
     email: EmailStr | None = Field(default=None, description="邮箱")
@@ -826,7 +827,7 @@ class TableUserSettingsSchema(StrictBaseModel):
 class TableUserSettingsInsertSchema(InsertSchema):
     """ 用户自定义设置 Insert Schema """
     user_id: int = Field(..., ge=0, description="用户ID（主键+外键）")
-    language: UserLanguage = Field(..., description="用户语言偏好")
+    language: UserLanguage = Field(default=UserLanguage.zh, description="用户语言偏好")
     configure: dict = Field(..., description="用户配置")
     notification_setting: dict = Field(..., description="用户通知设置")
     
@@ -892,7 +893,7 @@ CREATE TABLE user_account_actions (
 class UserAccountActionType(StrEnum):
     """ 用户账户操作类型 """
     login = "login"
-    password_change = "password_change"
+    password_update = "password_update"
     profile_update = "profile_update"
     account_deletion = "account_deletion"
     
@@ -911,7 +912,7 @@ class TableUserAccountActionsInsertSchema(InsertSchema):
     """ 用户账户行为 Insert Schema """
     user_id: int = Field(..., ge=0, description="用户ID（外键）")
     action_type: UserAccountActionType = Field(..., description="用户账户操作类型")
-    action_detail: str = Field(..., max_length=512, description="用户账户操作细节")
+    action_details: str = Field(..., max_length=512, description="用户账户操作细节")
     
 
 class TableUserAccountActionsDeleteWhereSchema(DeleteWhereSchema):
