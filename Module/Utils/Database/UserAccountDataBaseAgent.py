@@ -328,7 +328,10 @@ class UserAccountDataBaseAgent():
                 warning_msg=f"查询完成但无匹配记录: {table}",
                 error_msg=f"查询失败: {table}"
             )
-            return response_dict.get("data", {}).get("records", [])
+            if response_dict:
+                return response_dict.get("data", {})
+            else:
+                return {}
         except Exception as e:
             self.logger.error(f"执行 SELECT 失败: {e}")
             return {}
@@ -950,6 +953,7 @@ class UserAccountDataBaseAgent():
                 - 如果是 UPDATE/DELETE，返回 1 表示成功
                 - 如果失败，返回 None
         """
+        self.logger.info(f"[Execute SQL] session_id: {session_id}, sql: {sql}, sql_args: {sql_args}")
         req = MySQLServiceDynamicTransactionExecuteSQLRequest(
             session_id=session_id,
             sql=sql,
@@ -1041,15 +1045,18 @@ class UserAccountDataBaseAgent():
                 ),
                 select_fields=select_fields,
             )
+            self.logger.info(f"in function:fetch_user_id_and_password_hash_by_email_or_account;res={res}")
         except Exception as e:
             self.logger.error(f"{str(e)}")
             return None
 
-        if res is None:
+        if res[0]['row_count'] == 0:
             self.logger.warning(f"No user found with identifier: {identifier}")
             return None
-
-        return res[0]["user_id"], res[0]["password_hash"]
+        
+        row = res[0]['rows'][0]
+        
+        return row[0], row[1]
 
 
     async def fetch_uuid_by_user_id(self, user_id: int) -> str | None:
@@ -1150,7 +1157,9 @@ class UserAccountDataBaseAgent():
                 sql=insert_profile_sql,
                 sql_args=insert_profile_sql_args
             )
-            if not insert_profile_res:
+            self.logger.info(f"[{operator}] Insert profile res: {insert_profile_res}")
+            
+            if insert_profile_res is None:
                 self.logger.error(f"[{operator}] Insert profile failed, rolling back.")
                 await self._rollback_transaction(session_id)
                 return None
@@ -1173,7 +1182,7 @@ class UserAccountDataBaseAgent():
                 sql=insert_settings_sql,
                 sql_args=insert_settings_sql_args
             )
-            if not insert_settings_res:
+            if insert_settings_res is None:
                 self.logger.error(f"[{operator}] Insert settings failed, rolling back.")
                 await self._rollback_transaction(session_id)
                 return None

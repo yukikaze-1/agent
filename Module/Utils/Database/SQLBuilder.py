@@ -7,6 +7,7 @@
     构建SQL语句的工具类
 """
 
+import json
 from typing import Dict, List, Any
 from logging import Logger
 
@@ -40,12 +41,17 @@ class SQLBuilder:
         columns = list(data.keys())
         values = list(data.values())
         
+        for item in values:
+            if isinstance(item, dict):
+                # 将该字段转换为json字符串
+                values[values.index(item)] = json.dumps(item, ensure_ascii=False)
+        
         placeholders = ", ".join(["%s"] * len(columns))
         columns_str = ", ".join(columns)
         
         sql = f"INSERT INTO {table} ({columns_str}) VALUES ({placeholders});"
         
-        self.logger.debug(f"Generated SQL: {sql} | Values: {values}")
+        self.logger.info(f"Generated SQL: {sql} | Values: {values}")
         return sql, values
         
         

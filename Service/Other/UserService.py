@@ -26,7 +26,7 @@ from pathlib import Path
 from pydantic import IPvAnyAddress 
 
 from Module.Utils.Database.UserAccountDataBaseAgent import  UserAccountDataBaseAgent
-from Module.Utils.Database.UserAccountDatabaseSQLParameterSchema import TableUserLoginLogsInsertSchema, TableUsersQueryWhereSchema
+from Module.Utils.Database.UserAccountDatabaseSQLParameterSchema import TableUserLoginLogsInsertSchema, TableUsersQueryWhereSchema, UserLanguage
 from Module.Utils.Logger import setup_logger
 from Module.Utils.ConfigTools import load_config, validate_config
 from Module.Utils.ToolFunctions import retry
@@ -74,7 +74,9 @@ from Module.Utils.Database.UserAccountDatabaseSQLParameterSchema import (
     TableUserAccountActionsInsertSchema,
     TableUserProfileUpdateSetSchema,
     TableUserProfileUpdateWhereSchema,
-    
+    TableUserSettingsUpdateSetSchema,
+    TableUserSettingsUpdateWhereSchema,
+    TableUserFilesInsertSchema
 )
 
 # from Service.Other.EnvironmentManagerClient import EnvironmentManagerClient
@@ -185,13 +187,13 @@ class UserService:
             # 异步调用 init_connection，让 db_user_account 拿到 connect_id
             await self.db_user_account.init_connection()
             # 启动后台任务
-            task = asyncio.create_task(update_service_instances_periodically(
-                                            consul_url=self.consul_url,
-                                            client=self.client,
-                                            service_instances=self.service_instances,
-                                            config=self.config,
-                                            logger=self.logger
-                                        ))
+            # task = asyncio.create_task(update_service_instances_periodically(
+            #                                 consul_url=self.consul_url,
+            #                                 client=self.client,
+            #                                 service_instances=self.service_instances,
+            #                                 config=self.config,
+            #                                 logger=self.logger
+            #                             ))
             yield  # 应用正常运行
             
         except Exception as e:
@@ -201,12 +203,12 @@ class UserService:
         finally:
             # 关闭后台任务
             # 如果 task 没有赋值过(None)，就不去 cancel
-            if task is not None:
-                task.cancel()    
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    self.logger.info("Background task cancelled successfully.")
+            # if task is not None:
+            #     task.cancel()    
+            #     try:
+            #         await task
+            #     except asyncio.CancelledError:
+            #         self.logger.info("Background task cancelled successfully.")
                 
             # 关闭UserAccountDataBaseAgent中的httpx
             await self.db_user_account.client.aclose()
@@ -276,7 +278,7 @@ class UserService:
         async def usr_modify_profile(data: ModifyProfileRequest, request: Request):
             return await self._usr_modify_profile(session_token=data.session_token, 
                                                   user_name=data.user_name, 
-                                                  profile_picture_url=data.profile_picture_url,
+                                                  profile_picture_path=data.profile_picture_url,
                                                   signature=data.signature)
 
 
@@ -284,7 +286,7 @@ class UserService:
         @self.app.post("/usr/modify_notifications")
         async def usr_modify_notification_settings(data: ModifyNotificationSettingsRequest, request: Request):
             return await self._usr_modify_notification_settings(session_token=data.session_token, 
-                                                                notifications_enabled=data.notifications_enabled)
+                                                                settings_json=data.settings_json)
 
 
         # 用户修改个人设置
@@ -514,6 +516,7 @@ class UserService:
             res_email = await self.db_user_account.fetch_user_id_and_password_hash_by_email_or_account(
                 identifier=email
             )
+            self.logger.info(f"Fetched user by email '{email}': {res_email}")
         except Exception as e:
             self.logger.error(f"Database error during registration for user email'{email}': {e}")
             return RegisterResponse(
@@ -569,14 +572,19 @@ class UserService:
         res = await self.db_user_account.query_record_by_schema(
             table="users",
             query_where=TableUsersQueryWhereSchema(user_name=user_name),
-            select_fields=["MAX(suffix)"]
+            select_fields=["MAX(user_suffix)"]
         )
-        if res['data']['rows'][0][0] is not None:
-            # 如果存在，获取最大后缀
-            suffix  = res['data']['rows'][0][0] + 1
-        else:
+        self.logger.info(f"in function _user_register: 检查用户名存在res={res}")
+        
+        max_suffix = res[0]['rows'][0][0]
+        self.logger.info(f"Max suffix for user '{user_name}': {max_suffix}")
+        if max_suffix is None:
             # 如果不存在，后缀为0
             suffix = 0
+        else:
+            # 如果存在，获取最大后缀
+            suffix  = max_suffix + 1
+        
 
         try:
             res_insert_new_user = await self.db_user_account.insert_new_user(
@@ -591,8 +599,7 @@ class UserService:
             return RegisterResponse(
                 operator=operator,
                 result=False,
-                message="Internal server error.",
-                data=RegisterData()
+                message="Internal server error."
             )
 
         # 注册成功
@@ -601,8 +608,7 @@ class UserService:
             return RegisterResponse(
                 operator=operator,
                 result=True,
-                message="User registered successfully.",
-                data=RegisterData()
+                message="User registered successfully."
             )
             # TODO 将来调用 EnvironmentManager
         
@@ -663,7 +669,7 @@ class UserService:
                 insert_data=TableUserAccountActionsInsertSchema(
                     user_id=user_id,
                     action_type=UserAccountActionType.password_update,
-                    action_details="Changed password.",
+                    action_details="Changed password."
                 )
             )
         except Exception as e:
@@ -752,8 +758,7 @@ class UserService:
 
 
     async def _usr_modify_notification_settings(self, session_token: str,
-                                                notifications_enabled: bool | None = None,
-                                                settings_json: Dict | None = None) -> Dict:
+                                                settings_json: Dict[str, Any] | None = None) -> Dict:
         """
         用户修改通知设置
 
@@ -767,10 +772,9 @@ class UserService:
 
         # 2. 更新数据库对应条目
         try:
-            await self.db_user_account.update_user_notification_settings(
-                user_id=user_id,
-                notifications_enabled=notifications_enabled,
-                settings_json=settings_json
+            await self.db_user_account.update_user_settings(
+                update_data=TableUserSettingsUpdateSetSchema(notification_setting=settings_json),
+                update_where=TableUserSettingsUpdateWhereSchema(user_id=user_id)
             )
         except Exception as e:
             self.logger.error(f"Database error during notification settings update for user id'{user_id}': {e}")
@@ -802,10 +806,12 @@ class UserService:
         # 2. 更新数据库对应条目
         try:
             await self.db_user_account.update_user_settings(
-                user_id=user_id,
-                language=language,
-                configure=configure,
-                notification_setting=notification_setting
+                update_data=TableUserSettingsUpdateSetSchema(
+                    language=UserLanguage.zh if language is None else UserLanguage(language),
+                    configure=configure,
+                    notification_setting=notification_setting
+                ),
+                update_where=TableUserSettingsUpdateWhereSchema(user_id=user_id)
             )
         except Exception as e:
             self.logger.error(f"Database error during settings update for user id'{user_id}': {e}")
@@ -844,11 +850,11 @@ class UserService:
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
         filename = f"{timestamp}_{filename}"       
         
-        content_type: str = file.content_type or ""
-        size = len(contents)
+        file_type: str = file.content_type or ""
+        file_size = len(contents)
         
-        if size > self.upload_file_max_size:
-            return {"result": False, "message": f"File too large. Size: {size}, Max Size: {self.upload_file_max_size}", "user_id": user_id}
+        if file_size > self.upload_file_max_size:
+            return {"result": False, "message": f"File too large. Size: {file_size}, Max Size: {self.upload_file_max_size}", "user_id": user_id}
 
         # 4. 生成保存路径（user_uuid）
         save_dir = f"Users/Files/{user_uuid}/"
@@ -863,17 +869,20 @@ class UserService:
             self.logger.exception("File write failed")
             return {"result": False, "message": "Failed to write file.", "user_id": user_id}
 
-        self.logger.info(f"File uploaded: user_id={user_id}, file_name={filename}, size={size}, save_path={save_path}")
+        self.logger.info(f"File uploaded: user_id={user_id}, file_name={filename}, size={file_size}, save_path={save_path}")
 
 
         # 6. 插入数据库记录
-        res = await self.db_user_account.insert_user_files(user_id=user_id,
-                                                        file_path=save_path,
-                                                        file_name=filename,
-                                                        file_type=content_type,
-                                                        file_size=size,
-                                                        upload_time=datetime.now(),
-                                                        is_deleted=False)
+        res = await self.db_user_account.insert_user_files(
+            insert_data=TableUserFilesInsertSchema(
+                user_id=user_id,
+                file_name=filename,
+                file_path=save_path,
+                file_type=file_type,
+                file_size=file_size,
+                upload_time=datetime.now()
+            )
+        )
         if not res:
             self.logger.error(f"Failed to insert file record for user id: {user_id}")
             return {"result": False, "message": "File upload failed.", "user_id": user_id}

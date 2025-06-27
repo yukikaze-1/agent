@@ -75,7 +75,7 @@ class MySQLServiceDynamicTransactionSession:
 
     def close(self):
         self.cursor.close()
-        self.connection.close()
+        # self.connection.close()
         
 
 class MySQLService:
@@ -90,7 +90,7 @@ class MySQLService:
 
         # 加载环境变量和配置
         self.env_vars = dotenv_values("/home/yomu/agent/Module/Utils/Database/.env")
-        self.config_path = self.env_vars.get("MYSQL_AGENT_CONFIG_PATH", "")
+        self.config_path = self.env_vars.get("MYSQL_SERVICE_CONFIG_PATH", "")
         self.config: Dict = load_config(config_path=self.config_path, config_name='MySQLService', logger=self.logger)
         
         # 验证配置文件
@@ -112,8 +112,6 @@ class MySQLService:
         self.service_id = self.config.get("service_id", f"{self.service_name}-{self.host}:{self.port}")
         self.health_check_url = self.config.get("health_check_url", f"http://{self.host}:{self.port}/health")
         
-        # 存储MySQLService的地址
-        self.mysql_service_url: str     
            
         # MySQLService连接mysql的序号，每连接一个mysql数据库，该ids++
         self.ids = 0
@@ -282,8 +280,7 @@ class MySQLService:
             # 创建一个新的事务上下文、
             
             # 创建事务会话id
-            while session_id in self.dynamic_transaction_sessions:
-                session_id = str(uuid.uuid4())
+            session_id = str(uuid.uuid4())
                 
             # 创建事务会话
             session = MySQLServiceDynamicTransactionSession(connection=connection)
@@ -351,6 +348,7 @@ class MySQLService:
             )
 
         try:
+            self.logger.info(f"Executing SQL in dynamic transaction. session_id: {session_id}, sql: {sql}, sql_args: {sql_args}")
             # 执行 SQL 语句
             with transaction_session.connection.cursor() as cursor:
                 cursor.execute(sql, sql_args or [])
@@ -359,7 +357,7 @@ class MySQLService:
                 last_insert_id = cursor.lastrowid      
                 transaction_session.affected_rows_total += affected_rows
                           
-                self.logger.info(f"Executed SQL in dynamic transaction. session_id: {session_id}, sql: {sql}")
+                self.logger.info(f"Executed SQL in dynamic transaction. session_id: {session_id}, sql: {sql}, sql_args: {sql_args}, ")
 
             return MySQLServiceDynamicTransactionExecuteSQLResponse(
                 operator=operator,
@@ -668,13 +666,13 @@ class MySQLService:
                 query_result = cursor.fetchall()
                 return [
                     MySQLServiceQueryResponseData(
-                        column_names=list(query_result[0].keys()),
-                        rows=[list(row.values()) for row in query_result],
+                        column_names=list(query_result[0].keys()) if query_result else [],
+                        rows=[list(row.values()) for row in query_result] if query_result else [],
                         row_count=len(query_result)
                     )
                 ]
         except Exception as e:
-            self.logger.error(f"Query failed!：{e}\n{traceback.format_exc()}")
+            self.logger.error(f"Query failed!in function: _query_with_retry：ERROR:{e}\n{traceback.format_exc()}")
             raise
 
 

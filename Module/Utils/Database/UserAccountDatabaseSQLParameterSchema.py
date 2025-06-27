@@ -10,7 +10,7 @@
 
 from enum import StrEnum
 from typing import Dict, List, Any, Optional, Set, Literal
-from pydantic import BaseModel, EmailStr, Field, model_validator, field_validator, IPvAnyAddress, IPv4Address, IPv6Address
+from pydantic import BaseModel, EmailStr, Field, model_validator, field_validator, IPvAnyAddress
 from datetime import datetime
 from pathlib import Path
 from pydantic_core import PydanticCustomError
@@ -464,6 +464,7 @@ class TableUsersSchema(StrictBaseModel):
 class TableUsersInsertSchema(InsertSchema):
     """ 用户主表 Insert Schema 没有的字段要么是系统维护，要么是插入时不能赋值，只能更新"""
     user_uuid: str = Field(..., min_length=36, max_length=36, description="用户UUID")
+    status: UserStatus = Field(default=UserStatus.inactive, description="用户状态")
     user_name: str = Field(..., min_length=4, max_length=64,  description="用户名")
     user_suffix: int = Field(..., ge=0, description="用户名唯一数字后缀")
     account: str = Field(..., min_length=4, max_length=255, description="用户账号")
