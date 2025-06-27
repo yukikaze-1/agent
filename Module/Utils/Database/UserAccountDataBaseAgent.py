@@ -69,6 +69,23 @@ from Module.Utils.Database.UserAccountDatabaseSQLParameterSchema import (
 )
 
 
+def transfer_dict_in_schema_to_json(data: dict) -> dict:
+    """ 
+    将字典中的字典值转换为 JSON 字符串
+    用于准备 SQL 参数，具体为将各种Schema中包含的dict转为json，确保嵌套字典可以正确存储到数据库中的json字段中。
+    举例：
+        insert_data = XXXSchema(...) # 构建Schema
+        data = insert_data.model_dump(exclude_none=True) # Schema转为dict
+        data = transfer_dict_in_schema_to_json(data) # Schema中的dict类型转为json
+        
+    :param data: 已经经过.model_dump()的Schema数据。
+    """
+    return {
+        k: json.dumps(v) if isinstance(v, dict) else v
+        for k, v in data.items()
+    }
+
+
 class UserAccountDataBaseAgent():
     """
         该类负责用户账户相关数据的管理和操作
@@ -476,6 +493,8 @@ class UserAccountDataBaseAgent():
         # 构造 SQL
         data = insert_data.model_dump(exclude_none=True)
         
+        data = transfer_dict_in_schema_to_json(data)  # 将字典中的字典值转换为 JSON 字符串
+        
         try:
             sql, sql_args = self.sql_builder.build_insert_sql(table=table, data=data)
         except Exception as e:
@@ -602,7 +621,9 @@ class UserAccountDataBaseAgent():
         
         where_conditions, where_values = self.extract_where_from_schema(schema=update_where)
 
-        data = update_data.model_dump()
+        data = update_data.model_dump(exclude_none=True)
+        
+        data = transfer_dict_in_schema_to_json(data)  # 将字典中的字典值转换为 JSON 字符串
         # 构造 SQL
         try:
             sql, sql_args = self.sql_builder.build_update_sql(
@@ -1064,8 +1085,19 @@ class UserAccountDataBaseAgent():
         通过 user_id 查询用户的 UUID
 
         :param user_id: 用户ID
-
         :return: 用户UUID，如果未找到则返回 None
+        eg. res in fetch_uuid_by_user_id response: [
+            {
+                'column_names': ['user_uuid'], 
+                'rows': [
+                    ['05560daa-934b-4544-9ad8-355a79ea159e']
+                ], 
+                'row_count': 1, 
+                'total_count': None, 
+                'page_size': None, 
+                'current_page': None
+            }
+        ]
         """
         try:
             res = await self.query_record_by_schema(
@@ -1080,8 +1112,8 @@ class UserAccountDataBaseAgent():
         if res is None:
             self.logger.warning(f"No user found with user_id: {user_id}")
             return None
-
-        return res[0]["user_uuid"]
+        self.logger.info(f"res in fetch_uuid_by_user_id: {res}")
+        return res[0]["rows"][0][0]
 
     
     async def insert_new_user(self, account: str, email: str, password_hash: str,
@@ -1230,7 +1262,7 @@ class UserAccountDataBaseAgent():
             insert_data=TableUserAccountActionsInsertSchema(
                 user_id=user_id,
                 action_type=UserAccountActionType.password_update,
-                action_details=f"用户密码已更新，user_id={user_id}",
+                action_detail=f"用户密码已更新，user_id={user_id}",
             )
         )
         if not insert_success:

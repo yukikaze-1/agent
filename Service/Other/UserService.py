@@ -67,6 +67,7 @@ from Service.Other.UserServiceResponseType import (
     ModifyNotificationSettingsResponse
 )
 from Module.Utils.Database.UserAccountDatabaseSQLParameterSchema import (
+    UserStatus,
     TableUsersUpdateWhereSchema,
     TableUsersUpdateSetSchema,
     TableUserLoginLogsInsertSchema,
@@ -431,7 +432,7 @@ class UserService:
                 success = await self.db_user_account.insert_user_login_logs(
                     insert_data=TableUserLoginLogsInsertSchema(
                         user_id=user_id,
-                        ip_address=ipaddress.ip_address(ip_address),
+                        ip_address=ip_address,
                         agent=agent,
                         device=device,
                         os=os,
@@ -452,10 +453,13 @@ class UserService:
         # 3. 生成token
         access_token = self.create_access_token(user_id=user_id)
 
-        # 4. 将token更新到 users 表
+        # 4. 将token和 status 更新到 users 表
         try:
             res_update = await self.db_user_account.update_users(
-                update_data=TableUsersUpdateSetSchema(session_token=access_token),
+                update_data=TableUsersUpdateSetSchema(
+                    status=UserStatus.active,
+                    session_token=access_token
+                    ),
                 update_where=TableUsersUpdateWhereSchema(user_id=user_id)
             )
 
@@ -472,7 +476,7 @@ class UserService:
             res_insert = await self.db_user_account.insert_user_login_logs(
                 insert_data=TableUserLoginLogsInsertSchema(
                     user_id=user_id,
-                    ip_address=ipaddress.ip_address(ip_address),
+                    ip_address=ip_address,
                     agent=agent,
                     device=device,
                     os=os,
@@ -493,7 +497,9 @@ class UserService:
             operator=operator,
             result=True,
             message="Login successful!",
-            data=None
+            data=UserInfo(
+                session_token=access_token
+            )
         )
 
 
@@ -669,7 +675,7 @@ class UserService:
                 insert_data=TableUserAccountActionsInsertSchema(
                     user_id=user_id,
                     action_type=UserAccountActionType.password_update,
-                    action_details="Changed password."
+                    action_detail="Changed password."
                 )
             )
         except Exception as e:

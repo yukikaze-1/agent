@@ -14,7 +14,14 @@ from pydantic import BaseModel, EmailStr, constr, Field, model_validator
 
 # 各种请求的格式要求定义
 
-class RegisterRequest(BaseModel):
+class StrictBaseModel(BaseModel):
+    """ 基础模型，所有请求都继承自此模型 """
+    class Config:
+        # 允许额外的字段
+        extra = "forbid"
+
+
+class RegisterRequest(StrictBaseModel):
     """ 用户注册 request """
     user_name: str = Field(..., description="用户名，不唯一，有数字后缀")
     account: str = Field(..., min_length=3, max_length=50, description="用户账号，唯一")
@@ -22,7 +29,7 @@ class RegisterRequest(BaseModel):
     email: EmailStr = Field(..., description="用户邮箱")
     
 
-class LoginRequest(BaseModel):
+class LoginRequest(StrictBaseModel):
     """ 用户登陆 request """
     identifier: str = Field(min_length=3, max_length=50, description="用户账号或邮箱")
     password: str = Field(..., min_length=6, description="用户密码")
@@ -31,32 +38,26 @@ class LoginRequest(BaseModel):
     os: str = Field(..., description="操作系统信息")
 
 
-class UnregisterRequest(BaseModel):
+class UnregisterRequest(StrictBaseModel):
     """ 用户注销账户 request """
     session_token: str = Field(..., description="session token")
 
 
-class ModifyPasswordRequest(BaseModel):
+class ModifyPasswordRequest(StrictBaseModel):
     """ 用户修改密码 request"""
     session_token: str = Field(..., description="session token")
     new_password: str = Field(..., min_length=6, description="新密码")
     
 
-class ModifyProfileRequest(BaseModel):
+class ModifyProfileRequest(StrictBaseModel):
     """ 用户修改个人信息 request"""
     session_token: str = Field(..., description="session token")
     user_name: str | None = Field(..., description="用户名")
     profile_picture_url: str | None = Field(..., description="头像URL")
     signature: str | None = Field(..., description="个性签名")
-
-
-# class UploadFileRequest(BaseModel):
-#     """ 用户上传文件 request"""
-#     session_token: str = Field(..., description="session token")
-#     file: bytes = Field(..., description="上传的文件")
     
     
-class ModifySettingRequest(BaseModel):
+class ModifySettingRequest(StrictBaseModel):
     """ 用户修改设置 request"""
     session_token: str = Field(..., description="session token")
     language: str | None = Field(..., description="语言")
@@ -64,7 +65,7 @@ class ModifySettingRequest(BaseModel):
     notification_setting: Dict | None = Field(..., description="通知设置")
 
 
-class ModifyNotificationSettingsRequest(BaseModel):
+class ModifyNotificationSettingsRequest(StrictBaseModel):
     """ 用户修改通知设置 request"""
     session_token: str = Field(..., description="session token")
     notifications_enabled: bool | None = Field(..., description="是否启用通知")

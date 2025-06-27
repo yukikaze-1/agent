@@ -7,7 +7,7 @@
 """
     用户数据库的各表的pydantic
 """
-
+import ipaddress
 from enum import StrEnum
 from typing import Dict, List, Any, Optional, Set, Literal
 from pydantic import BaseModel, EmailStr, Field, model_validator, field_validator, IPvAnyAddress
@@ -452,7 +452,7 @@ class TableUsersSchema(StrictBaseModel):
     password_hash: str
     email: EmailStr
     last_login_time: datetime | None 
-    last_login_ip: IPvAnyAddress | None 
+    last_login_ip: str | None
     session_token: str | None 
     file_folder_path: str 
     created_at: datetime
@@ -495,7 +495,7 @@ class TableUsersUpdateSetSchema(UpdateSetSchema):
     user_suffix: int | None = Field(default=None, ge=0, description="用户名唯一数字后缀")
     password_hash: str | None = Field(default=None, min_length=6, max_length=255, description="密码哈希值")
     last_login_time: datetime | None = Field(default=None, description="最后登录时间")
-    last_login_ip: IPvAnyAddress | None = Field(default=None, description="最后登录IP")
+    last_login_ip: str | None = Field(default=None, description="最后登录IP")
     session_token: str | None = Field(default=None, description="Session令牌")
 
     @model_validator(mode="after")
@@ -739,7 +739,7 @@ class TableUserLoginLogsSchema(StrictBaseModel):
     login_id: int 
     user_id: int 
     login_time: datetime 
-    ip_address: IPvAnyAddress
+    ip_address: str
     agent: str 
     device: str 
     os: str 
@@ -751,7 +751,7 @@ class TableUserLoginLogsSchema(StrictBaseModel):
 class TableUserLoginLogsInsertSchema(InsertSchema):
     """ 用户登录日志 Insert Schema """
     user_id: int = Field(..., ge=0, description="用户ID（外键）")
-    ip_address: IPvAnyAddress = Field(..., description="登录IP地址")
+    ip_address: str = Field(..., description="登录IP地址")
     agent: str = Field(..., description="浏览器代理")
     device: str = Field(..., description="登录设备")
     os: str = Field(..., description="操作系统")
@@ -913,7 +913,7 @@ class TableUserAccountActionsInsertSchema(InsertSchema):
     """ 用户账户行为 Insert Schema """
     user_id: int = Field(..., ge=0, description="用户ID（外键）")
     action_type: UserAccountActionType = Field(..., description="用户账户操作类型")
-    action_details: str = Field(..., max_length=512, description="用户账户操作细节")
+    action_detail: str = Field(..., max_length=512, description="用户账户操作细节")
     
 
 class TableUserAccountActionsDeleteWhereSchema(DeleteWhereSchema):
