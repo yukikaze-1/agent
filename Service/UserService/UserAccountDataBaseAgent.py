@@ -21,11 +21,11 @@ from pydantic import BaseModel, Field, EmailStr
 from Module.Utils.Logger import setup_logger
 from Module.Utils.ConfigTools import load_config, validate_config
 from Module.Utils.FormatValidate import is_email, is_account_name
-from Module.Utils.Database.SQLBuilder import SQLBuilder
-from Module.Utils.Database.SQLExecutor import SQLExecutor
+from Service.UserService.SQLBuilder import SQLBuilder
+from Service.UserService.SQLExecutor import SQLExecutor
 from Module.Utils.ToolFunctions import retry
 
-from Module.Utils.Database.MySQLServiceRequestType import (
+from Service.MySQLService.schema.request import (
     MySQLServiceConnectRequest,
     MySQLServiceStaticTransactionRequest,
     MySQLServiceStaticTransactionSQL,
@@ -35,7 +35,7 @@ from Module.Utils.Database.MySQLServiceRequestType import (
     MySQLServiceDynamicTransactionRollbackRequest,
     MySQLServiceDynamicTransactionExecuteSQLRequest
 )
-from Module.Utils.Database.MySQLServiceResponseType import (
+from Service.MySQLService.schema.response import (
     MySQLServiceConnectDatabaseResponse, 
     MySQLServiceInsertResponse, 
     MySQLServiceUpdateResponse, 
@@ -46,7 +46,7 @@ from Module.Utils.Database.MySQLServiceResponseType import (
     MySQLServiceDynamicTransactionRollbackResponse,
     MySQLServiceDynamicTransactionExecuteSQLResponse
 )
-from Module.Utils.Database.UserAccountDatabaseSQLParameterSchema import (
+from Service.UserService.UserAccountDatabaseSQLParameterSchema import (
     get_allowed_query_select_fields,
     InsertSchema,
     QueryWhereSchema,
@@ -132,7 +132,7 @@ class UserAccountDataBaseAgent():
         self.logger = logger or setup_logger(name="UserAccountDataBaseAgent", log_path="InternalModule")
         
         # 加载环境变量和配置
-        self.env_vars = dotenv_values("/home/yomu/agent/Module/Utils/Database/.env")
+        self.env_vars = dotenv_values("/home/yomu/agent/Service/UserService/.env")
         self.config_path = self.env_vars.get("USER_ACCOUNT_DATABASE_AGENT_CONFIG_PATH","")
         self.config = load_config(config_path=self.config_path, config_name='UserAccountDataBaseAgent', logger=self.logger)
         

@@ -820,7 +820,7 @@ class TableUserSettingsSchema(StrictBaseModel):
     user_id: int
     language: UserLanguage 
     configure: dict 
-    notification_setting: dict
+    notification_setting: str
     created_at: datetime 
     updated_at: datetime 
 
@@ -837,7 +837,7 @@ class TableUserSettingsUpdateSetSchema(UpdateSetSchema):
     """ 用户自定义设置 Update SET Schema """
     language: UserLanguage | None = Field(default=None, description="用户语言偏好")
     configure: dict | None = Field(default=None, description="用户配置")
-    notification_setting: dict | None = Field(default=None, description="用户通知设置")
+    notification_setting: str | None = Field(default=None, description="用户通知设置")
     
     @model_validator(mode="after")
     def at_least_one_field_must_be_present(self) -> 'TableUserSettingsUpdateSetSchema':

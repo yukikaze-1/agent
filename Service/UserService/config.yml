@@ -1,3 +1,14 @@
+# UserAccountDataBaseAgent配置
+UserAccountDataBaseAgent:
+  mysql_host: 127.0.0.1
+  mysql_port: 3306
+  mysql_service_url: "http://127.0.0.1:20050"
+  mysql_user: "root"
+  mysql_password: "scgy19971205wq"
+  database: "userinfo"
+  charset: "utf8mb4"
+  
+
 # 用户服务配置
 UserService:
   # 微服务本身的地址和端口

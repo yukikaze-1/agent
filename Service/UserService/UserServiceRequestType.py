@@ -8,8 +8,10 @@
 """
     各种请求的格式定义
 """
-from typing import Dict
+from typing import Dict, Optional
 from pydantic import BaseModel, EmailStr, constr, Field, model_validator
+
+from Service.UserService.UserAccountDatabaseSQLParameterSchema import UserLanguage
 
 
 # 各种请求的格式要求定义
@@ -52,21 +54,20 @@ class ModifyPasswordRequest(StrictBaseModel):
 class ModifyProfileRequest(StrictBaseModel):
     """ 用户修改个人信息 request"""
     session_token: str = Field(..., description="session token")
-    user_name: str | None = Field(..., description="用户名")
-    profile_picture_url: str | None = Field(..., description="头像URL")
-    signature: str | None = Field(..., description="个性签名")
+    user_name: Optional[str] = Field(default=None, description="用户名")
+    profile_picture_url: Optional[str] = Field(default=None, description="头像URL")
+    signature: Optional[str] = Field(default=None, description="个性签名")
     
     
 class ModifySettingRequest(StrictBaseModel):
     """ 用户修改设置 request"""
     session_token: str = Field(..., description="session token")
-    language: str | None = Field(..., description="语言")
-    configure: Dict | None = Field(..., description="用户配置")
-    notification_setting: Dict | None = Field(..., description="通知设置")
+    language: Optional[UserLanguage] = Field(default=None, description="语言")
+    configure: Optional[str] = Field(default=None, description="用户配置 (JSON string)")
 
 
 class ModifyNotificationSettingsRequest(StrictBaseModel):
     """ 用户修改通知设置 request"""
     session_token: str = Field(..., description="session token")
-    notifications_enabled: bool | None = Field(..., description="是否启用通知")
-    settings_json: Dict | None = Field(..., description="通知设定JSON")
+    notifications_enabled: Optional[bool] = Field(default=None, description="是否启用通知")
+    settings_json: Optional[str] = Field(default=None, description="通知设定JSON (string)")

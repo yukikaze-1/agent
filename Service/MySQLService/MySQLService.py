@@ -1,3 +1,9 @@
+# Project:      Agent
+# Author:       yomu
+# Time:         2024/12/12
+# Version:      0.1
+# Description:  MySQLService definition
+
 """
     MySQL的代理
     提供MySQL的封装
@@ -32,10 +38,10 @@ from Module.Utils.FastapiServiceTools import (
     unregister_service_from_consul
 )
 
-from Module.Utils.Database.MySQLServiceResponseType import (
+from Service.MySQLService.schema.response import (
     MySQLServiceResponseErrorCode,
     MySQLServiceErrorDetail,
-    MySQLServiceConnectDatabaseResponseData,
+    MySQLServiceConnectDatabaseResponseData,    
     MySQLServiceConnectDatabaseResponse,
     MySQLServiceQueryResponseData,
     MySQLServiceQueryResponse,
@@ -53,7 +59,7 @@ from Module.Utils.Database.MySQLServiceResponseType import (
     MySQLServiceDynamicTransactionCommitResponse,
     MySQLServiceDynamicTransactionRollbackResponse,
 )
-from Module.Utils.Database.MySQLServiceRequestType import (
+from Service.MySQLService.schema.request import (
     MySQLServiceSQLRequest, 
     MySQLServiceConnectRequest,
     MySQLServiceStaticTransactionSQL,
@@ -63,6 +69,7 @@ from Module.Utils.Database.MySQLServiceRequestType import (
     MySQLServiceDynamicTransactionRollbackRequest,
     MySQLServiceDynamicTransactionExecuteSQLRequest
 )
+
 
 class MySQLServiceDynamicTransactionSession:
     """  动态事务会话类，用于管理 MySQL 事务。"""
@@ -127,7 +134,7 @@ class MySQLService:
         
         # 初始化 FastAPI 应用，使用生命周期管理
         self.app = FastAPI(lifespan=self.lifespan)
-        
+                
         # 设置路由
         self.setup_routes()
         

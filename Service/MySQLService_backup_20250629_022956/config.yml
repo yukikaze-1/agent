@@ -1,0 +1,24 @@
+# UserAccountDataBaseAgent配置
+UserAccountDataBaseAgent:
+  mysql_host: 127.0.0.1
+  mysql_port: 3306
+  mysql_service_url: "http://127.0.0.1:20050"
+  mysql_user: "root"
+  mysql_password: "scgy19971205wq"
+  database: "userinfo"
+  charset: "utf8mb4"
+
+# MySQLService配置
+MySQLService:
+  host: 127.0.0.1
+  port: 20050
+
+  # Consul 服务器的 URL，包括协议前缀
+  consul_url: "http://127.0.0.1:8500"
+
+  # 健康检查的 URL
+  health_check_url: "http://127.0.0.1:20050/health"  # 可选，默认会自动生成
+
+  # 当前微服务的名称和唯一标识符
+  service_name: "MySQLService"
+  service_id: "MySQLService-127.0.0.1:20050"  # 可选，默认会自动生成

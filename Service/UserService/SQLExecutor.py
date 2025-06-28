@@ -10,7 +10,7 @@
 import httpx
 from typing import Dict, List, Any
 from logging import Logger
-from Module.Utils.Database.MySQLServiceRequestType import MySQLServiceSQLRequest
+from Service.MySQLService.schema.request import MySQLServiceSQLRequest
 
 class SQLExecutor:
     """
