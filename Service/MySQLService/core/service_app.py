@@ -94,20 +94,20 @@ class MySQLServiceApp:
             self.logger.info("Async HTTP Client initialized")
 
             # 注册服务到Consul（目前注释掉，可根据需要启用）
-            # self.logger.info("Registering service to Consul...")
-            # tags = ["MySQLService"]
-            # await register_service_to_consul(
-            #     consul_url=self.consul_url,
-            #     client=self.client,
-            #     logger=self.logger,
-            #     service_name=self.service_name,
-            #     service_id=self.service_id,
-            #     address=self.host,
-            #     port=self.port,
-            #     tags=tags,
-            #     health_check_url=self.health_check_url
-            # )
-            # self.logger.info("Service registered to Consul")
+            self.logger.info("Registering service to Consul...")
+            tags = ["MySQLService"]
+            await register_service_to_consul(
+                consul_url=self.consul_url,
+                client=self.client,
+                logger=self.logger,
+                service_name=self.service_name,
+                service_id=self.service_id,
+                address=self.host,
+                port=self.port,
+                tags=tags,
+                health_check_url=self.health_check_url
+            )
+            self.logger.info("Service registered to Consul")
 
             yield  # 应用正常运行
 
@@ -117,17 +117,17 @@ class MySQLServiceApp:
 
         finally:                
             # 注销服务从Consul（目前注释掉，可根据需要启用）
-            # try:
-            #     self.logger.info("Deregistering service from Consul...")
-            #     await unregister_service_from_consul(
-            #         consul_url=self.consul_url,
-            #         client=self.client,
-            #         logger=self.logger,
-            #         service_id=self.service_id
-            #     )
-            #     self.logger.info("Service deregistered from Consul")
-            # except Exception as e:
-            #     self.logger.error(f"Error while deregistering service: {e}")    
+            try:
+                self.logger.info("Deregistering service from Consul...")
+                await unregister_service_from_consul(
+                    consul_url=self.consul_url,
+                    client=self.client,
+                    logger=self.logger,
+                    service_id=self.service_id
+                )
+                self.logger.info("Service deregistered from Consul")
+            except Exception as e:
+                self.logger.error(f"Error while deregistering service: {e}")    
              
             # 清理资源
             self.cleanup_resources()

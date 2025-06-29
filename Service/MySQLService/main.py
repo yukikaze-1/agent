@@ -1,6 +1,6 @@
 
 
-from Service.MySQLService.MySQLService_refactored import MySQLService
+from Service.MySQLService.MySQLService import MySQLService
 
 
 

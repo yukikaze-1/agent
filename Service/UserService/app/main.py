@@ -20,6 +20,10 @@ from Service.UserService.app.services.user_profile_service import UserProfileSer
 from Service.UserService.app.services.user_file_service import UserFileService
 from Service.UserService.app.api.v1.user_controller import UserController
 from Module.Utils.Logger import setup_logger
+from Module.Utils.FastapiServiceTools import (
+    register_service_to_consul,
+    unregister_service_from_consul
+)
 
 
 class UserServiceApp:
@@ -135,12 +139,55 @@ class UserServiceApp:
         except Exception as e:
             self.logger.warning(f"Failed to initialize database connections: {e}")
         
+        # 注册服务到Consul
+        try:
+            # 确保Consul URL包含协议前缀
+            consul_url = settings.consul_url
+            if not consul_url.startswith("http://") and not consul_url.startswith("https://"):
+                consul_url = "http://" + consul_url
+                self.logger.info(f"Consul URL adjusted to include http://: {consul_url}")
+            
+            self.logger.info("Registering service to Consul...")
+            tags = [settings.service_name, "UserService"]
+            await register_service_to_consul(
+                consul_url=consul_url,
+                client=self.client,
+                logger=self.logger,
+                service_name=settings.service_name,
+                service_id=settings.service_id,
+                address=settings.host,
+                port=settings.port,
+                tags=tags,
+                health_check_url=settings.health_check_url
+            )
+            self.logger.info("Service registered to Consul successfully")
+        except Exception as e:
+            self.logger.error(f"Failed to register service to Consul: {e}")
+            # 不因为Consul注册失败而停止服务启动
+        
         self.logger.info(f"{settings.service_name}已成功启动 {settings.host}:{settings.port}")
         
         yield  # 应用程序运行中
         
         # 关闭阶段
         self.logger.info(f"正在关闭 {settings.service_name}")
+        
+        # 从Consul注销服务
+        try:
+            consul_url = settings.consul_url
+            if not consul_url.startswith("http://") and not consul_url.startswith("https://"):
+                consul_url = "http://" + consul_url
+                
+            self.logger.info("Deregistering service from Consul...")
+            await unregister_service_from_consul(
+                consul_url=consul_url,
+                client=self.client,
+                logger=self.logger,
+                service_id=settings.service_id
+            )
+            self.logger.info("Service deregistered from Consul successfully")
+        except Exception as e:
+            self.logger.error(f"Error while deregistering service from Consul: {e}")
         
         # 清理数据库连接
         if self.user_database_manager:

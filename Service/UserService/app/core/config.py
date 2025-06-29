@@ -33,6 +33,10 @@ class Settings:
         # Consul服务发现设置
         self.consul_url: str = os.getenv("CONSUL_URL", "http://127.0.0.1:8500")
         
+        # 服务注册信息
+        self.service_id: str = os.getenv("SERVICE_ID", f"{self.service_name}-{self.host}:{self.port}")
+        self.health_check_url: str = os.getenv("HEALTH_CHECK_URL", f"http://{self.host}:{self.port}/health")
+        
         # 文件上传设置
         self.upload_max_size: int = int(os.getenv("UPLOAD_MAX_SIZE", str(1024 * 1024 * 1024)))  # 默认1GB
         self.file_storage_path: str = os.getenv("FILE_STORAGE_PATH", "/home/yomu/agent/Users/Files")
