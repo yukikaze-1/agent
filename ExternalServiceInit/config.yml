@@ -1,13 +1,13 @@
-# 核心LLM
-    # 采用Ollama的方式默认使用llama3.2
+# ExternalServiceInit 配置文件
+# 外部服务管理器专用配置
+
+# 核心LLM配置
 LLM_model:
   name: llama3.2 # ollama运行的模型名称(必须在ollama中支持并且可以运行的)
 
-############################################################################################
-# 外部服务
-
-# 要启动的基础外部服务
+# 外部服务配置
 external_services:
+  # 要启动的基础外部服务
   base_services:
   
     - Consul:
@@ -23,6 +23,8 @@ external_services:
         run_in_background: true
         is_base: true
         log_file: "Consul.log"
+        startup_timeout: 30
+        health_check_url: "http://127.0.0.1:8500/v1/status/leader"
 
     - ollama_server:
         script: "ollama"
@@ -33,6 +35,8 @@ external_services:
         run_in_background: true
         is_base: true
         log_file: "ollama_server.log"
+        startup_timeout: 60
+        health_check_url: "http://127.0.0.1:11434/api/tags"
 
     - GPTSoVits_server:
         script: "/home/yomu/GPTSoVits/GPTSoVits_api.py"
@@ -43,6 +47,8 @@ external_services:
         run_in_background: true
         is_base: true
         log_file: "GPTSoVits_server.log"
+        startup_timeout: 90
+        health_check_url: "http://127.0.0.1:9880/health"
 
     - SenseVoice_server:
         script: "/home/yomu/SenseVoice/SenseVoice_server.py"
@@ -53,6 +59,8 @@ external_services:
         run_in_background: true
         is_base: true
         log_file: "SenseVoice_server.log"
+        startup_timeout: 60
+        health_check_url: "http://127.0.0.1:20042/health"
 
     - MicroServiceGateway:
         script: "/home/yomu/agent/Service/Gateway/MicroServiceGateway.py"
@@ -63,6 +71,9 @@ external_services:
         run_in_background: true
         is_base: true
         log_file: "MicroServiceGateway.log"
+        startup_timeout: 30
+        health_check_url: "http://127.0.0.1:20000/health"
+        dependencies: ["Consul"]
 
     - APIGateway:
         script: "/home/yomu/agent/Service/Gateway/APIGateway.py"
@@ -73,6 +84,9 @@ external_services:
         run_in_background: true
         is_base: true
         log_file: "APIGateway.log"
+        startup_timeout: 30
+        health_check_url: "http://127.0.0.1:20001/health"
+        dependencies: ["MicroServiceGateway"]
 
     - OllamaAgent:
         script: "/home/yomu/agent/Module/LLM/OllamaAgent.py"
@@ -83,6 +97,9 @@ external_services:
         run_in_background: true
         is_base: true
         log_file: "OllamaAgent.log"
+        startup_timeout: 30
+        health_check_url: "http://127.0.0.1:20030/health"
+        dependencies: ["ollama_server"]
 
     - GPTSovitsAgent:
         script: "/home/yomu/agent/Module/TTS/GPTSoVits/GPTSoVitsAgent.py"
@@ -93,19 +110,24 @@ external_services:
         run_in_background: true
         is_base: true
         log_file: "GPTSovitsAgent.log"
+        startup_timeout: 30
+        health_check_url: "http://127.0.0.1:20040/health"
+        dependencies: ["GPTSoVits_server"]
 
-    - MySQLAgent:
-        script: "/home/yomu/agent/Module/Utils/Database/MySQLAgent.py"
+    - MySQLService:
+        script: "/home/yomu/agent/Service/MySQLService/main.py"
         service_name: "MySQLAgent"
         conda_env: "/home/yomu/data/anaconda3/envs/agent"
         args: []
         use_python: true
         run_in_background: true
         is_base: true
-        log_file: "MySQLAgent.log"
+        log_file: "MySQLService.log"
+        health_check_url: "http://127.0.0.1:20050/health"
+        startup_timeout: 30
 
     - UserService:
-        script: "/home/yomu/agent/Service/Other/UserService.py"
+        script: "/home/yomu/agent/Service/UserService/app/main.py"
         service_name: "UserService"
         conda_env: "/home/yomu/data/anaconda3/envs/agent"
         args: []
@@ -113,6 +135,9 @@ external_services:
         run_in_background: true
         is_base: true
         log_file: "UserService.log"
+        startup_timeout: 30
+        health_check_url: "http://127.0.0.1:20010/health"
+        dependencies: ["MySQLAgent"]
 
     - ChatModule:
         script: "/home/yomu/agent/Module/Chat/ChatModule.py"
@@ -123,6 +148,9 @@ external_services:
         run_in_background: true
         is_base: true
         log_file: "ChatModule.log"
+        startup_timeout: 30
+        health_check_url: "http://127.0.0.1:20060/health"
+        dependencies: ["OllamaAgent", "GPTSovitsAgent", "SenseVoiceAgent"]
 
     - SenseVoiceAgent:
         script: "/home/yomu/agent/Module/STT/SenseVoice/SenseVoiceAgent.py"
@@ -133,6 +161,9 @@ external_services:
         run_in_background: true
         is_base: true
         log_file: "SenseVoiceAgent.log"
+        startup_timeout: 30
+        health_check_url: "http://127.0.0.1:20041/health"
+        dependencies: ["SenseVoice_server"]
 
     - PromptOptimizer:
         script: "/home/yomu/agent/Module/Input/PromptOptimizer.py"
@@ -143,43 +174,79 @@ external_services:
         run_in_background: true
         is_base: true
         log_file: "PromptOptimizer.log"
+        health_check_url: "http://127.0.0.1:20022/health"
+        startup_timeout: 30
 
   # (可选)启动的optional外部服务
   optional_services:
+    # 示例可选服务配置
+    # - YOLOAgent:
+    #     script: "/home/yomu/agent/Module/Vision/YOLO/YOLOAgent.py"
+    #     service_name: "YOLOAgent"
+    #     conda_env: "/home/yomu/data/anaconda3/envs/yolo"
+    #     args: []
+    #     use_python: true
+    #     run_in_background: true
+    #     is_base: false
+    #     log_file: "YOLOAgent.log"
+    #     startup_timeout: 60
     
   # 目前已支持的外部服务
   support_services:
     - ollama
     - GPTSoVits
     - SenseVoice
+    - Consul
+    - MicroServiceGateway
+    - APIGateway
+    - OllamaAgent
+    - GPTSovitsAgent
+    - MySQLService
+    - UserService
+    - ChatModule
+    - SenseVoiceAgent
+    - PromptOptimizer
+    
   # 待支持的外部服务
   #_services:
   #  - yolo11 
+  
+  # 外部服务器 IP 地址和端口配置
   # TODO 后期修改0.0.0.0，让其只监听本地
-  # 外部服务器ipaddress---port
   ip_port:
     - ollama_server: ["127.0.0.1","11434"]
     - GPTSoVits: ["127.0.0.1","9880"]
-    - SenseVoice: ["127.0.0.1","9890"]
-
-############################################################################################
-
-### 内部模块
-
-# 要启动的基础模块
-internal_modules:
-  base_modules: 
-    - GPTSoVitsAgent: Module.TTS.GPTSoVits
-    - SenseVoiceAgent: Module.STT.SenseVoice
-  # (可选)启动的optional功能模块
-  optional_modules:
+    - SenseVoice: ["127.0.0.1","20042"]
+    - Consul: ["127.0.0.1","8500"]
+    - MicroServiceGateway: ["127.0.0.1","20000"]
+    - APIGateway: ["127.0.0.1","20001"]
+    - OllamaAgent: ["127.0.0.1","20030"]
+    - GPTSovitsAgent: ["127.0.0.1","20040"]
+    - MySQLService: ["127.0.0.1","20050"]
+    - UserService: ["127.0.0.1","20010"]
+    - ChatModule: ["127.0.0.1","20060"]
+    - SenseVoiceAgent: ["127.0.0.1","20041"]
+    - PromptOptimizer: ["127.0.0.1","20022"]
     
-  # 目前已支持的内部模块
-  support_modules:
-    - GPTSoVitsAgent
-    - SenseVoiceAgent
-  # 待支持的内部模块
-  #_module:
-  #  - yolo11: Module.Utils.yolo11
+# ############################################################################################
+# 重试配置
+retry_config:
+  max_retries: 3
+  base_delay: 1.0
+  max_delay: 60.0
+  backoff_factor: 2.0
 
-############################################################################################
+# 健康检查配置
+health_check:
+  default_timeout: 30
+  check_interval: 2
+  
+# 日志配置
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  
+# 进程管理配置
+process_management:
+  graceful_shutdown_timeout: 10
+  force_kill_timeout: 5

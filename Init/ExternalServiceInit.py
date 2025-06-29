@@ -134,7 +134,7 @@ class ExternalServiceManager:
         """
         base_success, base_fail =  self._init_base_services()
         optional_success, optional_fail =  self._init_optional_services()
-        return base_success, optional_fail 
+        return base_success, optional_success  # 修复：应该返回 optional_success 而不是 optional_fail 
     
     
     def _get_services(self, isBaseServices:bool)-> List[Dict]:
@@ -323,10 +323,10 @@ class ExternalServiceManager:
         started_base_services = {service for service, _ in self.base_processes}
         
         # 过滤出 未启动的且要start的 optional services
-        optional_services_to_start = [service for service in services if service not in started_optional_services] 
-        base_services_to_start = [service for service in services if service not in started_base_services] 
+        optional_services_to_start = [service for service in services if service.get("service_name") not in started_optional_services] 
+        base_services_to_start = [service for service in services if service.get("service_name") not in started_base_services] 
         
-        if optional_services_to_start is None and base_services_to_start is None:
+        if not optional_services_to_start and not base_services_to_start:
             self.logger.info("No services need to start.Please check the param:services")
             return (False, [], [])
         
@@ -348,9 +348,9 @@ class ExternalServiceManager:
         started_optional_services = {service for service, _ in self.optional_processes}
         
         # 过滤出 未启动的且要start的 optional services
-        services_to_start = [service for service in services if service not in started_optional_services] 
+        services_to_start = [service for service in services if service.get("service_name") not in started_optional_services] 
         
-        if services_to_start is None:
+        if not services_to_start:
             self.logger.info("No optional services need to start.Please check the param:services")
             return (False, [], [])
         
@@ -741,6 +741,85 @@ class ExternalServiceManager:
         }
         return ret
 
+    def check_service_health(self, service_name: str, timeout: int = 30) -> bool:
+        """
+        检查服务是否真正启动成功
+        
+        :param service_name: 服务名称
+        :param timeout: 超时时间（秒）
+        :return: 服务是否健康
+        """
+        import time
+        try:
+            import requests
+        except ImportError:
+            self.logger.warning("requests module not available, skipping HTTP health checks")
+            return True
+        
+        # 根据服务类型定义不同的健康检查策略
+        health_check_configs = {
+            "ollama_server": {"url": "http://127.0.0.1:11434/api/tags", "method": "GET"},
+            "GPTSoVits_server": {"url": "http://127.0.0.1:9880/health", "method": "GET"},
+            "SenseVoice_server": {"url": "http://127.0.0.1:8001/health", "method": "GET"},
+            "Consul": {"url": "http://127.0.0.1:8500/v1/status/leader", "method": "GET"}
+        }
+        
+        config = health_check_configs.get(service_name)
+        if not config:
+            self.logger.warning(f"No health check config for service: {service_name}")
+            return True  # 假设服务正常
+        
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            try:
+                response = requests.get(config["url"], timeout=5)
+                if response.status_code == 200:
+                    self.logger.info(f"Service {service_name} health check passed")
+                    return True
+            except requests.RequestException:
+                pass
+            
+            time.sleep(2)
+        
+        self.logger.error(f"Service {service_name} health check failed after {timeout}s")
+        return False
+    
+    def _start_service_with_retry(self, service: Dict, max_retries: int = 3) -> Tuple[bool, Tuple[str, int]]:
+        """
+        带重试机制的服务启动
+        
+        :param service: 服务配置
+        :param max_retries: 最大重试次数
+        :return: (启动成功, (服务名, PID))
+        """
+        service_name = service.get("service_name", "Unknown")
+        
+        for attempt in range(max_retries + 1):
+            try:
+                success, result = self._start_single_service(service)
+                
+                if success:
+                    # 进行健康检查
+                    if self.check_service_health(service_name):
+                        self.logger.info(f"Service {service_name} started successfully on attempt {attempt + 1}")
+                        return True, result
+                    else:
+                        self.logger.warning(f"Service {service_name} started but health check failed on attempt {attempt + 1}")
+                        # 停止失败的服务
+                        self._stop_single_service(service_name, service.get("is_base", False))
+                        success = False
+                
+                if attempt < max_retries:
+                    wait_time = 2 ** attempt  # 指数退避
+                    self.logger.info(f"Retrying service {service_name} in {wait_time}s (attempt {attempt + 1}/{max_retries})")
+                    import time
+                    time.sleep(wait_time)
+                    
+            except Exception as e:
+                self.logger.error(f"Service {service_name} start attempt {attempt + 1} failed with error: {e}")
+                
+        self.logger.error(f"Service {service_name} failed to start after {max_retries + 1} attempts")
+        return False, (service_name, -1)
 
 def main():
     logging.info("Now initialize the service")
