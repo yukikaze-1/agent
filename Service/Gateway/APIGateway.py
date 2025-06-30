@@ -49,6 +49,10 @@ class APIGateway:
         self.config_path = self.env_vars.get("API_GATEWAY_CONFIG_PATH","") 
         self.config: Dict = load_config(config_path=self.config_path, config_name='APIGateway', logger=self.logger)
         
+        # 超时配置
+        self.request_timeout = self.config.get("request_timeout", 10.0)
+        self.read_timeout = self.config.get("read_timeout", 60.0)
+        
         # 初始化 httpx.AsyncClient
         self.client: httpx.AsyncClient # 在lifespan中初始化
         
@@ -107,8 +111,15 @@ class APIGateway:
         # 检查 routes 中的每个 URL 是否包含协议前缀
         for server, url in self.routes.items():
             if not url.startswith("http://") and not url.startswith("https://"):
-                self.logger.error(f"Route URL for '{server}' must start with 'http://' or 'https://'. Current URL: {url}")
-                raise ValueError(f"Route URL for '{server}' must start with 'http://' or 'https://'.")      
+                self.logger.warning(f"Route URL for '{server}' will be adjusted to include http://. Current URL: {url}")
+        
+        # 验证超时配置
+        if self.request_timeout <= 0:
+            self.logger.warning("Invalid request_timeout, using default 10.0")
+            self.request_timeout = 10.0
+        if self.read_timeout <= 0:
+            self.logger.warning("Invalid read_timeout, using default 60.0") 
+            self.read_timeout = 60.0      
         
         
     @asynccontextmanager
@@ -117,7 +128,7 @@ class APIGateway:
         # 应用启动时执行
         self.client = httpx.AsyncClient(
             limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
-            timeout=httpx.Timeout(10.0, read=60.0)
+            timeout=httpx.Timeout(self.request_timeout, read=self.read_timeout)
         )
         self.logger.info("Async HTTP Client Initialized")
         
@@ -196,12 +207,12 @@ class APIGateway:
             return await self._usr_service_proxy(request, prefix, path)
 
 
-        # TODO 这个usr_ping_serve函数名字要改下，转发给微服务网关
+        # 通用选项服务，转发给微服务网关
         @self.app.api_route("/option/{path:path}", methods=["GET", "POST"])
-        async def usr_ping_server(request: Request, path: str):
+        async def option_service_proxy(request: Request, path: str):
             """路由到MicroServiceGateway"""
             prefix = "/option"
-            return await self._usr_ping_server(request, prefix, path)
+            return await self._option_service_proxy(request, prefix, path)
         
         
         # 用户输入
@@ -241,15 +252,18 @@ class APIGateway:
         if not is_instance_healthy(service_name=service_name, instance=instance, failure_counts=self.failure_counts, logger=self.logger):
             self.logger.warning(f"Service instance {instance['address']}:{instance['port']} is unhealthy.")
             raise HTTPException(status_code=503, detail=f"Service instance {instance['address']}:{instance['port']} is unhealthy")
-        target_url = f"{instance['address']}:{instance['port']}/{path}"
+        target_url = f"http://{instance['address']}:{instance['port']}/{path}"
+        self.logger.info(f"Forwarding {request.method} request to {target_url}")
         try:
             response = await self.client.request(
                 method=request.method,
                 url=target_url,
                 headers=self.filter_headers(request.headers),
                 content=await request.body(),
-                timeout=httpx.Timeout(10.0, read=60.0)
+                timeout=httpx.Timeout(self.request_timeout, read=self.read_timeout)
             )
+            # 检查响应状态
+            response.raise_for_status()
             reset_failure(service_name=service_name, instance=instance, failure_counts=self.failure_counts, logger=self.logger)
             return Response(
                 content=response.content,
@@ -288,8 +302,8 @@ class APIGateway:
         return await self.forward(request, prefix, path, server)
     
     
-    # 用户ping服务器，转发给微服务网关
-    async def _usr_ping_server(self, request: Request, prefix: str, path: str):
+    # 通用选项服务，转发给微服务网关
+    async def _option_service_proxy(self, request: Request, prefix: str, path: str):
         server = "MicroServiceGateway"
         return await self.forward(request, prefix, path, server)
     
@@ -315,8 +329,8 @@ class APIGateway:
     
     async def forward(self, request: Request, prefix: str, path: str, server: str):
         """实际转发函数"""
-        # 路径编码，防止路径遍历攻击
-        sanitized_path = quote(path, safe='')
+        # 路径编码，防止路径遍历攻击，但保留正常的路径分隔符
+        sanitized_path = quote(path, safe='/')
 
         # url拼接
         user_service_base_url = self.routes.get(server, '')
@@ -334,7 +348,7 @@ class APIGateway:
                 url=user_service_url,
                 headers=self.filter_headers(request.headers),
                 content=await request.body(),
-                timeout=httpx.Timeout(10.0, read=60.0)
+                timeout=httpx.Timeout(self.request_timeout, read=self.read_timeout)
             )
             # 检查响应状态
             forwarded_response.raise_for_status()

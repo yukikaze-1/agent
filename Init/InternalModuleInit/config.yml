@@ -1,0 +1,46 @@
+# 内部模块初始化配置文件
+
+internal_modules:
+  # 基础模块配置（必须启动的模块）
+  base_modules: 
+    - GPTSoVitsAgent: Module.TTS.GPTSoVits.GPTSoVitsAgent
+    - SenseVoiceAgent: Module.STT.SenseVoice.SenseVoiceAgent
+
+  # 可选模块配置（可以选择性启动的模块）
+  optional_modules:
+    - OllamaAgent: Module.LLM.OllamaAgent
+    # - VisionAgent: Module.Vision.VisionAgent
+    - PromptOptimizer: Module.Input.PromptOptimizer
+
+  # 目前已支持的内部模块
+  support_modules:
+    - GPTSoVitsAgent
+    - SenseVoiceAgent
+    - OllamaAgent
+    - ChatModule
+    - PromptOptimizer
+    # - VisionAgent
+
+  # 模块依赖关系配置（可选）
+  dependencies:
+    # 示例：OllamaAgent 依赖于 GPTSoVitsAgent 和 SenseVoiceAgent
+    OllamaAgent:
+      - GPTSoVitsAgent
+      - SenseVoiceAgent
+    
+    # 示例：VisionAgent 依赖于 SenseVoiceAgent
+    VisionAgent:
+      - SenseVoiceAgent
+
+  # 健康检查配置（可选）
+  health_check:
+    interval: 30  # 健康检查间隔（秒）
+    timeout: 5    # 健康检查超时（秒）
+    retries: 3    # 重试次数
+
+  # 启动配置（可选）
+  startup:
+    timeout: 60           # 模块启动超时（秒）
+    retry_count: 3        # 启动失败重试次数
+    retry_delay: 5        # 重试间隔（秒）
+    continue_on_failure: true  # 某个模块启动失败时是否继续启动其他模块

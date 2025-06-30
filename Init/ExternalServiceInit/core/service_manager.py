@@ -14,18 +14,43 @@ from dotenv import dotenv_values
 from Module.Utils.Logger import setup_logger
 from Module.Utils.ConfigTools import load_config
 
-from ..exceptions import (
-    ServiceStartupError, 
-    ServiceConfigError, 
-    ServiceNotFoundError,
-    ServiceStopError
-)
-from ..utils import (
-    ServiceConfigValidator,
-    ServiceHealthChecker,
-    ProcessManager,
-    RetryManager
-)
+# 使用兼容的导入方式
+try:
+    # 尝试相对导入（作为包使用时）
+    from ..exceptions import (
+        ServiceStartupError, 
+        ServiceConfigError, 
+        ServiceNotFoundError,
+        ServiceStopError
+    )
+    from ..utils import (
+        ServiceConfigValidator,
+        ServiceHealthChecker,
+        ProcessManager,
+        RetryManager
+    )
+except ImportError:
+    # 如果相对导入失败，使用绝对导入（直接导入时）
+    import sys
+    import os
+    
+    # 添加 ExternalServiceInit 目录到路径
+    current_dir = os.path.dirname(os.path.dirname(__file__))
+    if current_dir not in sys.path:
+        sys.path.insert(0, current_dir)
+    
+    from exceptions import (
+        ServiceStartupError, 
+        ServiceConfigError, 
+        ServiceNotFoundError,
+        ServiceStopError
+    )
+    from utils import (
+        ServiceConfigValidator,
+        ServiceHealthChecker,
+        ProcessManager,
+        RetryManager
+    )
 
 
 class ExternalServiceManager:
@@ -64,8 +89,8 @@ class ExternalServiceManager:
         """加载配置文件"""
         try:
             # 优先使用 ExternalServiceInit 目录下的配置文件
-            external_service_config = "/home/yomu/agent/ExternalServiceInit/config.yml"
-            external_service_env = "/home/yomu/agent/ExternalServiceInit/.env"
+            external_service_config = "/home/yomu/agent/Init/ExternalServiceInit/config.yml"
+            external_service_env = "/home/yomu/agent/Init/ExternalServiceInit/.env"
             
             # 加载环境变量
             if os.path.exists(external_service_env):
@@ -76,20 +101,26 @@ class ExternalServiceManager:
             if os.path.exists(external_service_config):
                 # 使用专门的外部服务配置文件
                 with open(external_service_config, 'r', encoding='utf-8') as f:
-                    self.config = yaml.safe_load(f)
+                    full_config = yaml.safe_load(f)
+                    self.config = full_config
                 self.config_path = external_service_config
                 self.logger.info(f"Using dedicated external service config: {external_service_config}")
+                # 从完整配置中获取external_services部分
+                external_services_config = self.config.get('external_services', {})
             else:
                 # 回退到原来的配置方式
                 self.config_path = self.env_vars.get("INIT_CONFIG_PATH", "")
-                self.config: Dict = load_config(
+                # load_config 返回的是 external_services 子配置
+                external_services_config = load_config(
                     config_path=self.config_path, 
                     config_name='external_services', 
                     logger=self.logger
                 )
+                # 为了保持一致性，将其包装在完整配置结构中
+                self.config = {'external_services': external_services_config}
                 self.logger.warning("Using fallback configuration from Init directory")
             
-            self.support_services: List[str] = self.config.get('external_services', {}).get('support_services', [])
+            self.support_services: List[str] = external_services_config.get('support_services', [])
             
             # 设置日志目录
             # 优先从配置文件获取，否则使用环境变量
@@ -337,15 +368,60 @@ class ExternalServiceManager:
         """停止所有服务"""
         self.logger.info("Stopping all services...")
         
-        # 停止可选服务
-        for service_name, _ in self.optional_processes.copy():
-            self._stop_single_service_internal(service_name, is_base_service=False)
-        
-        # 停止基础服务
-        for service_name, _ in self.base_processes.copy():
-            self._stop_single_service_internal(service_name, is_base_service=True)
+        # 如果内存中有进程列表，优先使用
+        if self.base_processes or self.optional_processes:
+            # 停止可选服务
+            for service_name, _ in self.optional_processes.copy():
+                self._stop_single_service_internal(service_name, is_base_service=False)
+            
+            # 停止基础服务
+            for service_name, _ in self.base_processes.copy():
+                self._stop_single_service_internal(service_name, is_base_service=True)
+        else:
+            # 如果内存中没有进程列表，通过进程名称查找并停止
+            self.logger.warning("No processes in memory, attempting to find and stop services by name")
+            self._stop_services_by_name()
         
         self.logger.info("All services stopped")
+    
+    def _stop_services_by_name(self):
+        """通过进程名查找并停止服务"""
+        # 从配置中获取服务列表
+        all_services = []
+        
+        if 'external_services' in self.config:
+            base_services = self.config['external_services'].get('base_services', [])
+            optional_services = self.config['external_services'].get('optional_services', [])
+            
+            # 确保服务列表不为None
+            if base_services is None:
+                base_services = []
+            if optional_services is None:
+                optional_services = []
+            
+            # 解析服务配置
+            for service_item in base_services + optional_services:
+                if isinstance(service_item, dict) and len(service_item) == 1:
+                    service_config = next(iter(service_item.values()))
+                    service_name = service_config.get('service_name')
+                    script_path = service_config.get('script')
+                    
+                    if service_name and script_path:
+                        all_services.append((service_name, script_path))
+        
+        # 停止找到的服务
+        for service_name, script_path in all_services:
+            try:
+                self.logger.info(f"Attempting to stop service: {service_name}")
+                cleaned = self.process_manager.cleanup_existing_processes(service_name, script_path)
+                if cleaned:
+                    self.logger.info(f"Successfully stopped service: {service_name}")
+                else:
+                    self.logger.info(f"No running processes found for service: {service_name}")
+            except Exception as e:
+                self.logger.error(f"Failed to stop service {service_name}: {e}")
+        
+        self.logger.info(f"Processed {len(all_services)} services for termination")
     
     def get_service_status(self) -> Dict[str, List[Dict[str, Any]]]:
         """

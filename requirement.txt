@@ -1,3 +1,5 @@
 python >=3.12
 zhipuAI ==2.1.5.20230904
 dashscope==1.20.12
+bcrypt==3.2.2
+passlib[bcrypt]>=1.7.4

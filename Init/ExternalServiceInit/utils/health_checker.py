@@ -5,7 +5,17 @@
 import time
 import logging
 from typing import Dict, Optional
-from ..exceptions import ServiceHealthCheckError
+
+# 兼容的导入方式
+try:
+    from ..exceptions import ServiceHealthCheckError
+except ImportError:
+    import sys
+    import os
+    current_dir = os.path.dirname(os.path.dirname(__file__))
+    if current_dir not in sys.path:
+        sys.path.insert(0, current_dir)
+    from exceptions import ServiceHealthCheckError
 
 try:
     import requests

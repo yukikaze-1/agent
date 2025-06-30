@@ -11,7 +11,7 @@ ExternalServiceInit - 重构版外部服务管理器
 6. 进程管理：更安全的进程创建和终止
 
 使用示例：
-    from ExternalServiceInit import ExternalServiceManager
+    from Init.ExternalServiceInit import ExternalServiceManager
     
     manager = ExternalServiceManager()
     base_services, optional_services = manager.init_services()

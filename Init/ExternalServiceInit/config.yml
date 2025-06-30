@@ -88,31 +88,9 @@ external_services:
         health_check_url: "http://127.0.0.1:20001/health"
         dependencies: ["MicroServiceGateway"]
 
-    - OllamaAgent:
-        script: "/home/yomu/agent/Module/LLM/OllamaAgent.py"
-        service_name: "OllamaAgent"
-        conda_env: "/home/yomu/data/anaconda3/envs/agent"
-        args: []
-        use_python: true
-        run_in_background: true
-        is_base: true
-        log_file: "OllamaAgent.log"
-        startup_timeout: 30
-        health_check_url: "http://127.0.0.1:20030/health"
-        dependencies: ["ollama_server"]
-
-    - GPTSovitsAgent:
-        script: "/home/yomu/agent/Module/TTS/GPTSoVits/GPTSoVitsAgent.py"
-        service_name: "GPTSovitsAgent"
-        conda_env: "/home/yomu/data/anaconda3/envs/agent"
-        args: []
-        use_python: true
-        run_in_background: true
-        is_base: true
-        log_file: "GPTSovitsAgent.log"
-        startup_timeout: 30
-        health_check_url: "http://127.0.0.1:20040/health"
-        dependencies: ["GPTSoVits_server"]
+    # Agent 客户端模块已移至 InternalModuleInit 管理
+    # - OllamaAgent: 现由 InternalModuleInit 管理
+    # - GPTSovitsAgent: 现由 InternalModuleInit 管理
 
     - MySQLService:
         script: "/home/yomu/agent/Service/MySQLService/main.py"
@@ -139,43 +117,10 @@ external_services:
         health_check_url: "http://127.0.0.1:20010/health"
         dependencies: ["MySQLAgent"]
 
-    - ChatModule:
-        script: "/home/yomu/agent/Module/Chat/ChatModule.py"
-        service_name: "ChatModule"
-        conda_env: "/home/yomu/data/anaconda3/envs/agent"
-        args: []
-        use_python: true
-        run_in_background: true
-        is_base: true
-        log_file: "ChatModule.log"
-        startup_timeout: 30
-        health_check_url: "http://127.0.0.1:20060/health"
-        dependencies: ["OllamaAgent", "GPTSovitsAgent", "SenseVoiceAgent"]
-
-    - SenseVoiceAgent:
-        script: "/home/yomu/agent/Module/STT/SenseVoice/SenseVoiceAgent.py"
-        service_name: "SenseVoiceAgent"
-        conda_env: "/home/yomu/data/anaconda3/envs/agent"
-        args: []
-        use_python: true
-        run_in_background: true
-        is_base: true
-        log_file: "SenseVoiceAgent.log"
-        startup_timeout: 30
-        health_check_url: "http://127.0.0.1:20041/health"
-        dependencies: ["SenseVoice_server"]
-
-    - PromptOptimizer:
-        script: "/home/yomu/agent/Module/Input/PromptOptimizer.py"
-        service_name: "PromptOptimizer"
-        conda_env: "/home/yomu/data/anaconda3/envs/agent"
-        args: []
-        use_python: true
-        run_in_background: true
-        is_base: true
-        log_file: "PromptOptimizer.log"
-        health_check_url: "http://127.0.0.1:20022/health"
-        startup_timeout: 30
+    # 其他业务模块已移至 InternalModuleInit 管理
+    # - ChatModule: 现由 InternalModuleInit 管理
+    # - SenseVoiceAgent: 现由 InternalModuleInit 管理
+    # - PromptOptimizer: 现由 InternalModuleInit 管理
 
   # (可选)启动的optional外部服务
   optional_services:
@@ -191,13 +136,17 @@ external_services:
     #     log_file: "YOLOAgent.log"
     #     startup_timeout: 60
     
-  # 目前已支持的外部服务
+  # 目前已支持的外部服务（仅包含独立进程服务）
   support_services:
-    - ollama
-    - GPTSoVits
-    - SenseVoice
+    - ollama_server
+    - GPTSoVits_server
+    - SenseVoice_server
     - Consul
     - MicroServiceGateway
+    - APIGateway
+    - MySQLService
+    - UserService
+    # Agent 客户端模块已移至 InternalModuleInit 管理
     - APIGateway
     - OllamaAgent
     - GPTSovitsAgent

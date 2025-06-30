@@ -1,1 +1,1 @@
-from .SenseVoiceAgent_old import SenseVoiceAgent
+from .SenseVoiceAgent import SenseVoiceAgent

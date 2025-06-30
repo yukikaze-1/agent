@@ -18,14 +18,14 @@ from subprocess import Popen
 from typing import List, Dict, Tuple
 from dotenv import dotenv_values
 
-from Init.ExternalServiceInit import ExternalServiceManager
-from Init.InternalModuleInit import InternalModuleManager
-from Init.AgentFrameInit import AgentFrameManager
+from Init.discard.ExternalServiceInit import ExternalServiceManager
+from Init.discard.InternalModuleInit import InternalModuleManager
+from Init.discard.AgentFrameInit import AgentFrameManager
 from Init.EnvironmentManager import EnvironmentManager
 
 from Service.Gateway.MicroServiceGateway import MicroServiceGateway
 from Service.Gateway.APIGateway import APIGateway
-from Service.Other.UserService import UserService
+from Service.UserService import UserService
 
 from Module.Utils.Logger import setup_logger
 from Module.Utils.ConfigTools import load_config

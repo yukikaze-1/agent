@@ -169,8 +169,11 @@ external_services:
 # 要启动的基础模块
 internal_modules:
   base_modules: 
-    - GPTSoVitsAgent: Module.TTS.GPTSoVits
-    - SenseVoiceAgent: Module.STT.SenseVoice
+    - GPTSoVitsAgent: Module.TTS.GPTSoVits.GPTSoVitsAgent
+    - SenseVoiceAgent: Module.STT.SenseVoice.SenseVoiceAgent
+    - OllamaAgent: Module.LLM.OllamaAgent
+    - ChatModule: Module.Chat.ChatModule
+    - PromptOptimizer: Module.Input.PromptOptimizer
   # (可选)启动的optional功能模块
   optional_modules:
     
@@ -178,6 +181,9 @@ internal_modules:
   support_modules:
     - GPTSoVitsAgent
     - SenseVoiceAgent
+    - OllamaAgent
+    - ChatModule
+    - PromptOptimizer
   # 待支持的内部模块
   #_module:
   #  - yolo11: Module.Utils.yolo11

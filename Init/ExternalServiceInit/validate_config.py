@@ -11,7 +11,7 @@ from typing import Dict, Any
 # 添加项目根目录到Python路径
 sys.path.insert(0, '/home/yomu/agent')
 
-from ExternalServiceInit.utils.config_validator import ServiceConfigValidator
+from .utils.config_validator import ServiceConfigValidator
 
 
 def validate_config_file(config_path: str) -> bool:

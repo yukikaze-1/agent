@@ -132,7 +132,7 @@ class InternalModuleManager:
         if optional_modules:
             for name, path in optional_modules:
                 if name == module_name:
-                    return True, name, path 
+                    return False, name, path 
         
         return (False, module_name, "")
 
@@ -505,13 +505,13 @@ class InternalModuleManager:
         optional_modules_to_restart = [module for module in modules if module in started_optional_modules]
         base_modules_to_restart = [module for module in modules if module in started_base_modules]
         
-        if optional_modules_to_restart is None and base_modules_to_restart is None:
+        if not optional_modules_to_restart and not base_modules_to_restart:
             self.logger.info(f"没有已选中的模型正在运行：{modules}无需重启他们")
             return (False, [], [])
         
-        ok1, opt_sucess, opt_fail = self._stop_modules(optional_modules_to_restart, isBaseModule=False)
-        ok2, base_success, base_fail = self._stop_modules(base_modules_to_restart, isBaseModule=True)
-        return ok1 and ok2, base_success + opt_sucess, base_fail + opt_fail
+        ok1, opt_success, opt_fail = self._restart_modules(optional_modules_to_restart, isBaseModule=False)
+        ok2, base_success, base_fail = self._restart_modules(base_modules_to_restart, isBaseModule=True)
+        return ok1 and ok2, base_success + opt_success, base_fail + opt_fail
         
     def restart_select_modules(self, modules:List[str])->Tuple[bool,List[str],List[str]]:
         """
@@ -525,11 +525,11 @@ class InternalModuleManager:
         # 过滤出要restart且已启动的optional modules
         modules_to_restart = [module for module in modules if module in optional_modules]
         
-        if modules_to_restart is None:
+        if not modules_to_restart:
             self.logger.info(f"没有已选中的模型正在运行：{modules}无需重启他们")
             return (False, [], [])
         
-        return self._stop_modules(modules_to_restart, isBaseModule=False)
+        return self._restart_modules(modules_to_restart, isBaseModule=False)
            
     def list_started_modules(self, isBaseModule: Optional[bool] = None) -> List[str]:
         """

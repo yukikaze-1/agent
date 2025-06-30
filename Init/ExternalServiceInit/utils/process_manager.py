@@ -9,7 +9,17 @@ import shlex
 from typing import List, Dict, Tuple, Optional, Union, Any
 from subprocess import Popen
 import logging
-from ..exceptions import ServiceStartupError, ServiceStopError
+
+# 兼容的导入方式
+try:
+    from ..exceptions import ServiceStartupError, ServiceStopError
+except ImportError:
+    import sys
+    import os
+    current_dir = os.path.dirname(os.path.dirname(__file__))
+    if current_dir not in sys.path:
+        sys.path.insert(0, current_dir)
+    from exceptions import ServiceStartupError, ServiceStopError
 
 
 class ProcessManager:

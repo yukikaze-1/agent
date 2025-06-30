@@ -5,7 +5,17 @@
 import time
 import logging
 from typing import Callable, Any, Optional, Dict
-from ..exceptions import ServiceStartupError
+
+# 兼容的导入方式
+try:
+    from ..exceptions import ServiceStartupError
+except ImportError:
+    import sys
+    import os
+    current_dir = os.path.dirname(os.path.dirname(__file__))
+    if current_dir not in sys.path:
+        sys.path.insert(0, current_dir)
+    from exceptions import ServiceStartupError
 
 
 class RetryManager:

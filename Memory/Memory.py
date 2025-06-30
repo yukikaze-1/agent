@@ -66,7 +66,7 @@ class DateTimeEncoder(json.JSONEncoder):
 
 # 从文件中加载长期记忆并返回 #TODO 这玩意是不是该移动到LongMemory中当做成员函数？
 def load_long_memory():
-    memory_dir = os.getenv('MEMORY_DIR')
+    memory_dir: str = os.getenv('MEMORY_DIR', "")
     memory_file = os.path.join(memory_dir,"memory_long.json")
     memory = {}
     
@@ -149,7 +149,7 @@ class LongMemory(Memory):#TODO 按照ShortMemory来实现
         self.forget_factor = forget_factor
         
         if not long_memory_filepath:
-            self.long_memory_filepath = os.getenv("MEMORY_DIR") + "memory_long.json"
+            self.long_memory_filepath = os.getenv("MEMORY_DIR", "") + "memory_long.json"
         else:
             self.long_memory_filepath = long_memory_filepath
             
