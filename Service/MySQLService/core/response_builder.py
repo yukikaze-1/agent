@@ -44,18 +44,19 @@ class ResponseBuilder:
     @staticmethod
     def build_connection_error_response(operator: str, connection_id: int):
         """构建连接ID不存在的错误响应"""
-        return {
-            "operator": operator,
-            "message": f"{operator} failed",
-            "result": False,
-            "err_code": MySQLServiceResponseErrorCode.CONNECTION_ID_NOT_EXISTS,
-            "errors": [MySQLServiceErrorDetail(
+        return MySQLServiceConnectDatabaseResponse(
+            operator=operator,
+            message=f"{operator} failed",
+            result=False,
+            err_code=MySQLServiceResponseErrorCode.CONNECTION_ID_NOT_EXISTS,
+            errors=[MySQLServiceErrorDetail(
                 code=MySQLServiceResponseErrorCode.CONNECTION_ID_NOT_EXISTS,
                 message=f"Connection ID '{connection_id}' does not exist.",
                 field="connection_id",
                 hint="Please check if the connection ID is correct."
             )]
-        }
+        )
+        
     
     @staticmethod
     def build_connect_success_response(connection_id: int, database: str) -> MySQLServiceConnectDatabaseResponse:

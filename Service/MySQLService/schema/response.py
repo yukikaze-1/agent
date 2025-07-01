@@ -72,10 +72,10 @@ class MySQLServiceConnectDatabaseResponseData(StrictBaseModel):
     
 class MySQLServiceConnectDatabaseResponse(MySQLServiceBaseResponse):
     """ 连接数据库 Response """
-    data: MySQLServiceConnectDatabaseResponseData = Field(..., description="连接数据库附加数据")
-    
-    
+    data: Optional[MySQLServiceConnectDatabaseResponseData] = Field(default=None, description="连接数据库附加数据")
 
+# ------------------------------------------------------------------------------------------------
+# 单条CURD响应
 # ------------------------------------------------------------------------------------------------
 # 单条CURD响应
 # ------------------------------------------------------------------------------------------------ 

@@ -93,7 +93,7 @@ external_services:
     # - GPTSovitsAgent: 现由 InternalModuleInit 管理
 
     - MySQLService:
-        script: "/home/yomu/agent/Service/MySQLService/main.py"
+        script: "/home/yomu/agent/Service/MySQLService/MySQLService.py"
         service_name: "MySQLAgent"
         conda_env: "/home/yomu/data/anaconda3/envs/agent"
         args: []

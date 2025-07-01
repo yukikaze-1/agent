@@ -93,7 +93,7 @@ class MySQLServiceApp:
             )
             self.logger.info("Async HTTP Client initialized")
 
-            # 注册服务到Consul（目前注释掉，可根据需要启用）
+            # 注册服务到Consul
             self.logger.info("Registering service to Consul...")
             tags = ["MySQLService"]
             await register_service_to_consul(
