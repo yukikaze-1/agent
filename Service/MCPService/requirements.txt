@@ -1,0 +1,36 @@
+# MCP服务框架依赖
+
+# 核心MCP库
+mcp>=1.0.0
+
+# Web服务器支持（用于HTTP传输）
+uvicorn>=0.27.0
+starlette>=0.36.0
+
+# 数据验证和序列化
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# 异步支持
+anyio>=4.0.0
+
+# 可选依赖（用于具体服务实现）
+
+# 数据库支持
+# psycopg2-binary>=2.9.0  # PostgreSQL
+# pymongo>=4.6.0          # MongoDB
+# redis>=5.0.0            # Redis
+
+# 文件处理
+# aiofiles>=23.2.1        # 异步文件操作
+
+# 配置管理
+# python-dotenv>=1.0.0    # 环境变量管理
+# PyYAML>=6.0.1           # YAML配置文件
+
+# 日志
+# loguru>=0.7.0           # 更好的日志库
+
+# 开发工具
+# pytest>=7.4.0          # 测试框架
+# pytest-asyncio>=0.23.0 # 异步测试支持
