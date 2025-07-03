@@ -8,14 +8,51 @@ import subprocess
 import sys
 import os
 
+def prepare_environment():
+    """准备测试环境变量"""
+    env = os.environ.copy()
+    
+    # 自动检测项目根目录
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    # 从 Service/UserService 向上两级到达项目根目录
+    agent_home = os.path.dirname(os.path.dirname(current_dir))
+    
+    # 确保 AGENT_HOME 存在
+    if 'AGENT_HOME' not in env:
+        env['AGENT_HOME'] = agent_home
+    
+    # 确保 PYTHONPATH 包含项目根目录
+    agent_home = env['AGENT_HOME']
+    current_pythonpath = env.get('PYTHONPATH', '')
+    if agent_home not in current_pythonpath:
+        if current_pythonpath:
+            env['PYTHONPATH'] = f"{agent_home}:{current_pythonpath}"
+        else:
+            env['PYTHONPATH'] = agent_home
+    
+    # 设置测试环境
+    env['AGENT_ENV'] = 'testing'
+    
+    return env
+
 def run_command(cmd, description):
     """运行命令并显示结果"""
     print(f"\n{'='*60}")
     print(f"🧪 {description}")
     print(f"{'='*60}")
     
+    # 准备环境变量
+    env = prepare_environment()
+    
     try:
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, cwd="/home/yomu/agent/Service/UserService")
+        result = subprocess.run(
+            cmd, 
+            shell=True, 
+            capture_output=True, 
+            text=True, 
+            cwd=os.path.join(env['AGENT_HOME'], "Service", "UserService"),
+            env=env  # 传递环境变量
+        )
         
         if result.returncode == 0:
             print(f"✅ {description} - 通过")

@@ -104,7 +104,7 @@ class UserService:
         self.logger = setup_logger(name="UserService", log_path="InternalModule")
         
         # 加载环境变量和配置
-        self.env_vars = dotenv_values("/home/yomu/agent/Service/UserService/.env")
+        self.env_vars = dotenv_values("${AGENT_HOME}/Service/UserService/.env")
         self.config_path = self.env_vars.get("USER_SERVICE_CONFIG_PATH","")
         self.config = load_config(config_path=self.config_path, config_name='UserService', logger=self.logger)
         
@@ -1075,7 +1075,7 @@ class UserService:
         # 3. 保存文件到服务器
         try:
             # 构建文件保存路径
-            user_files_dir = Path(f"/home/yomu/agent/Users/Files/{user_id}")
+            user_files_dir = Path(f"${AGENT_HOME}/Users/Files/{user_id}")
             user_files_dir.mkdir(parents=True, exist_ok=True)
             
             # 防止文件名冲突

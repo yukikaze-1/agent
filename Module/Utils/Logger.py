@@ -18,7 +18,7 @@ def setup_logger(name: str, log_path: Literal['ExternalService', 'InternalModule
     """
     配置并返回一个日志记录器
     """
-    env_vars = dotenv_values("/home/yomu/agent/Module/Utils/.env")
+    env_vars = dotenv_values("${AGENT_HOME}/Module/Utils/.env")
     log_dir: str = env_vars.get("LOG_DIR", "") 
     _log_path: str = os.path.join(log_dir, log_path)
     os.makedirs(_log_path, exist_ok=True) 

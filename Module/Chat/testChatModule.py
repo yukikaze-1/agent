@@ -2,7 +2,7 @@ import requests
 import os
 from typing import List, Tuple
 
-audio_path = "/home/yomu/agent/Module/Chat/1_301.wav"
+audio_path = "${AGENT_HOME}/Module/Chat/1_301.wav"
 url = "http://127.0.0.1:20060/agent/chat/input/audio"  # 确保URL路径与服务端一致
 
 # 以二进制方式打开音频文件

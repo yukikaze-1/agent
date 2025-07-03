@@ -8,7 +8,7 @@
     用于启动agent内部模块
     在当前进程环境(即agent的进程环境)中运行
     
-    运行前请 export PYTHONPATH=/home/yomu/agent:$PYTHONPATH
+    运行前请 export PYTHONPATH=${AGENT_HOME}:$PYTHONPATH
     
     1. LLM
         1) ollama agent [注：ollama agent直接使用Langchain的ChatOllama即可]

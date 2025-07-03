@@ -8,7 +8,7 @@ import os
 import logging
 
 # 添加项目根目录到Python路径
-sys.path.insert(0, '/home/yomu/agent')
+sys.path.insert(0, '${AGENT_HOME}')
 
 from . import ExternalServiceManager
 from .exceptions import ServiceStartupError, ServiceConfigError

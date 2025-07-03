@@ -48,7 +48,7 @@ class PromptOptimizer:
         self.logger = setup_logger(name="APIGateway", log_path='Other')
         
         # 加载环境变量和配置
-        self.env_vars = dotenv_values("/home/yomu/agent/Module/Input/.env") 
+        self.env_vars = dotenv_values("${AGENT_HOME}/Module/Input/.env") 
         self.config_path = self.env_vars.get("PROMPT_OPTIMIZER_CONFIG_PATH","") 
         self.config: Dict = load_config(config_path=self.config_path, config_name='PromptOptimizer', logger=self.logger)
         

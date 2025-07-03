@@ -7,7 +7,7 @@ from typing import Optional
 from dotenv import load_dotenv
 
 # 加载环境变量
-load_dotenv("/home/yomu/agent/Service/UserService/config/.env")
+load_dotenv("${AGENT_HOME}/Service/UserService/config/.env")
 
 
 class Settings:
@@ -39,7 +39,7 @@ class Settings:
         
         # 文件上传设置
         self.upload_max_size: int = int(os.getenv("UPLOAD_MAX_SIZE", str(1024 * 1024 * 1024)))  # 默认1GB
-        self.file_storage_path: str = os.getenv("FILE_STORAGE_PATH", "/home/yomu/agent/Users/Files")
+        self.file_storage_path: str = os.getenv("FILE_STORAGE_PATH", "${AGENT_HOME}/Users/Files")
         
         # 日志设置
         self.log_level: str = os.getenv("LOG_LEVEL", "INFO")

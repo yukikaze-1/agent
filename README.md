@@ -1,5 +1,36 @@
 # Agent
 
+一个模块化的 AI Agent 系统，支持多模态交互和智能服务。
+
+## 🚀 快速开始
+
+```bash
+# 克隆项目
+git clone <repository_url>
+cd agent
+
+# 直接运行（无需手动配置环境变量）
+python agent_v0.1.py
+
+# 或使用启动脚本
+./start_agent.sh start
+```
+
+## 📚 文档
+
+- **[启动指南](Docs/STARTUP_GUIDE.md)** - 详细的启动方法和配置说明
+- **[跨平台部署](Docs/CROSS_PLATFORM_DEPLOY_GUIDE.md)** - 确保在不同系统上的兼容性
+- **[环境工具](Tools/Environment/README.md)** - 环境验证和故障排除工具
+
+## 🔧 环境验证
+
+```bash
+# 快速验证环境
+python Tools/Environment/quick_verify.py
+
+# 完整环境测试
+python Tools/Environment/test_full_environment.py
+```
 
 # 1. 简介
 # 2. 框架

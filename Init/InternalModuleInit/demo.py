@@ -130,9 +130,9 @@ def main():
     
     # 检查环境
     pythonpath = os.environ.get('PYTHONPATH', '')
-    if '/home/yomu/agent' not in pythonpath:
-        print("⚠️  警告: PYTHONPATH 中可能缺少 /home/yomu/agent")
-        print("   建议运行: export PYTHONPATH=/home/yomu/agent:$PYTHONPATH")
+    if '${AGENT_HOME}' not in pythonpath:
+        print("⚠️  警告: PYTHONPATH 中可能缺少 ${AGENT_HOME}")
+        print("   建议运行: export PYTHONPATH=${AGENT_HOME}:$PYTHONPATH")
     
     try:
         # 基本用法演示

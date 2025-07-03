@@ -21,15 +21,15 @@ GPTSovits:
   # GPTSoVits服务设置
   setting:
     server_url: "http://127.0.0.1:9880"
-    save_dir: "/home/yomu/agent/Module/TTS/GPTSoVits/output"
+    save_dir: "${AGENT_HOME}/Module/TTS/GPTSoVits/output"
   
   # 声线  
   characters:
     Elysia:
       gpt_path: "/home/yomu/GPTSoVits/GPT_weights_v2/alxy_all_modified_v1.0-e50.ckpt"
       sovits_path: "/home/yomu/GPTSoVits/SoVITS_weights_v2/alxy_all_modified_v1.0_e50_s4700.pth"
-      ref_audio: "/home/yomu/agent/Module/TTS/GPTSoVits/reference/audio/1_301.wav"
+      ref_audio: "${AGENT_HOME}/Module/TTS/GPTSoVits/reference/audio/1_301.wav"
       ref_audio_text: 
-          path: "/home/yomu/agent/Module/TTS/GPTSoVits/reference/text/1_301.txt"
+          path: "${AGENT_HOME}/Module/TTS/GPTSoVits/reference/text/1_301.txt"
           content:  "我的话，呢哼，更多是靠少女的小心思吧。看看你现在的表情。好想去那里。"
         

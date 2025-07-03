@@ -24,7 +24,7 @@ def main():
     
     try:
         # 加载配置
-        config_path = "/home/yomu/agent/InternalModuleInit/config.yml"
+        config_path = "${AGENT_HOME}/InternalModuleInit/config.yml"
         config = load_config(config_path=config_path, config_name='internal_modules', logger=logger)
         
         # 验证配置

@@ -132,7 +132,7 @@ class UserAccountDataBaseAgent():
         self.logger = logger or setup_logger(name="UserAccountDataBaseAgent", log_path="InternalModule")
         
         # 加载环境变量和配置
-        self.env_vars = dotenv_values("/home/yomu/agent/Service/UserService/.env")
+        self.env_vars = dotenv_values("${AGENT_HOME}/Service/UserService/.env")
         self.config_path = self.env_vars.get("USER_ACCOUNT_DATABASE_AGENT_CONFIG_PATH","")
         self.config = load_config(config_path=self.config_path, config_name='UserAccountDataBaseAgent', logger=self.logger)
         

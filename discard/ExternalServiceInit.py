@@ -8,7 +8,7 @@
     用于启动agent外部服务器模块
     在新进程环境中运行
     
-    运行前请 export PYTHONPATH=/home/yomu/agent:$PYTHONPATH
+    运行前请 export PYTHONPATH=${AGENT_HOME}:$PYTHONPATH
     
     1. LLM
         1) ollama server *

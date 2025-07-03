@@ -49,7 +49,7 @@ class GPTSoVitsAgent:
         self.logger = setup_logger(name="GPTSoVitsAgent", log_path='ExternalService')
         
         # 加载环境变量和配置
-        self.env_vars = dotenv_values("/home/yomu/agent/Module/TTS/GPTSoVits/.env")
+        self.env_vars = dotenv_values("${AGENT_HOME}/Module/TTS/GPTSoVits/.env")
         self.config_path = self.env_vars.get("GPTSOVITS_CONFIG_PATH","") 
         self.config: Dict = load_config(config_path=self.config_path, config_name='GPTSovits', logger=self.logger)
         

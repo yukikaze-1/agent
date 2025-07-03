@@ -9,7 +9,7 @@ import yaml
 from typing import Dict, Any
 
 # 添加项目根目录到Python路径
-sys.path.insert(0, '/home/yomu/agent')
+sys.path.insert(0, '${AGENT_HOME}')
 
 from .utils.config_validator import ServiceConfigValidator
 
@@ -127,8 +127,8 @@ def main():
     print("=" * 60)
     
     # 验证新配置文件
-    new_config = "/home/yomu/agent/ExternalServiceInit/config.yml"
-    old_config = "/home/yomu/agent/Init/config.yml"
+    new_config = "${AGENT_HOME}/ExternalServiceInit/config.yml"
+    old_config = "${AGENT_HOME}/Init/config.yml"
     
     success = True
     
@@ -157,7 +157,7 @@ def main():
             print(f"✗ 检查原配置文件失败: {e}")
     
     print("\n3. 检查环境文件:")
-    env_file = "/home/yomu/agent/ExternalServiceInit/.env"
+    env_file = "${AGENT_HOME}/ExternalServiceInit/.env"
     if os.path.exists(env_file):
         print(f"✓ 环境文件存在: {env_file}")
         try:

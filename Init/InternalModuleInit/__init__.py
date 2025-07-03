@@ -32,7 +32,7 @@ InternalModuleInit - 重构版内部模块管理器
     manager.restart_single_module("GPTSoVitsAgent")
 
 运行前请设置环境变量：
-    export PYTHONPATH=/home/yomu/agent:$PYTHONPATH
+    export PYTHONPATH=${AGENT_HOME}:$PYTHONPATH
 """
 
 from .core import InternalModuleManager

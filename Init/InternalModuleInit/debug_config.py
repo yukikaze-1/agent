@@ -18,7 +18,7 @@ def main():
     logger = setup_logger(name="ConfigDebug", log_path="Other")
     
     # 测试配置加载
-    config_path = "/home/yomu/agent/InternalModuleInit/config.yml"
+    config_path = "${AGENT_HOME}/InternalModuleInit/config.yml"
     
     print(f"配置文件路径: {config_path}")
     print(f"文件是否存在: {os.path.exists(config_path)}")

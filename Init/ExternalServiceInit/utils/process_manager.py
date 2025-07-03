@@ -28,6 +28,36 @@ class ProcessManager:
     def __init__(self, logger: Optional[logging.Logger] = None):
         self.logger = logger or logging.getLogger(__name__)
     
+    def _prepare_environment(self) -> Dict[str, str]:
+        """
+        准备子进程的环境变量
+        
+        Returns:
+            Dict[str, str]: 包含所有必要环境变量的字典
+        """
+        # 复制当前环境变量
+        env = os.environ.copy()
+        
+        # 确保关键的环境变量存在
+        if 'AGENT_HOME' not in env:
+            env['AGENT_HOME'] = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+        
+        if 'PYTHONPATH' not in env or env['AGENT_HOME'] not in env['PYTHONPATH']:
+            current_pythonpath = env.get('PYTHONPATH', '')
+            if current_pythonpath:
+                env['PYTHONPATH'] = f"{env['AGENT_HOME']}:{current_pythonpath}"
+            else:
+                env['PYTHONPATH'] = env['AGENT_HOME']
+        
+        # 确保其他重要环境变量
+        if 'AGENT_ENV' not in env:
+            env['AGENT_ENV'] = 'development'
+        
+        self.logger.debug(f"Prepared environment - AGENT_HOME: {env.get('AGENT_HOME')}")
+        self.logger.debug(f"Prepared environment - PYTHONPATH: {env.get('PYTHONPATH')}")
+        
+        return env
+    
     def create_process(self, 
                       service_config: Dict,
                       log_dir: str) -> Tuple[bool, Tuple[str, int]]:
@@ -45,6 +75,16 @@ class ProcessManager:
         use_python = service_config.get("use_python", False)
         run_in_background = service_config.get("run_in_background", True)
         log_file = service_config.get("log_file")
+        
+        # 处理相对路径 - 转换为绝对路径
+        if not os.path.isabs(service_script):
+            agent_home = os.environ.get("AGENT_HOME")
+            if agent_home:
+                service_script = os.path.join(agent_home, service_script)
+            else:
+                # 如果没有 AGENT_HOME，尝试从当前文件位置推断
+                current_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+                service_script = os.path.join(current_dir, service_script)
         
         try:
             # 准备日志文件
@@ -113,7 +153,11 @@ class ProcessManager:
                 f"Python executable not found in conda environment: {python_path}"
             )
         
+        # 准备环境变量
+        env = self._prepare_environment()
+        
         self.logger.info(f"Starting service '{service_name}' at '{service_script}' with Python '{python_path}'")
+        self.logger.debug(f"Service environment - PYTHONPATH: {env.get('PYTHONPATH')}")
         
         if run_in_background:
             return subprocess.Popen(
@@ -121,6 +165,7 @@ class ProcessManager:
                 stdin=stdin,
                 stdout=stdout,
                 stderr=stderr,
+                env=env,  # 传递环境变量
                 preexec_fn=os.setsid,
                 close_fds=True,
                 cwd=script_dir
@@ -129,6 +174,7 @@ class ProcessManager:
             # 前台运行
             subprocess.run(
                 args=[python_path, service_script] + args,
+                env=env,  # 传递环境变量
                 check=True,
                 cwd=script_dir
             )
@@ -140,8 +186,14 @@ class ProcessManager:
         """创建Shell进程"""
         self.logger.info(f"Starting service '{service_name}' using system shell")
         
+        # 准备环境变量
+        env = self._prepare_environment()
+        
         command_list = [service_script] + args
         command_str = ' '.join(shlex.quote(arg) for arg in command_list)
+        
+        self.logger.debug(f"Shell command: {command_str}")
+        self.logger.debug(f"Shell environment - PYTHONPATH: {env.get('PYTHONPATH')}")
         
         if run_in_background:
             return subprocess.Popen(
@@ -150,12 +202,19 @@ class ProcessManager:
                 stdin=stdin,
                 stdout=stdout,
                 stderr=stderr,
+                env=env,  # 传递环境变量
                 preexec_fn=os.setsid,
                 close_fds=True,
                 cwd=script_dir
             )
         else:
-            subprocess.run(command_str, shell=True, check=True, cwd=script_dir)
+            subprocess.run(
+                command_str, 
+                shell=True, 
+                env=env,  # 传递环境变量
+                check=True, 
+                cwd=script_dir
+            )
             return None
     
     def _cleanup_file_handles(self, stdout, stderr):

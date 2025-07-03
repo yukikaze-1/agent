@@ -71,7 +71,7 @@ class EnvironmentManager:
     目录结构、资源验证、用户环境等。
     """
     
-    def __init__(self, base_path: str = "/home/yomu/agent", env_level: EnvironmentLevel = EnvironmentLevel.DEVELOPMENT):
+    def __init__(self, base_path: str = "${AGENT_HOME}", env_level: EnvironmentLevel = EnvironmentLevel.DEVELOPMENT):
         """
         初始化环境管理器
         

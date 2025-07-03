@@ -5,7 +5,7 @@
 # Description:  NewsReporter
 
 '''
-    测试：运行前要export PYTHONPATH=/home/yomu/agent:$PYTHONPATH
+    测试：运行前要export PYTHONPATH=${AGENT_HOME}:$PYTHONPATH
 
 '''
 

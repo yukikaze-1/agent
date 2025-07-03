@@ -10,7 +10,7 @@
 用于启动agent内部模块，在当前进程环境(即agent的进程环境)中运行
 
 运行前请设置环境变量：
-    export PYTHONPATH=/home/yomu/agent:$PYTHONPATH
+    export PYTHONPATH=${AGENT_HOME}:$PYTHONPATH
 
 支持的模块类型：
 1. LLM: ollama agent (直接使用Langchain的ChatOllama)
@@ -82,7 +82,7 @@ class InternalModuleManager:
             
             if not self.config_path:
                 # 使用默认路径 - 更新为新的位置
-                self.config_path = "/home/yomu/agent/Init/InternalModuleInit/config.yml"
+                self.config_path = "${AGENT_HOME}/Init/InternalModuleInit/config.yml"
                 self.logger.warning(f"No config path provided, using default: {self.config_path}")
             
             self.config: Dict = load_config(

@@ -55,7 +55,7 @@ external_services:
         log_file: "SenseVoice_server.log"
 
     - MicroServiceGateway:
-        script: "/home/yomu/agent/Service/Gateway/MicroServiceGateway.py"
+        script: "${AGENT_HOME}/Service/Gateway/MicroServiceGateway.py"
         service_name: "MicroServiceGateway"
         conda_env: "/home/yomu/data/anaconda3/envs/agent"
         args: []
@@ -65,7 +65,7 @@ external_services:
         log_file: "MicroServiceGateway.log"
 
     - APIGateway:
-        script: "/home/yomu/agent/Service/Gateway/APIGateway.py"
+        script: "${AGENT_HOME}/Service/Gateway/APIGateway.py"
         service_name: "APIGateway"
         conda_env: "/home/yomu/data/anaconda3/envs/agent"
         args: []
@@ -75,7 +75,7 @@ external_services:
         log_file: "APIGateway.log"
 
     - OllamaAgent:
-        script: "/home/yomu/agent/Module/LLM/OllamaAgent.py"
+        script: "${AGENT_HOME}/Module/LLM/OllamaAgent.py"
         service_name: "OllamaAgent"
         conda_env: "/home/yomu/data/anaconda3/envs/agent"
         args: []
@@ -85,7 +85,7 @@ external_services:
         log_file: "OllamaAgent.log"
 
     - GPTSovitsAgent:
-        script: "/home/yomu/agent/Module/TTS/GPTSoVits/GPTSoVitsAgent.py"
+        script: "${AGENT_HOME}/Module/TTS/GPTSoVits/GPTSoVitsAgent.py"
         service_name: "GPTSovitsAgent"
         conda_env: "/home/yomu/data/anaconda3/envs/agent"
         args: []
@@ -95,7 +95,7 @@ external_services:
         log_file: "GPTSovitsAgent.log"
 
     - MySQLAgent:
-        script: "/home/yomu/agent/Module/Utils/Database/MySQLAgent.py"
+        script: "${AGENT_HOME}/Module/Utils/Database/MySQLAgent.py"
         service_name: "MySQLAgent"
         conda_env: "/home/yomu/data/anaconda3/envs/agent"
         args: []
@@ -105,7 +105,7 @@ external_services:
         log_file: "MySQLAgent.log"
 
     - UserService:
-        script: "/home/yomu/agent/Service/Other/UserService.py"
+        script: "${AGENT_HOME}/Service/Other/UserService.py"
         service_name: "UserService"
         conda_env: "/home/yomu/data/anaconda3/envs/agent"
         args: []
@@ -115,7 +115,7 @@ external_services:
         log_file: "UserService.log"
 
     - ChatModule:
-        script: "/home/yomu/agent/Module/Chat/ChatModule.py"
+        script: "${AGENT_HOME}/Module/Chat/ChatModule.py"
         service_name: "ChatModule"
         conda_env: "/home/yomu/data/anaconda3/envs/agent"
         args: []
@@ -125,7 +125,7 @@ external_services:
         log_file: "ChatModule.log"
 
     - SenseVoiceAgent:
-        script: "/home/yomu/agent/Module/STT/SenseVoice/SenseVoiceAgent.py"
+        script: "${AGENT_HOME}/Module/STT/SenseVoice/SenseVoiceAgent.py"
         service_name: "SenseVoiceAgent"
         conda_env: "/home/yomu/data/anaconda3/envs/agent"
         args: []
@@ -135,7 +135,7 @@ external_services:
         log_file: "SenseVoiceAgent.log"
 
     - PromptOptimizer:
-        script: "/home/yomu/agent/Module/Input/PromptOptimizer.py"
+        script: "${AGENT_HOME}/Module/Input/PromptOptimizer.py"
         service_name: "PromptOptimizer"
         conda_env: "/home/yomu/data/anaconda3/envs/agent"
         args: []

@@ -48,7 +48,7 @@ async def test_consul_registration():
     
     print("\n🚀 启动服务:")
     print("  python -m Service.UserService.app.main")
-    print("  或者: cd /home/yomu/agent/Service/UserService && python app/main.py")
+    print("  或者: cd ${AGENT_HOME}/Service/UserService && python app/main.py")
 
 
 if __name__ == "__main__":

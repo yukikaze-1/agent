@@ -89,8 +89,8 @@ class ExternalServiceManager:
         """加载配置文件"""
         try:
             # 优先使用 ExternalServiceInit 目录下的配置文件
-            external_service_config = "/home/yomu/agent/Init/ExternalServiceInit/config.yml"
-            external_service_env = "/home/yomu/agent/Init/ExternalServiceInit/.env"
+            external_service_config = "${AGENT_HOME}/Init/ExternalServiceInit/config.yml"
+            external_service_env = "${AGENT_HOME}/Init/ExternalServiceInit/.env"
             
             # 加载环境变量
             if os.path.exists(external_service_env):
@@ -127,7 +127,7 @@ class ExternalServiceManager:
             if hasattr(self, 'env_vars') and self.env_vars:
                 log_base = self.env_vars.get("LOG_PATH")
             else:
-                log_base = os.environ.get("LOG_PATH", "/home/yomu/agent/Log")
+                log_base = os.environ.get("LOG_PATH", "${AGENT_HOME}/Log")
             
             if log_base is None:
                 raise ValueError("LOG_PATH not set in env_vars or environment")

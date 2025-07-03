@@ -52,7 +52,7 @@ class MySQLService:
         self.logger.info("Loading configuration...")
         
         # 加载环境变量和配置
-        self.env_vars = dotenv_values("/home/yomu/agent/Service/MySQLService/.env")
+        self.env_vars = dotenv_values("${AGENT_HOME}/Service/MySQLService/.env")
         self.config_path = self.env_vars.get("MYSQL_SERVICE_CONFIG_PATH", "")
         self.config: Dict = load_config(
             config_path=self.config_path, 

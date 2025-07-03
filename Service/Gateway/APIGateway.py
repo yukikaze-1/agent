@@ -45,7 +45,7 @@ class APIGateway:
         self.logger = setup_logger(name="APIGateway", log_path='Other')
         
         # 加载环境变量和配置
-        self.env_vars = dotenv_values("/home/yomu/agent/Service/Gateway/.env") 
+        self.env_vars = dotenv_values("${AGENT_HOME}/Service/Gateway/.env") 
         self.config_path = self.env_vars.get("API_GATEWAY_CONFIG_PATH","") 
         self.config: Dict = load_config(config_path=self.config_path, config_name='APIGateway', logger=self.logger)
         

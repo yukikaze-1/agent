@@ -13,7 +13,7 @@ class GatewayValidator:
     """网关验证器"""
     
     def __init__(self):
-        self.config_path = "/home/yomu/agent/Service/Gateway/config.yml"
+        self.config_path = "${AGENT_HOME}/Service/Gateway/config.yml"
         self.config = self.load_config()
         
     def load_config(self) -> Dict:

@@ -40,7 +40,7 @@ class UserFileService:
                  user_account_actions_db_agent: UserAccountActionsDBAgent,
                  token_verifier,  # 从认证服务注入token验证器
                  upload_file_max_size: int = 1024 * 1024 * 1024,  # 1GB
-                 file_storage_path: str = "/home/yomu/agent/Users/Files",
+                 file_storage_path: str = "${AGENT_HOME}/Users/Files",
                  logger: Optional[Logger] = None):
         self.user_database_manager = user_database_manager
         self.user_account_actions_db_agent = user_account_actions_db_agent

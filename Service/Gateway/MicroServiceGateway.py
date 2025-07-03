@@ -6,7 +6,7 @@
 
 """
     负责agent与用户客户端的通信
-    运行前请 export PYTHONPATH=/home/yomu/agent:$PYTHONPATH
+    运行前请 export PYTHONPATH=${AGENT_HOME}:$PYTHONPATH
 """
 
 import os
@@ -46,7 +46,7 @@ class MicroServiceGateway():
         self.logger = setup_logger(name="MicroServiceGateway", log_path="Other") 
         
         # 加载环境变量和配置
-        self.env_vars = dotenv_values("/home/yomu/agent/Service/Gateway/.env")
+        self.env_vars = dotenv_values("${AGENT_HOME}/Service/Gateway/.env")
         self.config_path = self.env_vars.get("MICRO_SERVICE_GATEWAY_CONFIG_PATH","")
         self.config = load_config(config_path=self.config_path, config_name='MicroServiceGateway', logger=self.logger)
         

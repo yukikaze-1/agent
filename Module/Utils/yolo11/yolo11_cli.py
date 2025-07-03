@@ -30,7 +30,7 @@ class YOLO11Agent:
     def __init__(self,
                  env_path: str = None,
                  yolo_server: str = "http://192.168.1.17:8300",
-                 output_save_dir: str = "/home/yomu/agent/Module/Utils/yolo11/output",
+                 output_save_dir: str = "${AGENT_HOME}/Module/Utils/yolo11/output",
                  ):
         """
         初始化 YOLO 客户端，加载环境变量并设置服务器 URL 和保存目录。
