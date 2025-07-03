@@ -7,6 +7,7 @@
 """
     API网关, 目前只负责路由转发 
 """
+import os
 import httpx
 import uvicorn
 import asyncio
@@ -44,9 +45,24 @@ class APIGateway:
     def __init__(self):
         self.logger = setup_logger(name="APIGateway", log_path='Other')
         
+        # 获取 AGENT_HOME 环境变量
+        agent_home = os.environ.get('AGENT_HOME', os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+        
         # 加载环境变量和配置
-        self.env_vars = dotenv_values("${AGENT_HOME}/Service/Gateway/.env") 
-        self.config_path = self.env_vars.get("API_GATEWAY_CONFIG_PATH","") 
+        env_file_path = os.path.join(agent_home, "Service", "Gateway", ".env")
+        if os.path.exists(env_file_path):
+            self.env_vars = dotenv_values(env_file_path)
+        else:
+            self.env_vars = {}
+        
+        # 获取配置路径并展开变量
+        config_path_template = self.env_vars.get("API_GATEWAY_CONFIG_PATH", "")
+        if config_path_template:
+            self.config_path = config_path_template.replace("${AGENT_HOME}", agent_home)
+        else:
+            # 默认配置路径
+            self.config_path = os.path.join(agent_home, "Service", "Gateway", "config.yml")
+        
         self.config: Dict = load_config(config_path=self.config_path, config_name='APIGateway', logger=self.logger)
         
         # 超时配置

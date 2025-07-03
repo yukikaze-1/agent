@@ -8,6 +8,7 @@
     ollama 的 agent
 """
 
+import os
 import uvicorn
 import httpx
 import asyncio
@@ -36,7 +37,10 @@ class OllamaAgent:
         self.logger = setup_logger(name="OllamaAgent", log_path="InternalModule")
         
         # 加载环境变量和配置
-        self.env_vars = dotenv_values("${AGENT_HOME}/Module/LLM/.env") 
+        self.env_vars = dotenv_values(os.path.join(
+            os.environ.get('AGENT_HOME', os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
+            "Module/LLM/.env"
+        )) 
         self.config_path = self.env_vars.get("OLLAMA_AGENT_CONFIG_PATH","") 
         self.config: Dict = load_config(config_path=self.config_path, config_name='OllamaAgent', logger=self.logger)
         

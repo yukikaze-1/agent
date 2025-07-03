@@ -7,7 +7,9 @@ from typing import Optional
 from dotenv import load_dotenv
 
 # 加载环境变量
-load_dotenv("${AGENT_HOME}/Service/UserService/config/.env")
+agent_home = os.environ.get('AGENT_HOME', os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
+env_file_path = os.path.join(agent_home, "Service", "UserService", "config", ".env")
+load_dotenv(env_file_path)
 
 
 class Settings:

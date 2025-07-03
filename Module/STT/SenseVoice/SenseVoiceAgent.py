@@ -39,7 +39,10 @@ class SenseVoiceAgent:
         self.logger = setup_logger(name="SenseVoiceAgent", log_path="InternalModule")
         
         # 加载环境变量和配置
-        self.env_vars = dotenv_values("${AGENT_HOME}/Module/STT/SenseVoice/.env")
+        self.env_vars = dotenv_values(os.path.join(
+            os.environ.get('AGENT_HOME', os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
+            "Module/STT/SenseVoice/.env"
+        ))
         self.config_path = self.env_vars.get("SENSEVOICE_AGENT_CONFIG_PATH","")
         self.config = load_config(config_path=self.config_path, config_name='SenseVoiceAgent', logger=self.logger)
         

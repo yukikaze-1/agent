@@ -8,6 +8,7 @@
     接受并处理用户发来的文本消息
 """
 
+import os
 import uvicorn
 import fastapi
 from fastapi import Form, FastAPI
@@ -26,7 +27,10 @@ class UserTextInputProcessModule:
     def __init__(self):
         self.logger = setup_logger(name="UserTextInputProcessModule", log_path="InternalModule")
 
-        self.env_vars = dotenv_values("${AGENT_HOME}/Module/Input/.env")
+        self.env_vars = dotenv_values(os.path.join(
+            os.environ.get('AGENT_HOME', os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
+            "Module/Input/.env"
+        ))
         self.config_path = self.env_vars.get("USER_TEXT_INPUT_PROCESS_MODULE_CONFIG_PATH","") 
         self.config: Dict = load_config(config_path=self.config_path, config_name='UserTextInputProcessModule', logger=self.logger)
         

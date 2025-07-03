@@ -9,6 +9,7 @@
 采用模块化设计，职责分离清晰
 """
 
+import os
 import uvicorn
 from typing import Dict, Optional
 from dotenv import dotenv_values
@@ -51,9 +52,24 @@ class MySQLService:
         """加载和验证配置"""
         self.logger.info("Loading configuration...")
         
+        # 获取 AGENT_HOME 环境变量
+        agent_home = os.environ.get('AGENT_HOME', os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+        
         # 加载环境变量和配置
-        self.env_vars = dotenv_values("${AGENT_HOME}/Service/MySQLService/.env")
-        self.config_path = self.env_vars.get("MYSQL_SERVICE_CONFIG_PATH", "")
+        env_file_path = os.path.join(agent_home, "Service", "MySQLService", ".env")
+        if os.path.exists(env_file_path):
+            self.env_vars = dotenv_values(env_file_path)
+        else:
+            self.env_vars = {}
+        
+        # 获取配置路径并展开变量
+        config_path_template = self.env_vars.get("MYSQL_SERVICE_CONFIG_PATH", "")
+        if config_path_template:
+            self.config_path = config_path_template.replace("${AGENT_HOME}", agent_home)
+        else:
+            # 默认配置路径
+            self.config_path = os.path.join(agent_home, "Service", "MySQLService", "config.yml")
+        
         self.config: Dict = load_config(
             config_path=self.config_path, 
             config_name='MySQLService', 

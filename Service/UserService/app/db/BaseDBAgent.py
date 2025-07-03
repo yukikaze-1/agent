@@ -8,6 +8,7 @@
 数据库代理基类
 为所有数据库代理提供统一的数据库连接、事务管理和SQL操作功能
 """
+import os
 import httpx
 import json
 from typing import Optional, Dict, List, Any
@@ -71,7 +72,10 @@ class BaseDBAgent:
         self.logger = logger or setup_logger(name=agent_name, log_path="InternalModule")
         
         # 加载环境变量和配置
-        self.env_vars = dotenv_values("${AGENT_HOME}/Service/UserService/config/.env")
+        self.env_vars = dotenv_values(os.path.join(
+            os.environ.get('AGENT_HOME', os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
+            "Service/UserService/config/.env"
+        ))
         self.config_path = self.env_vars.get("USER_ACCOUNT_DATABASE_AGENT_CONFIG_PATH", "")
         self.config = load_config(config_path=self.config_path, config_name='UserAccountDataBaseAgent', logger=self.logger)
         

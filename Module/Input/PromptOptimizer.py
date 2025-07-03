@@ -8,6 +8,7 @@
     提示词优化器
 """
 
+import os
 import httpx
 import asyncio
 import uvicorn
@@ -48,7 +49,10 @@ class PromptOptimizer:
         self.logger = setup_logger(name="APIGateway", log_path='Other')
         
         # 加载环境变量和配置
-        self.env_vars = dotenv_values("${AGENT_HOME}/Module/Input/.env") 
+        self.env_vars = dotenv_values(os.path.join(
+            os.environ.get('AGENT_HOME', os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
+            "Module/Input/.env"
+        )) 
         self.config_path = self.env_vars.get("PROMPT_OPTIMIZER_CONFIG_PATH","") 
         self.config: Dict = load_config(config_path=self.config_path, config_name='PromptOptimizer', logger=self.logger)
         

@@ -88,15 +88,22 @@ class ExternalServiceManager:
     def _load_configuration(self):
         """加载配置文件"""
         try:
+            # 获取 AGENT_HOME 环境变量
+            agent_home = os.environ.get('AGENT_HOME', os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
+            
             # 优先使用 ExternalServiceInit 目录下的配置文件
-            external_service_config = "${AGENT_HOME}/Init/ExternalServiceInit/config.yml"
-            external_service_env = "${AGENT_HOME}/Init/ExternalServiceInit/.env"
+            external_service_config = os.path.join(agent_home, "Init", "ExternalServiceInit", "config.yml")
+            external_service_env = os.path.join(agent_home, "Init", "ExternalServiceInit", ".env")
             
             # 加载环境变量
             if os.path.exists(external_service_env):
                 self.env_vars = dotenv_values(external_service_env)
             else:
-                self.env_vars = dotenv_values("Init/.env")
+                init_env = os.path.join(agent_home, "Init", ".env")
+                if os.path.exists(init_env):
+                    self.env_vars = dotenv_values(init_env)
+                else:
+                    self.env_vars = {}
             
             if os.path.exists(external_service_config):
                 # 使用专门的外部服务配置文件
@@ -109,16 +116,23 @@ class ExternalServiceManager:
                 external_services_config = self.config.get('external_services', {})
             else:
                 # 回退到原来的配置方式
-                self.config_path = self.env_vars.get("INIT_CONFIG_PATH", "")
-                # load_config 返回的是 external_services 子配置
-                external_services_config = load_config(
-                    config_path=self.config_path, 
-                    config_name='external_services', 
-                    logger=self.logger
-                )
-                # 为了保持一致性，将其包装在完整配置结构中
-                self.config = {'external_services': external_services_config}
-                self.logger.warning("Using fallback configuration from Init directory")
+                fallback_config_path = os.path.join(agent_home, "Init", "config.yml")
+                if os.path.exists(fallback_config_path):
+                    # load_config 返回的是 external_services 子配置
+                    external_services_config = load_config(
+                        config_path=fallback_config_path, 
+                        config_name='external_services', 
+                        logger=self.logger
+                    )
+                    # 为了保持一致性，将其包装在完整配置结构中
+                    self.config = {'external_services': external_services_config}
+                    self.config_path = fallback_config_path
+                    self.logger.warning("Using fallback configuration from Init directory")
+                else:
+                    # 如果都没有找到配置文件，创建一个最小配置
+                    self.logger.error("No configuration file found. Creating minimal config.")
+                    self.config = {'external_services': {'base_services': [], 'optional_services': []}}
+                    external_services_config = self.config['external_services']
             
             self.support_services: List[str] = external_services_config.get('support_services', [])
             
@@ -126,11 +140,13 @@ class ExternalServiceManager:
             # 优先从配置文件获取，否则使用环境变量
             if hasattr(self, 'env_vars') and self.env_vars:
                 log_base = self.env_vars.get("LOG_PATH")
+                if log_base and "${AGENT_HOME}" in log_base:
+                    log_base = log_base.replace("${AGENT_HOME}", agent_home)
             else:
-                log_base = os.environ.get("LOG_PATH", "${AGENT_HOME}/Log")
+                log_base = os.environ.get("LOG_PATH", os.path.join(agent_home, "Log"))
             
             if log_base is None:
-                raise ValueError("LOG_PATH not set in env_vars or environment")
+                log_base = os.path.join(agent_home, "Log")
             
             self.log_dir = os.path.join(log_base, "ExternalService")
             os.makedirs(self.log_dir, exist_ok=True)

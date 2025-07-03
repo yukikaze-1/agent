@@ -107,7 +107,7 @@ class UserServiceRefactored:
         self.logger = setup_logger(name="UserServiceRefactored", log_path="InternalModule")
         
         # 加载环境变量和配置
-        self.env_vars = dotenv_values("${AGENT_HOME}/Service/UserService/.env")
+        self.env_vars = dotenv_values(os.path.expandvars("${AGENT_HOME}/Service/UserService/.env"))
         self.config_path = self.env_vars.get("USER_SERVICE_CONFIG_PATH","")
         self.config = load_config(config_path=self.config_path, config_name='UserService', logger=self.logger)
         

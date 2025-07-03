@@ -13,3 +13,7 @@ Module/TTS/GPTSoVits/ExternalService
 Module/Chat/user_audio_input
 Users/Files/*
 Users/Config/*
+*.log
+*.pyc
+*.pyo
+*.pyd

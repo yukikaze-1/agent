@@ -76,8 +76,14 @@ class ProcessManager:
         run_in_background = service_config.get("run_in_background", True)
         log_file = service_config.get("log_file")
         
-        # 处理相对路径 - 转换为绝对路径
-        if not os.path.isabs(service_script):
+        # 处理相对路径 - 只对脚本文件转换为绝对路径，不对系统命令处理
+        if not os.path.isabs(service_script) and (
+            service_script.endswith('.py') or 
+            '/' in service_script or 
+            service_script.startswith('./') or
+            service_script.startswith('../')
+        ):
+            # 只对明确的脚本文件路径进行转换
             agent_home = os.environ.get("AGENT_HOME")
             if agent_home:
                 service_script = os.path.join(agent_home, service_script)
@@ -85,6 +91,7 @@ class ProcessManager:
                 # 如果没有 AGENT_HOME，尝试从当前文件位置推断
                 current_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
                 service_script = os.path.join(current_dir, service_script)
+        # 对于系统命令（如 consul, ollama），保持原样，让系统在 PATH 中查找
         
         try:
             # 准备日志文件
