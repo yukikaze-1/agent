@@ -34,9 +34,6 @@ python Tools/Environment/check_cross_platform_compatibility.py
 ```bash
 # 清理日志文件
 python Tools/Development/rmlog.py
-
-# 查看早期函数定义
-cat Tools/Development/functions.py
 ```
 
 ## 📋 使用建议

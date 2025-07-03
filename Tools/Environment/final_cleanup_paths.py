@@ -11,7 +11,9 @@ from pathlib import Path
 
 def get_project_root():
     """获取项目根目录"""
-    return os.path.dirname(os.path.abspath(__file__))
+    # 脚本现在在 Tools/Environment/ 下，需要向上两级到达项目根目录
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    return os.path.dirname(os.path.dirname(current_dir))
 
 def fix_hardcoded_paths_in_file(file_path, project_root):
     """修复单个文件中的硬编码路径"""

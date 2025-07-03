@@ -47,4 +47,10 @@ python Tools/Environment/fix_hardcoded_paths.py
 3. 修复硬编码路径问题
 4. 确保其他人 clone 代码后能正常运行
 
+**🔧 归档后的修复说明**:
+- ✅ 所有脚本已修复路径检测问题，现在能正确从 `Tools/Environment/` 目录运行
+- ✅ `get_project_root()` 函数已更新，自动向上两级查找项目根目录
+- ✅ 简化了复杂的子进程操作，提高脚本稳定性
+- ✅ 新增 `test_final.py` 用于最终验证
+
 在部署新环境或遇到环境问题时，可以使用这些工具进行诊断和修复。

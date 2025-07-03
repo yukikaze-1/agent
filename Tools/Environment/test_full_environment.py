@@ -9,8 +9,9 @@ import subprocess
 import json
 from pathlib import Path
 
-# 确保项目根目录在 Python 路径中
-AGENT_ROOT = os.path.dirname(os.path.abspath(__file__))
+# 确保项目根目录在 Python 路径中 - 脚本在 Tools/Environment/ 下
+current_dir = os.path.dirname(os.path.abspath(__file__))
+AGENT_ROOT = os.path.dirname(os.path.dirname(current_dir))
 if AGENT_ROOT not in sys.path:
     sys.path.insert(0, AGENT_ROOT)
 

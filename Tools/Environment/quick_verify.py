@@ -13,8 +13,9 @@ def main():
     print("🔍 Agent 系统环境快速验证")
     print("="*50)
     
-    # 设置基础环境
-    agent_root = os.path.dirname(os.path.abspath(__file__))
+    # 设置基础环境 - 脚本在 Tools/Environment/ 下，需要向上两级到达项目根目录
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    agent_root = os.path.dirname(os.path.dirname(current_dir))
     os.environ["AGENT_HOME"] = agent_root
     
     current_pythonpath = os.environ.get("PYTHONPATH", "")
