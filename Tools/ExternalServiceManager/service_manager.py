@@ -26,9 +26,9 @@ import signal
 from typing import Dict, List, Optional, Tuple
 from pathlib import Path
 
-# 添加项目根目录到路径
-project_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(project_root))
+# 添加当前目录到路径（用于独立项目）
+current_dir = Path(__file__).parent
+sys.path.insert(0, str(current_dir))
 
 # 导入本地化的外部服务管理器
 try:
@@ -112,7 +112,8 @@ class ExternalServiceManager:
         Args:
             config_path: 用户指定的配置文件路径
         """
-        project_root = Path(__file__).parent.parent.parent
+        # 项目根目录现在就是当前目录
+        project_root = Path(__file__).parent
         
         # 设置 AGENT_HOME 环境变量（如果未设置）
         if 'AGENT_HOME' not in os.environ:
@@ -152,14 +153,8 @@ class ExternalServiceManager:
                 shutil.copy2(str(local_config), str(target_config))
                 self.logger.info(f"使用本地配置文件: {local_config}")
             else:
-                # 尝试传统配置文件作为后备
-                legacy_config = project_root / "discard" / "ExternalServiceInit_legacy" / "config.yml"
-                if legacy_config.exists():
-                    import shutil
-                    shutil.copy2(str(legacy_config), str(target_config))
-                    self.logger.info(f"使用传统配置文件: {legacy_config}")
-                else:
-                    self.logger.error(f"找不到任何配置文件")
+                self.logger.error(f"找不到本地配置文件: {local_config}")
+                raise FileNotFoundError(f"配置文件不存在: {local_config}")
         
         self.logger.info(f"传统管理器将使用配置文件: {target_config}")
     

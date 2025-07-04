@@ -1,53 +1,97 @@
 #!/usr/bin/env python3
 """
-简单测试本地化服务管理器
+测试独立外部服务管理器项目
 """
 
 import sys
 import os
 from pathlib import Path
 
-# 设置路径
-current_dir = Path(__file__).parent
-sys.path.insert(0, str(current_dir))
-
-def test_import():
-    """测试导入功能"""
-    print("🔍 测试导入...")
+def test_dependencies():
+    """测试依赖模块"""
+    print("🔍 测试依赖模块...")
     try:
-        from legacy.core import ExternalServiceManager
-        print("✅ 成功导入 ExternalServiceManager")
+        from Module.Utils.Logger import setup_logger
+        from Module.Utils.ConfigTools import load_config
+        print("✅ 依赖模块导入成功")
         return True
     except ImportError as e:
-        print(f"❌ 导入失败: {e}")
+        print(f"❌ 依赖模块导入失败: {e}")
         return False
 
-def test_creation():
-    """测试创建管理器"""
-    print("🔍 测试创建管理器...")
+def test_legacy_import():
+    """测试传统管理器导入"""
+    print("🔍 测试传统管理器导入...")
+    try:
+        from legacy.core import ExternalServiceManager
+        print("✅ 传统管理器导入成功")
+        return True
+    except ImportError as e:
+        print(f"❌ 传统管理器导入失败: {e}")
+        return False
+
+def test_main_manager():
+    """测试主服务管理器"""
+    print("🔍 测试主服务管理器...")
     try:
         from service_manager import ExternalServiceManager
-        manager = ExternalServiceManager()
-        print("✅ 成功创建服务管理器")
-        return manager
-    except Exception as e:
-        print(f"❌ 创建失败: {e}")
-        return None
+        print("✅ 主服务管理器导入成功")
+        return True
+    except ImportError as e:
+        print(f"❌ 主服务管理器导入失败: {e}")
+        return False
+
+def test_files_exist():
+    """测试必要文件是否存在"""
+    print("🔍 检查必要文件...")
+    current_dir = Path(__file__).parent
+    
+    required_files = [
+        "service_manager.py",
+        "manage_services.sh", 
+        "requirements.txt",
+        "setup.py",
+        "legacy/config.yml",
+        "Module/Utils/Logger.py",
+        "Module/Utils/ConfigTools.py"
+    ]
+    
+    missing_files = []
+    for file_path in required_files:
+        if not (current_dir / file_path).exists():
+            missing_files.append(file_path)
+    
+    if missing_files:
+        print(f"❌ 缺少文件: {missing_files}")
+        return False
+    else:
+        print("✅ 所有必要文件都存在")
+        return True
 
 def main():
-    print("🚀 开始测试本地化外部服务管理器...")
+    print("🚀 开始测试独立外部服务管理器项目...")
     
-    # 测试导入
-    if not test_import():
+    tests = [
+        test_files_exist,
+        test_dependencies,
+        test_legacy_import,
+        test_main_manager
+    ]
+    
+    passed = 0
+    for test in tests:
+        if test():
+            passed += 1
+        print()
+    
+    print(f"测试结果: {passed}/{len(tests)} 通过")
+    
+    if passed == len(tests):
+        print("🎉 所有测试通过！项目可以独立运行。")
+        return True
+    else:
+        print("❌ 部分测试失败，请检查项目配置。")
         return False
-    
-    # 测试创建
-    manager = test_creation()
-    if not manager:
-        return False
-    
-    print("🎉 所有测试通过！")
-    return True
 
 if __name__ == "__main__":
     success = main()

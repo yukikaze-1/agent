@@ -10,8 +10,8 @@ if [ ! -f "$PYTHON_SCRIPT" ]; then
     exit 1
 fi
 
-# 设置AGENT_HOME环境变量
-export AGENT_HOME="$(cd "$SCRIPT_DIR/../.." && pwd)"
+# 设置AGENT_HOME环境变量（指向当前目录）
+export AGENT_HOME="$SCRIPT_DIR"
 
 # 函数：显示帮助信息
 show_help() {
@@ -37,9 +37,9 @@ check_dependencies() {
     fi
     
     # 检查传统管理器目录
-    if [ ! -d "$AGENT_HOME/discard/ExternalServiceInit_legacy" ]; then
-        echo "❌ 错误：未找到传统外部服务管理器"
-        echo "请确保 discard/ExternalServiceInit_legacy 目录存在"
+    if [ ! -d "$AGENT_HOME/legacy" ]; then
+        echo "❌ 错误：未找到本地化外部服务管理器"
+        echo "请确保 legacy 目录存在"
         exit 1
     fi
 }

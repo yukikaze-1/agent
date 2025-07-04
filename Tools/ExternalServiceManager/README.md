@@ -1,35 +1,68 @@
 # 外部服务管理器 🚀
 
-这是一个独立的外部服务管理工具，用于启动、停止和管理 Agent 系统的外部服务。
+一个独立的外部服务管理工具，用于启动、停止和管理多个外部服务。
+
+## 📦 安装
+
+### 方式1：直接使用（推荐）
+
+```bash
+# 克隆或下载项目
+git clone <repository-url>
+cd ExternalServiceManager
+
+# 安装依赖
+pip install -r requirements.txt
+
+# 直接运行
+python service_manager.py --help
+```
+
+### 方式2：安装为Python包
+
+```bash
+# 安装依赖并设置
+pip install -e .
+
+# 使用命令行工具
+external-service-manager --help
+```
 
 ## 🔄 本地化改进 (最新更新)
 
 为了提高独立性和避免对 `discard` 目录的依赖，外部服务管理器现在包含了所有必要的依赖代码：
 
-### 目录结构更新
+### 目录结构
 ```
-Tools/ExternalServiceManager/
-├── service_manager.py      # 主要的服务管理器
-├── manage_services.sh      # 便捷的 bash 脚本
-├── config.yml             # 本地配置文件
-├── service_state.json     # 服务状态文件（自动生成）
-├── README.md              # 本文档
-├── legacy/                # 本地化的外部服务管理器组件
-│   ├── __init__.py
-│   ├── config.yml         # 外部服务配置
-│   ├── core/
-│   │   ├── __init__.py
-│   │   └── service_manager.py
-│   ├── exceptions/
-│   │   ├── __init__.py
-│   │   └── service_exceptions.py
-│   └── utils/
-│       ├── __init__.py
-│       ├── config_validator.py
-│       ├── health_checker.py
-│       ├── process_manager.py
-│       └── retry_manager.py
-└── logs/                  # 日志目录（自动创建）
+ExternalServiceManager/                 # 项目根目录
+├── service_manager.py                  # 主要的服务管理器
+├── manage_services.sh                  # 便捷的 bash 脚本
+├── config.yml                         # 本地配置文件
+├── service_state.json                 # 服务状态文件（自动生成）
+├── README.md                          # 本文档
+├── requirements.txt                   # Python依赖
+├── setup.py                          # 安装脚本
+├── LICENSE                           # 许可证
+├── .gitignore                        # Git忽略文件
+├── Module/                           # 依赖模块
+│   └── Utils/
+│       ├── Logger.py
+│       └── ConfigTools.py
+└── legacy/                           # 本地化的外部服务管理器组件
+    ├── __init__.py
+    ├── config.yml                   # 外部服务配置
+    ├── core/
+    │   ├── __init__.py
+    │   └── service_manager.py
+    ├── exceptions/
+    │   ├── __init__.py
+    │   └── service_exceptions.py
+    └── utils/
+        ├── __init__.py
+        ├── config_validator.py
+        ├── health_checker.py
+        ├── process_manager.py
+        └── retry_manager.py
 ```
 
 ### 主要改进
@@ -92,9 +125,6 @@ Tools/ExternalServiceManager/
 ### 🎮 方式1：使用便捷脚本（推荐）
 
 ```bash
-# 进入工具目录
-cd Tools/ExternalServiceManager/
-
 # 🚀 启动所有服务（一键启动8个服务）
 ./manage_services.sh start
 
@@ -114,9 +144,6 @@ cd Tools/ExternalServiceManager/
 ### 🐍 方式2：直接使用Python脚本
 
 ```bash
-# 进入工具目录
-cd Tools/ExternalServiceManager/
-
 # 启动所有服务
 python3 service_manager.py start
 
