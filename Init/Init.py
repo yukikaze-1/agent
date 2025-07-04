@@ -7,9 +7,9 @@
 """
 统一初始化管理器
 
-这个模块提供了 Agent 系统的统一初始化入口，负责协调和管理：
-- 外部服务的启动和管理
-- 内部模块的初始化和启动
+这个模块提供了 Agent 系统的统一初始化入口，采用服务发现架构：
+- 外部服务的发现和连接管理
+- 内部代理模块的初始化和启动
 - 系统健康检查和监控
 - 优雅的启动和关闭流程
 
@@ -21,7 +21,7 @@
     
     if success:
         print("系统初始化成功")
-        initializer.start_services()
+        # 系统已运行，代理模块已就绪
     
     # 关闭系统
     initializer.shutdown_all()
@@ -38,8 +38,7 @@ from dotenv import dotenv_values
 # 导入新的模块化组件（处理直接运行和模块导入两种情况）
 try:
     # 尝试相对导入（作为模块导入时）
-    from .ExternalServiceInit import ExternalServiceManager
-    from .InternalModuleInit import InternalModuleManager
+    from .ServiceDiscovery import ServiceDiscoveryManager, ExternalServiceConnector
     from .EnvironmentManager import EnvironmentManager
 except ImportError:
     # 如果相对导入失败，说明是直接运行脚本，使用绝对导入
@@ -56,8 +55,7 @@ except ImportError:
     if current_dir not in sys.path:
         sys.path.insert(0, current_dir)
     
-    from ExternalServiceInit import ExternalServiceManager
-    from InternalModuleInit import InternalModuleManager
+    from ServiceDiscovery import ServiceDiscoveryManager, ExternalServiceConnector
     from EnvironmentManager import EnvironmentManager
 
 from Module.Utils.Logger import setup_logger
@@ -88,14 +86,19 @@ class InitializationResult:
 
 class SystemInitializer:
     """
-    系统统一初始化器
+    系统统一初始化器（服务发现模式）
     
     负责整个 Agent 系统的初始化流程，包括：
     - 环境检查和预备工作
-    - 外部服务启动
-    - 内部模块初始化
+    - 外部服务的发现和连接
+    - 内部代理模块的初始化
     - 框架组件启动
     - 健康检查和状态监控
+    
+    架构说明：
+    - 外部服务：通过 Consul 服务发现连接已运行的服务
+    - 内部模块：使用代理模式，在同一进程内运行
+    - 通信方式：代理模块通过 HTTP 客户端与外部服务通信
     """
     
     def __init__(self, config_path: Optional[str] = None):
@@ -116,18 +119,19 @@ class SystemInitializer:
             self.env_vars = dotenv_values("Init/.env")
             self.config_path = config_path or self.env_vars.get("INIT_CONFIG_PATH", "")
             
-            # 初始化各个管理器
-            self.external_service_manager = None
-            self.internal_module_manager = None
-            self.frame_manager = None
+            # 初始化环境管理器
             self.environment_manager = None
+            
+            # 服务发现模式的管理器
+            self.service_discovery_manager = None
+            self.service_connector = None
             
             # 状态跟踪
             self.started_services = []
             self.started_modules = []
             self.failed_components = []
             
-            self.logger.info("SystemInitializer initialized successfully")
+            self.logger.info("SystemInitializer initialized successfully (服务发现模式)")
             
         except Exception as e:
             self.logger.error(f"Failed to initialize SystemInitializer: {str(e)}")
@@ -278,129 +282,154 @@ class SystemInitializer:
             )
     
     def _initialize_external_services(self) -> InitializationResult:
-        """初始化外部服务"""
+        """初始化外部服务（服务发现模式）"""
         self.current_stage = InitializationStage.EXTERNAL_SERVICES
-        self.logger.info("阶段2: 初始化外部服务...")
+        self.logger.info("阶段2: 连接外部服务（服务发现模式）...")
         
         try:
-            # 创建外部服务管理器
-            self.external_service_manager = ExternalServiceManager()
+            import asyncio
             
-            # 验证管理器是否正确创建
-            if not hasattr(self.external_service_manager, 'init_services'):
-                raise Exception("ExternalServiceManager instance is invalid")
+            # 创建服务发现管理器
+            consul_url = self.env_vars.get("CONSUL_URL") or "http://127.0.0.1:8500"
+            discovery_config_path = "Init/ServiceDiscovery/config.yml"
             
-            # 启动外部服务
-            base_services, optional_services = self.external_service_manager.init_services()
+            self.service_discovery_manager = ServiceDiscoveryManager(
+                consul_url=consul_url,
+                config_path=discovery_config_path
+            )
             
-            # 记录启动的服务
-            if base_services:
-                self.started_services.extend([name for name, _ in base_services])
-                self.logger.info(f"✅ 基础外部服务启动成功: {[name for name, _ in base_services]}")
+            # 创建服务连接器
+            self.service_connector = ExternalServiceConnector(self.service_discovery_manager)
             
-            if optional_services:
-                self.started_services.extend([name for name, _ in optional_services])
-                self.logger.info(f"✅ 可选外部服务启动成功: {[name for name, _ in optional_services]}")
-            
-            # 检查服务状态
-            service_status = {}
-            try:
-                if hasattr(self.external_service_manager, 'get_service_status'):
-                    service_status = self.external_service_manager.get_service_status()
+            async def async_init():
+                # 等待外部服务就绪
+                self.logger.info("等待外部服务就绪...")
+                discovery_manager = self.service_discovery_manager
+                if discovery_manager and not await discovery_manager.wait_for_services(timeout=60):
+                    raise RuntimeError("外部服务等待超时")
+                
+                # 初始化服务连接
+                self.logger.info("初始化服务连接...")
+                service_connector = self.service_connector
+                if service_connector:
+                    service_clients = await service_connector.initialize_connections()
+                    return service_clients
                 else:
-                    self.logger.warning("get_service_status method not available")
-            except Exception as e:
-                self.logger.warning(f"获取外部服务状态失败: {str(e)}")
-                service_status = {}
+                    raise RuntimeError("Service connector not initialized")
             
-            self.logger.info("✅ 外部服务初始化完成")
+            # 运行异步初始化
+            service_clients = asyncio.run(async_init())
+            
+            # 记录连接的服务
+            connected_services = list(service_clients.keys())
+            self.started_services.extend(connected_services)
+            
+            self.logger.info(f"✅ 外部服务连接成功: {connected_services}")
+            
             return InitializationResult(
                 success=True,
                 stage=InitializationStage.EXTERNAL_SERVICES,
-                message=f"外部服务启动成功，共 {len(self.started_services)} 个服务",
-                started_components=self.started_services,
-                details={"service_status": service_status}
-            )
-            
-        except Exception as e:
-            error_msg = f"外部服务初始化失败: {str(e)}"
-            self.logger.error(error_msg)
-            self.failed_components.append("external_services")
-            
-            return InitializationResult(
-                success=False,
-                stage=InitializationStage.EXTERNAL_SERVICES,
-                message=error_msg,
-                failed_components=self.failed_components
-            )
-    
-    def _initialize_internal_modules(self) -> InitializationResult:
-        """初始化内部模块"""
-        self.current_stage = InitializationStage.INTERNAL_MODULES
-        self.logger.info("阶段3: 初始化内部模块...")
-        
-        try:
-            # 创建内部模块管理器
-            self.internal_module_manager = InternalModuleManager()
-            
-            # 验证管理器是否正确创建
-            if not hasattr(self.internal_module_manager, 'init_modules'):
-                raise Exception("InternalModuleManager instance is invalid")
-            
-            # 启动内部模块
-            success, base_success, base_fail, opt_success, opt_fail = self.internal_module_manager.init_modules()
-            
-            # 记录启动的模块
-            self.started_modules.extend(base_success)
-            self.started_modules.extend(opt_success)
-            
-            # 记录失败的模块
-            if base_fail:
-                self.failed_components.extend(base_fail)
-                self.logger.warning(f"⚠️  基础模块启动失败: {base_fail}")
-            
-            if opt_fail:
-                self.failed_components.extend(opt_fail)
-                self.logger.warning(f"⚠️  可选模块启动失败: {opt_fail}")
-            
-            # 检查模块健康状态
-            try:
-                if hasattr(self.internal_module_manager, 'get_module_status'):
-                    health_status = self.internal_module_manager.get_module_status()
-                else:
-                    self.logger.warning("get_module_status method not available")
-                    health_status = {}
-            except Exception as e:
-                self.logger.warning(f"获取内部模块状态失败: {str(e)}")
-                health_status = {}
-            
-            if self.started_modules:
-                self.logger.info(f"✅ 内部模块启动成功: {self.started_modules}")
-            
-            self.logger.info("✅ 内部模块初始化完成")
-            return InitializationResult(
-                success=len(self.started_modules) > 0,  # 只要有模块启动成功就算成功
-                stage=InitializationStage.INTERNAL_MODULES,
-                message=f"内部模块启动完成，成功 {len(self.started_modules)} 个，失败 {len(base_fail + opt_fail)} 个",
-                started_components=self.started_modules,
-                failed_components=base_fail + opt_fail,
+                message="外部服务连接成功",
+                started_components=connected_services,
                 details={
-                    "health_status": health_status,
-                    "base_modules": {"success": base_success, "failed": base_fail},
-                    "optional_modules": {"success": opt_success, "failed": opt_fail}
+                    "mode": "service_discovery",
+                    "connected_services": connected_services,
+                    "consul_url": consul_url
                 }
             )
             
         except Exception as e:
-            error_msg = f"内部模块初始化失败: {str(e)}"
+            error_msg = f"外部服务连接失败: {str(e)}"
             self.logger.error(error_msg)
-            self.failed_components.append("internal_modules")
+            return InitializationResult(
+                success=False,
+                stage=InitializationStage.EXTERNAL_SERVICES,
+                message=error_msg,
+                details={"mode": "service_discovery"}
+            )
+    
+    def _initialize_internal_modules(self) -> InitializationResult:
+        """初始化内部模块（代理模式）"""
+        self.current_stage = InitializationStage.INTERNAL_MODULES
+        self.logger.info("阶段3: 初始化内部代理模块...")
+        
+        try:
+            import asyncio
+            from Module.LLM.LLMProxy import LLMProxy
+            from Module.TTS.TTSProxy import TTSProxy
+            from Module.STT.STTProxy import STTProxy
             
+            # 确保服务连接器可用
+            if not self.service_connector:
+                raise RuntimeError("Service connector not initialized")
+            
+            async def async_init_proxies():
+                # 初始化代理模块
+                proxies = {}
+                
+                # LLM代理
+                try:
+                    llm_proxy = LLMProxy()
+                    await llm_proxy.initialize()
+                    proxies["llm_proxy"] = llm_proxy
+                    self.logger.info("✅ LLM代理初始化成功")
+                except Exception as e:
+                    self.logger.error(f"❌ LLM代理初始化失败: {e}")
+                    raise
+                
+                # TTS代理
+                try:
+                    tts_proxy = TTSProxy()
+                    await tts_proxy.initialize()
+                    proxies["tts_proxy"] = tts_proxy
+                    self.logger.info("✅ TTS代理初始化成功")
+                except Exception as e:
+                    self.logger.error(f"❌ TTS代理初始化失败: {e}")
+                    raise
+                
+                # STT代理
+                try:
+                    stt_proxy = STTProxy()
+                    await stt_proxy.initialize()
+                    proxies["stt_proxy"] = stt_proxy
+                    self.logger.info("✅ STT代理初始化成功")
+                except Exception as e:
+                    self.logger.error(f"❌ STT代理初始化失败: {e}")
+                    raise
+                
+                return proxies
+            
+            # 运行异步初始化
+            proxies = asyncio.run(async_init_proxies())
+            
+            # 存储代理模块引用
+            self.proxy_modules = proxies
+            
+            # 记录启动的模块
+            proxy_names = list(proxies.keys())
+            self.started_modules.extend(proxy_names)
+            
+            self.logger.info(f"✅ 内部代理模块初始化完成: {proxy_names}")
+            
+            return InitializationResult(
+                success=True,
+                stage=InitializationStage.INTERNAL_MODULES,
+                message="内部代理模块初始化成功",
+                started_components=proxy_names,
+                details={
+                    "mode": "proxy",
+                    "initialized_proxies": proxy_names
+                }
+            )
+            
+        except Exception as e:
+            error_msg = f"内部代理模块初始化失败: {str(e)}"
+            self.logger.error(error_msg)
             return InitializationResult(
                 success=False,
                 stage=InitializationStage.INTERNAL_MODULES,
                 message=error_msg,
-                failed_components=self.failed_components
+                details={"mode": "proxy"}
             )
     
     def _initialize_framework(self) -> InitializationResult:
@@ -442,26 +471,26 @@ class SystemInitializer:
             "initialization_time": self.initialization_time
         }
         
-        # 添加详细状态
-        if self.external_service_manager:
+        # 添加服务发现相关状态
+        if self.service_discovery_manager:
             try:
-                if hasattr(self.external_service_manager, 'get_service_status'):
-                    status["external_services"] = self.external_service_manager.get_service_status()
-                else:
-                    status["external_services"] = "方法不可用"
+                status["service_discovery"] = {
+                    "consul_available": True,
+                    "connected_services": self.started_services
+                }
             except Exception as e:
-                self.logger.warning(f"获取外部服务状态失败: {str(e)}")
-                status["external_services"] = "获取状态失败"
+                self.logger.warning(f"获取服务发现状态失败: {str(e)}")
+                status["service_discovery"] = {
+                    "consul_available": False,
+                    "error": str(e)
+                }
         
-        if self.internal_module_manager:
-            try:
-                if hasattr(self.internal_module_manager, 'get_module_status'):
-                    status["internal_modules"] = self.internal_module_manager.get_module_status()
-                else:
-                    status["internal_modules"] = "方法不可用"
-            except Exception as e:
-                self.logger.warning(f"获取内部模块状态失败: {str(e)}")
-                status["internal_modules"] = "获取状态失败"
+        # 添加代理模块状态
+        if hasattr(self, 'proxy_modules'):
+            status["proxy_modules"] = {
+                "initialized_proxies": list(self.proxy_modules.keys()),
+                "count": len(self.proxy_modules)
+            }
         
         return status
     
@@ -474,35 +503,39 @@ class SystemInitializer:
         }
         
         try:
-            # 检查外部服务健康状态
-            if self.external_service_manager:
+            # 检查服务发现管理器健康状态
+            if self.service_discovery_manager:
                 try:
-                    if hasattr(self.external_service_manager, 'get_service_status'):
-                        service_status = self.external_service_manager.get_service_status()
-                        health_report["details"]["external_services"] = service_status
-                    else:
-                        health_report["details"]["external_services"] = "方法不可用"
+                    # 简单的连通性检查
+                    health_report["details"]["service_discovery"] = {
+                        "consul_url": self.service_discovery_manager.consul_url if hasattr(self.service_discovery_manager, 'consul_url') else "unknown",
+                        "status": "connected" if self.started_services else "no_services"
+                    }
                 except Exception as e:
-                    health_report["details"]["external_services"] = f"检查失败: {str(e)}"
+                    health_report["details"]["service_discovery"] = f"检查失败: {str(e)}"
                     health_report["overall_healthy"] = False
             
-            # 检查内部模块健康状态
-            if self.internal_module_manager:
+            # 检查代理模块健康状态
+            if hasattr(self, 'proxy_modules'):
                 try:
-                    if hasattr(self.internal_module_manager, 'check_all_modules_health'):
-                        module_health = self.internal_module_manager.check_all_modules_health()
-                        health_report["details"]["internal_modules"] = module_health
-                        
-                        # 检查是否有不健康的模块
-                        for module_name, (is_healthy, message) in module_health.items():
-                            if not is_healthy:
-                                health_report["overall_healthy"] = False
-                                break
-                    else:
-                        health_report["details"]["internal_modules"] = "方法不可用"
-                        
+                    proxy_health = {}
+                    for proxy_name, proxy_instance in self.proxy_modules.items():
+                        # 简单检查代理实例是否存在
+                        proxy_health[proxy_name] = {
+                            "initialized": proxy_instance is not None,
+                            "type": type(proxy_instance).__name__
+                        }
+                    
+                    health_report["details"]["proxy_modules"] = proxy_health
+                    
+                    # 检查是否有不健康的代理
+                    for proxy_name, health_info in proxy_health.items():
+                        if not health_info["initialized"]:
+                            health_report["overall_healthy"] = False
+                            break
+                            
                 except Exception as e:
-                    health_report["details"]["internal_modules"] = f"检查失败: {str(e)}"
+                    health_report["details"]["proxy_modules"] = f"检查失败: {str(e)}"
                     health_report["overall_healthy"] = False
             
             self.logger.info(f"健康检查完成: {'健康' if health_report['overall_healthy'] else '存在问题'}")
@@ -521,29 +554,48 @@ class SystemInitializer:
         success = True
         
         try:
-            # 关闭内部模块
-            if self.internal_module_manager:
+            # 关闭代理模块
+            if hasattr(self, 'proxy_modules'):
                 try:
-                    self.logger.info("关闭内部模块...")
-                    # 内部模块的析构函数会自动清理
-                    del self.internal_module_manager
-                    self.internal_module_manager = None
-                    self.logger.info("✅ 内部模块关闭完成")
+                    self.logger.info("关闭代理模块...")
+                    for proxy_name, proxy_instance in self.proxy_modules.items():
+                        try:
+                            # 如果代理有清理方法，调用它
+                            if hasattr(proxy_instance, 'cleanup'):
+                                proxy_instance.cleanup()
+                            self.logger.info(f"✅ {proxy_name} 关闭完成")
+                        except Exception as e:
+                            self.logger.error(f"关闭 {proxy_name} 失败: {str(e)}")
+                            success = False
+                    
+                    del self.proxy_modules
+                    self.logger.info("✅ 代理模块关闭完成")
                 except Exception as e:
-                    self.logger.error(f"关闭内部模块失败: {str(e)}")
+                    self.logger.error(f"关闭代理模块失败: {str(e)}")
                     success = False
             
-            # 关闭外部服务
-            if self.external_service_manager:
+            # 关闭服务连接器
+            if self.service_connector:
                 try:
-                    self.logger.info("关闭外部服务...")
-                    if hasattr(self.external_service_manager, 'stop_all_services'):
-                        self.external_service_manager.stop_all_services()
-                    else:
-                        self.logger.warning("stop_all_services method not available")
-                    self.logger.info("✅ 外部服务关闭完成")
+                    self.logger.info("关闭服务连接器...")
+                    # 服务连接器的清理
+                    del self.service_connector
+                    self.service_connector = None
+                    self.logger.info("✅ 服务连接器关闭完成")
                 except Exception as e:
-                    self.logger.error(f"关闭外部服务失败: {str(e)}")
+                    self.logger.error(f"关闭服务连接器失败: {str(e)}")
+                    success = False
+            
+            # 关闭服务发现管理器
+            if self.service_discovery_manager:
+                try:
+                    self.logger.info("关闭服务发现管理器...")
+                    # 服务发现管理器的清理
+                    del self.service_discovery_manager
+                    self.service_discovery_manager = None
+                    self.logger.info("✅ 服务发现管理器关闭完成")
+                except Exception as e:
+                    self.logger.error(f"关闭服务发现管理器失败: {str(e)}")
                     success = False
             
             if success:

@@ -3,7 +3,7 @@
 
 处理内部模块之间的依赖关系和启动顺序。
 """
-
+from logging import Logger
 from typing import List, Dict, Set, Any, Tuple, Optional
 from collections import defaultdict, deque
 from ..exceptions import ModuleDependencyError
@@ -12,7 +12,7 @@ from ..exceptions import ModuleDependencyError
 class DependencyResolver:
     """依赖关系解析器"""
     
-    def __init__(self, logger):
+    def __init__(self, logger: Logger):
         self.logger = logger
         self.dependencies: Dict[str, Set[str]] = defaultdict(set)
         self.reverse_dependencies: Dict[str, Set[str]] = defaultdict(set)

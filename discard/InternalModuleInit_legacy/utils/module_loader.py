@@ -5,6 +5,7 @@
 """
 
 import importlib
+from logging import Logger
 from typing import Any, Dict, Optional, Type
 from logging import Logger
 from ..exceptions import ModuleLoadError, ModuleDependencyError
@@ -13,7 +14,7 @@ from ..exceptions import ModuleLoadError, ModuleDependencyError
 class ModuleLoader:
     """模块加载器"""
     
-    def __init__(self, logger):
+    def __init__(self, logger: Logger):
         self.logger = logger
         self._loaded_modules: Dict[str, Any] = {}
     
