@@ -34,23 +34,21 @@ except ImportError:
     import sys
     import os
     
-    # 添加 ExternalServiceInit 目录到路径
+    # 添加当前目录到路径
     current_dir = os.path.dirname(os.path.dirname(__file__))
     if current_dir not in sys.path:
         sys.path.insert(0, current_dir)
     
-    from exceptions import (
+    from exceptions.service_exceptions import (
         ServiceStartupError, 
         ServiceConfigError, 
         ServiceNotFoundError,
         ServiceStopError
     )
-    from utils import (
-        ServiceConfigValidator,
-        ServiceHealthChecker,
-        ProcessManager,
-        RetryManager
-    )
+    from utils.config_validator import ServiceConfigValidator
+    from utils.health_checker import ServiceHealthChecker
+    from utils.process_manager import ProcessManager
+    from utils.retry_manager import RetryManager
 
 
 class ExternalServiceManager:

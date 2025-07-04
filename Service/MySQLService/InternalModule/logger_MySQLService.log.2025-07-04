@@ -1,0 +1,132 @@
+2025-07-04 02:23:09,491 - MySQLService - INFO - Initializing MySQL Service...
+2025-07-04 02:23:09,491 - MySQLService - INFO - Loading configuration...
+2025-07-04 02:23:09,493 - MySQLService - INFO - Configuration loaded and validated
+2025-07-04 02:23:09,493 - MySQLService - INFO - Initializing core components...
+2025-07-04 02:23:09,502 - MySQLService - INFO - All core components initialized
+2025-07-04 02:23:09,502 - MySQLService - INFO - MySQL Service initialized successfully
+2025-07-04 02:23:09,502 - MySQLService - INFO - Starting MySQL Service on 127.0.0.1:20050
+2025-07-04 02:23:09,515 - MySQLService - INFO - Starting MySQL Service lifespan...
+2025-07-04 02:23:09,558 - MySQLService - INFO - Async HTTP Client initialized
+2025-07-04 02:23:09,558 - MySQLService - INFO - Registering service to Consul...
+2025-07-04 02:23:09,565 - MySQLService - INFO - Service 'MySQLService' registered successfully to Consul.
+2025-07-04 02:23:09,566 - MySQLService - INFO - Service registered to Consul
+2025-07-04 02:23:11,978 - MySQLService - INFO - Successfully connected to database 'userinfo', connection_id=0
+2025-07-04 02:24:38,446 - MySQLService - INFO - Deregistering service from Consul...
+2025-07-04 02:24:38,449 - MySQLService - ERROR - Error while deregistering service ID 'MySQLService-127.0.0.1:20050': All connection attempts failed
+2025-07-04 02:24:38,449 - MySQLService - INFO - Service deregistered from Consul
+2025-07-04 02:24:38,449 - MySQLService - INFO - All dynamic transaction sessions cleaned up
+2025-07-04 02:24:38,449 - MySQLService - INFO - Successfully closed connection 0
+2025-07-04 02:24:38,450 - MySQLService - INFO - Closed connection 0
+2025-07-04 02:24:38,450 - MySQLService - INFO - All MySQL connections closed
+2025-07-04 02:24:38,450 - MySQLService - INFO - All resources cleaned up
+2025-07-04 02:24:38,450 - MySQLService - INFO - Shutting down Async HTTP Client
+2025-07-04 22:28:24,654 - MySQLService - INFO - Initializing MySQL Service...
+2025-07-04 22:28:24,656 - MySQLService - INFO - Loading configuration...
+2025-07-04 22:28:24,658 - MySQLService - INFO - Configuration loaded and validated
+2025-07-04 22:28:24,658 - MySQLService - INFO - Initializing core components...
+2025-07-04 22:28:24,667 - MySQLService - INFO - All core components initialized
+2025-07-04 22:28:24,667 - MySQLService - INFO - MySQL Service initialized successfully
+2025-07-04 22:28:24,668 - MySQLService - INFO - Starting MySQL Service on 127.0.0.1:20050
+2025-07-04 22:28:24,680 - MySQLService - INFO - Starting MySQL Service lifespan...
+2025-07-04 22:28:24,722 - MySQLService - INFO - Async HTTP Client initialized
+2025-07-04 22:28:24,723 - MySQLService - INFO - Registering service to Consul...
+2025-07-04 22:28:24,730 - MySQLService - INFO - Service 'MySQLService' registered successfully to Consul.
+2025-07-04 22:28:24,730 - MySQLService - INFO - Service registered to Consul
+2025-07-04 22:28:27,390 - MySQLService - INFO - Successfully connected to database 'userinfo', connection_id=0
+2025-07-04 22:28:40,763 - MySQLService - INFO - Deregistering service from Consul...
+2025-07-04 22:28:40,765 - MySQLService - ERROR - Error while deregistering service ID 'MySQLService-127.0.0.1:20050': All connection attempts failed
+2025-07-04 22:28:40,765 - MySQLService - INFO - Service deregistered from Consul
+2025-07-04 22:28:40,765 - MySQLService - INFO - All dynamic transaction sessions cleaned up
+2025-07-04 22:28:40,765 - MySQLService - INFO - Successfully closed connection 0
+2025-07-04 22:28:40,765 - MySQLService - INFO - Closed connection 0
+2025-07-04 22:28:40,765 - MySQLService - INFO - All MySQL connections closed
+2025-07-04 22:28:40,765 - MySQLService - INFO - All resources cleaned up
+2025-07-04 22:28:40,766 - MySQLService - INFO - Shutting down Async HTTP Client
+2025-07-04 22:58:22,690 - MySQLService - INFO - Initializing MySQL Service...
+2025-07-04 22:58:22,690 - MySQLService - INFO - Loading configuration...
+2025-07-04 22:58:22,692 - MySQLService - INFO - Configuration loaded and validated
+2025-07-04 22:58:22,692 - MySQLService - INFO - Initializing core components...
+2025-07-04 22:58:22,701 - MySQLService - INFO - All core components initialized
+2025-07-04 22:58:22,701 - MySQLService - INFO - MySQL Service initialized successfully
+2025-07-04 22:58:22,701 - MySQLService - INFO - Starting MySQL Service on 127.0.0.1:20050
+2025-07-04 22:58:22,714 - MySQLService - INFO - Starting MySQL Service lifespan...
+2025-07-04 22:58:22,756 - MySQLService - INFO - Async HTTP Client initialized
+2025-07-04 22:58:22,756 - MySQLService - INFO - Registering service to Consul...
+2025-07-04 22:58:22,764 - MySQLService - INFO - Service 'MySQLService' registered successfully to Consul.
+2025-07-04 22:58:22,764 - MySQLService - INFO - Service registered to Consul
+2025-07-04 22:58:25,199 - MySQLService - INFO - Successfully connected to database 'userinfo', connection_id=0
+2025-07-04 22:58:38,797 - MySQLService - INFO - Deregistering service from Consul...
+2025-07-04 22:58:38,800 - MySQLService - ERROR - Error while deregistering service ID 'MySQLService-127.0.0.1:20050': All connection attempts failed
+2025-07-04 22:58:38,800 - MySQLService - INFO - Service deregistered from Consul
+2025-07-04 22:58:38,800 - MySQLService - INFO - All dynamic transaction sessions cleaned up
+2025-07-04 22:58:38,800 - MySQLService - INFO - Successfully closed connection 0
+2025-07-04 22:58:38,801 - MySQLService - INFO - Closed connection 0
+2025-07-04 22:58:38,801 - MySQLService - INFO - All MySQL connections closed
+2025-07-04 22:58:38,801 - MySQLService - INFO - All resources cleaned up
+2025-07-04 22:58:38,801 - MySQLService - INFO - Shutting down Async HTTP Client
+2025-07-04 23:00:28,954 - MySQLService - INFO - Initializing MySQL Service...
+2025-07-04 23:00:28,954 - MySQLService - INFO - Loading configuration...
+2025-07-04 23:00:28,956 - MySQLService - INFO - Configuration loaded and validated
+2025-07-04 23:00:28,956 - MySQLService - INFO - Initializing core components...
+2025-07-04 23:00:28,965 - MySQLService - INFO - All core components initialized
+2025-07-04 23:00:28,965 - MySQLService - INFO - MySQL Service initialized successfully
+2025-07-04 23:00:28,965 - MySQLService - INFO - Starting MySQL Service on 127.0.0.1:20050
+2025-07-04 23:00:28,978 - MySQLService - INFO - Starting MySQL Service lifespan...
+2025-07-04 23:00:29,021 - MySQLService - INFO - Async HTTP Client initialized
+2025-07-04 23:00:29,021 - MySQLService - INFO - Registering service to Consul...
+2025-07-04 23:00:29,029 - MySQLService - INFO - Service 'MySQLService' registered successfully to Consul.
+2025-07-04 23:00:29,029 - MySQLService - INFO - Service registered to Consul
+2025-07-04 23:00:31,446 - MySQLService - INFO - Successfully connected to database 'userinfo', connection_id=0
+2025-07-04 23:00:45,063 - MySQLService - INFO - Deregistering service from Consul...
+2025-07-04 23:00:45,066 - MySQLService - ERROR - Error while deregistering service ID 'MySQLService-127.0.0.1:20050': All connection attempts failed
+2025-07-04 23:00:45,066 - MySQLService - INFO - Service deregistered from Consul
+2025-07-04 23:00:45,066 - MySQLService - INFO - All dynamic transaction sessions cleaned up
+2025-07-04 23:00:45,067 - MySQLService - INFO - Successfully closed connection 0
+2025-07-04 23:00:45,067 - MySQLService - INFO - Closed connection 0
+2025-07-04 23:00:45,067 - MySQLService - INFO - All MySQL connections closed
+2025-07-04 23:00:45,067 - MySQLService - INFO - All resources cleaned up
+2025-07-04 23:00:45,067 - MySQLService - INFO - Shutting down Async HTTP Client
+2025-07-04 23:04:21,676 - MySQLService - INFO - Initializing MySQL Service...
+2025-07-04 23:04:21,676 - MySQLService - INFO - Loading configuration...
+2025-07-04 23:04:21,678 - MySQLService - INFO - Configuration loaded and validated
+2025-07-04 23:04:21,678 - MySQLService - INFO - Initializing core components...
+2025-07-04 23:04:21,687 - MySQLService - INFO - All core components initialized
+2025-07-04 23:04:21,687 - MySQLService - INFO - MySQL Service initialized successfully
+2025-07-04 23:04:21,687 - MySQLService - INFO - Starting MySQL Service on 127.0.0.1:20050
+2025-07-04 23:04:21,700 - MySQLService - INFO - Starting MySQL Service lifespan...
+2025-07-04 23:04:21,742 - MySQLService - INFO - Async HTTP Client initialized
+2025-07-04 23:04:21,742 - MySQLService - INFO - Registering service to Consul...
+2025-07-04 23:04:21,750 - MySQLService - INFO - Service 'MySQLService' registered successfully to Consul.
+2025-07-04 23:04:21,750 - MySQLService - INFO - Service registered to Consul
+2025-07-04 23:04:24,156 - MySQLService - INFO - Successfully connected to database 'userinfo', connection_id=0
+2025-07-04 23:05:29,700 - MySQLService - INFO - Deregistering service from Consul...
+2025-07-04 23:05:29,706 - MySQLService - WARNING - Failed to deregister service ID 'MySQLService-127.0.0.1:20050': 404, Unknown service ID "MySQLService-127.0.0.1:20050". Ensure that the service ID is passed, not the service name.
+2025-07-04 23:05:29,706 - MySQLService - INFO - Service deregistered from Consul
+2025-07-04 23:05:29,706 - MySQLService - INFO - All dynamic transaction sessions cleaned up
+2025-07-04 23:05:29,707 - MySQLService - INFO - Successfully closed connection 0
+2025-07-04 23:05:29,707 - MySQLService - INFO - Closed connection 0
+2025-07-04 23:05:29,707 - MySQLService - INFO - All MySQL connections closed
+2025-07-04 23:05:29,707 - MySQLService - INFO - All resources cleaned up
+2025-07-04 23:05:29,707 - MySQLService - INFO - Shutting down Async HTTP Client
+2025-07-04 23:05:32,192 - MySQLService - INFO - Initializing MySQL Service...
+2025-07-04 23:05:32,192 - MySQLService - INFO - Loading configuration...
+2025-07-04 23:05:32,194 - MySQLService - INFO - Configuration loaded and validated
+2025-07-04 23:05:32,194 - MySQLService - INFO - Initializing core components...
+2025-07-04 23:05:32,203 - MySQLService - INFO - All core components initialized
+2025-07-04 23:05:32,203 - MySQLService - INFO - MySQL Service initialized successfully
+2025-07-04 23:05:32,203 - MySQLService - INFO - Starting MySQL Service on 127.0.0.1:20050
+2025-07-04 23:05:32,216 - MySQLService - INFO - Starting MySQL Service lifespan...
+2025-07-04 23:05:32,258 - MySQLService - INFO - Async HTTP Client initialized
+2025-07-04 23:05:32,258 - MySQLService - INFO - Registering service to Consul...
+2025-07-04 23:05:32,266 - MySQLService - INFO - Service 'MySQLService' registered successfully to Consul.
+2025-07-04 23:05:32,266 - MySQLService - INFO - Service registered to Consul
+2025-07-04 23:05:36,707 - MySQLService - INFO - Successfully connected to database 'userinfo', connection_id=0
+2025-07-04 23:10:17,463 - MySQLService - INFO - Deregistering service from Consul...
+2025-07-04 23:10:17,466 - MySQLService - ERROR - Error while deregistering service ID 'MySQLService-127.0.0.1:20050': All connection attempts failed
+2025-07-04 23:10:17,466 - MySQLService - INFO - Service deregistered from Consul
+2025-07-04 23:10:17,467 - MySQLService - INFO - All dynamic transaction sessions cleaned up
+2025-07-04 23:10:17,467 - MySQLService - INFO - Successfully closed connection 0
+2025-07-04 23:10:17,467 - MySQLService - INFO - Closed connection 0
+2025-07-04 23:10:17,467 - MySQLService - INFO - All MySQL connections closed
+2025-07-04 23:10:17,467 - MySQLService - INFO - All resources cleaned up
+2025-07-04 23:10:17,468 - MySQLService - INFO - Shutting down Async HTTP Client
