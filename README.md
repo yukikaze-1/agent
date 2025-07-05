@@ -21,6 +21,7 @@ python agent_v0.1.py
 - **[启动指南](Docs/STARTUP_GUIDE.md)** - 详细的启动方法和配置说明
 - **[跨平台部署](Docs/CROSS_PLATFORM_DEPLOY_GUIDE.md)** - 确保在不同系统上的兼容性
 - **[环境工具](Tools/Environment/README.md)** - 环境验证和故障排除工具
+- **[归档文件](Archive/README.md)** - 已归档的测试脚本和临时文件
 
 ## 🔧 环境验证
 
@@ -30,6 +31,27 @@ python Tools/Environment/quick_verify.py
 
 # 完整环境测试
 python Tools/Environment/test_full_environment.py
+```
+
+## 📁 项目结构
+
+```
+agent/
+├── Archive/          # 归档的测试脚本和临时文件
+├── Client/          # 客户端实现
+├── Config/          # 配置文件
+├── Core/            # 核心模块
+├── Data/            # 数据存储
+├── Docs/            # 文档
+├── Functions/       # 功能模块
+├── Init/            # 初始化模块
+├── Log/             # 日志文件
+├── Memory/          # 记忆模块
+├── Module/          # 各种AI模块
+├── Other/           # 其他服务
+├── Service/         # 微服务
+├── Tools/           # 工具脚本
+└── Users/           # 用户数据
 ```
 
 # 1. 简介

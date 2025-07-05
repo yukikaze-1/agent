@@ -1,7 +1,8 @@
-
 __pycache__/
 output/
 study/
+# 归档目录 - 包含已归档的临时文件和测试脚本
+Archive/
 Log/ExternalService/*
 Log/InternalModule/*
 Log/Other/*
