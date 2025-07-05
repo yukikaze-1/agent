@@ -7,7 +7,8 @@ Log/InternalModule/*
 Log/Other/*
 Log/*.Log
 Log/*.pos
-Service/Gateway/Other
+Service/APIGateway/Other
+Service/MicroServiceGateway/Other
 Service/Other/InternalModule
 Module/TTS/GPTSoVits/ExternalService
 Module/Chat/user_audio_input
@@ -17,3 +18,5 @@ Users/Config/*
 *.pyc
 *.pyo
 *.pyd
+Users/Config/*
+Users/Files/*

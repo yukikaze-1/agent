@@ -1,0 +1,39 @@
+# 微服务网关配置
+MicroServiceGateway:
+  # 微服务网关本身的地址和端口
+  host: 127.0.0.1
+  port: 20000
+
+  # 超时配置（秒）
+  request_timeout: 10.0  # 请求超时
+  read_timeout: 60.0     # 读取超时
+
+  # Consul 服务器的 URL，包括协议前缀
+  consul_url: "http://127.0.0.1:8500"
+
+  # 内部微服务的路由表
+  routes:
+    TTSAgent: "http://127.0.0.1:20033"
+    STTAgent: "http://127.0.0.1:20032"
+    LLMAgent: "http://127.0.0.1:20031"
+    UserService: "http://127.0.0.1:20010"
+    OllamaAgent: "http://127.0.0.1:20030"
+    APIGateway: "http://127.0.0.1:20001"
+    UserTextInputProcessModule: "http://127.0.0.1:20020"
+
+  # 需要通过 Consul 进行服务发现的微服务列表
+  services:
+    - "UserService"
+    - "OllamaAgent"
+
+  # Redis 服务器的配置，用于限流
+  # redis_host: "127.0.0.1"
+  # redis_port: 6379
+  # redis_db: 0
+
+  # 当前微服务网关的名称和唯一标识符
+  service_name: "MicroServiceGateway"
+  service_id: "MicroServiceGateway-127.0.0.1:20000"  # 可选，默认会自动生成
+
+  # 健康检查的 URL
+  health_check_url: "http://127.0.0.1:20000/health"  # 可选，默认会自动生成

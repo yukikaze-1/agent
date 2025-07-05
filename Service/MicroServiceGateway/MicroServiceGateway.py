@@ -61,7 +61,7 @@ class MicroServiceGateway():
             self.config_path = config_path_template.replace("${AGENT_HOME}", agent_home)
         else:
             # 默认配置路径
-            self.config_path = os.path.join(agent_home, "Service", "Gateway", "config.yml")
+            self.config_path = os.path.join(agent_home, "Service", "MicroServiceGateway", "config.yml")
         
         self.config = load_config(config_path=self.config_path, config_name='MicroServiceGateway', logger=self.logger)
         

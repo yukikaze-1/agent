@@ -24,7 +24,7 @@ from Init.discard.AgentFrameInit import AgentFrameManager
 from Init.EnvironmentManager import EnvironmentManager
 
 from Service.Gateway.MicroServiceGateway import MicroServiceGateway
-from Service.Gateway.APIGateway import APIGateway
+from Service.APIGateway.APIGateway import APIGateway
 from Service.UserService import UserService
 
 from Module.Utils.Logger import setup_logger
