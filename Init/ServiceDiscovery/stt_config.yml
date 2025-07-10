@@ -1,0 +1,39 @@
+# STT服务发现配置文件
+# 专门用于STT代理的服务发现
+
+service_discovery:
+  # STT相关的必需服务列表
+  required_services:
+    - "SenseVoice_server"  # STT服务
+
+  # 服务名称映射 (Consul服务名 -> 内部服务名)
+  service_mapping:
+    "SenseVoice_server": "stt_service"
+
+  # Consul配置
+  consul:
+    url: "http://127.0.0.1:8500"
+    timeout: 10
+    retry_count: 3
+    retry_delay: 2
+
+  # 健康检查配置
+  health_check:
+    timeout: 5           # 健康检查超时时间（秒）
+    retry_count: 3       # 重试次数
+    retry_delay: 2       # 重试间隔（秒）
+    interval: 30         # 定期健康检查间隔（秒）
+
+  # 服务端点配置
+  service_endpoints:
+    SenseVoice_server:
+      health_check: "/health"
+      api_prefix: ""
+
+  # 连接配置
+  connection:
+    timeout: 10.0        # 请求超时时间
+    read_timeout: 60.0   # 读取超时时间
+    max_connections: 100 # 最大连接数
+    max_keepalive: 20    # 最大保持连接数
+    follow_redirects: true

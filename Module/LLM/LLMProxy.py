@@ -71,7 +71,8 @@ class LLMProxy:
         try:
             # 创建服务发现管理器
             consul_url = self.config.get("consul_url", "http://127.0.0.1:8500")
-            discovery_config_path = "Init/ServiceDiscovery/config.yml"
+            # 使用LLM专用的服务发现配置
+            discovery_config_path = "Init/ServiceDiscovery/llm_config.yml"
             
             self.discovery_manager = ServiceDiscoveryManager(
                 consul_url=consul_url,
@@ -315,20 +316,38 @@ async def create_llm_proxy(config_path: Optional[str] = None) -> LLMProxy:
 
 
 if __name__ == "__main__":
+    print("开始LLMProxy测试...")
+    
     # 测试代码
     async def test_llm_proxy():
+        print("创建LLMProxy实例...")
         proxy = await create_llm_proxy()
         
         try:
-            # 测试对话
-            response = await proxy.chat("Hello, how are you?")
-            print(f"Chat response: {response}")
+            print("开始功能测试...")
+            
+            # 测试健康检查
+            health = await proxy.check_health()
+            print(f"LLM service health: {health}")
             
             # 测试模型列表
-            models = await proxy.list_models()
-            print(f"Available models: {len(models)}")
+            # models = await proxy.list_models()
+            # print(f"Available models: {len(models)}")
+            # for model in models[:3]:  # 只显示前3个模型
+            #     print(f"  - {model['name']}")
+            
+            # 测试简单对话
+            try:
+                print("测试对话功能...")
+                response = await proxy.chat("你好呀", model="qwen2.5")
+                print(f"Chat response: {response}")
+            except Exception as e:
+                print(f"Chat test failed: {e}")
             
         finally:
+            print("清理资源...")
             await proxy.cleanup()
     
+    print("运行异步测试...")
     asyncio.run(test_llm_proxy())
+    print("测试完成!")

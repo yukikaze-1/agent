@@ -15,7 +15,7 @@ from logging import Logger
 from urllib.parse import urljoin
 
 from Module.Utils.Logger import setup_logger
-from Module.Utils.ConfigTools import load_config
+from Module.Utils.ConfigTools import load_config, validate_config
 from Init.ServiceDiscovery import ServiceDiscoveryManager, ExternalServiceConnector
 
 
@@ -58,6 +58,7 @@ class TTSProxy:
         self._ensure_save_dir()
         
         self.logger.info("TTSProxy initialized")
+        
     
     def _load_config(self, config_path: Optional[str]) -> Dict:
         """加载配置"""
@@ -68,7 +69,7 @@ class TTSProxy:
                 self.logger.warning(f"Failed to load config: {e}")
         
         # 默认配置
-        return {
+        default_config: Dict[str, Any] = {
             "save_dir": "${AGENT_HOME}/Temp",
             "default_character": "Elysia",
             "request_timeout": 60.0,
@@ -76,13 +77,15 @@ class TTSProxy:
             "retry_delay": 2.0,
             "characters": {
                 "Elysia": {
-                    "gpt_path": "GPT_SoVITS/pretrained_models/s1bert25hz-2kh-longer-epoch=68e-step=50232.ckpt",
-                    "sovits_path": "GPT_SoVITS/pretrained_models/s2G488k.pth",
-                    "ref_audio": "GPT_SoVITS/tools/参考音频/elysia.wav",
-                    "ref_audio_text": "你好，我是爱莉希雅。"
+                    "gpt_path": "/home/yomu/GPTSoVits/GPT_SoVITS/pretrained_models/s1bert25hz-2kh-longer-epoch=68e-step=50232.ckpt",
+                    "sovits_path": "/home/yomu/GPTSoVits/GPT_SoVITS/pretrained_models/s2G488k.pth",
+                    "ref_audio": "/home/yomu/data/audio/reference/audio/elysia.wav",
+                    "ref_audio_text": "我的话，嗯哼，更多是靠少女的小心思吧~。看看你现在的表情。好想去那里。"
                 }
             }
         }
+        return default_config
+    
     
     def _ensure_save_dir(self):
         """确保保存目录存在"""
@@ -94,6 +97,7 @@ class TTSProxy:
             self.logger.info(f"Created save directory: {save_dir}")
         
         self.save_dir = save_dir
+        
     
     async def initialize(self):
         """初始化服务连接"""
@@ -102,7 +106,8 @@ class TTSProxy:
         try:
             # 创建服务发现管理器
             consul_url = self.config.get("consul_url", "http://127.0.0.1:8500")
-            discovery_config_path = "Init/ServiceDiscovery/config.yml"
+            # 使用TTS专用的服务发现配置
+            discovery_config_path = "Init/ServiceDiscovery/tts_config.yml"
             
             self.discovery_manager = ServiceDiscoveryManager(
                 consul_url=consul_url,
@@ -127,6 +132,7 @@ class TTSProxy:
         except Exception as e:
             self.logger.error(f"TTS服务初始化失败: {e}")
             raise
+        
     
     async def synthesize(self, text: str, character: Optional[str] = None, 
                         save_file: bool = True, **kwargs) -> Union[str, bytes]:
@@ -179,6 +185,7 @@ class TTSProxy:
         except Exception as e:
             self.logger.error(f"TTS synthesis failed: {e}")
             raise
+        
     
     async def _synthesize_and_save(self, params: Dict[str, Any]) -> str:
         """合成语音并保存文件"""
@@ -196,7 +203,7 @@ class TTSProxy:
             try:
                 # 发起请求
                 response = await self.service_client.get(
-                    "/tts",
+                    path="/tts",
                     params=params,
                     timeout=self.request_timeout
                 )
@@ -221,6 +228,7 @@ class TTSProxy:
         
         # 如果所有重试都失败，抛出异常
         raise RuntimeError("TTS synthesis failed after all retries")
+    
     
     async def _synthesize_raw(self, params: Dict[str, Any]) -> bytes:
         """合成语音并返回原始数据"""
@@ -258,6 +266,7 @@ class TTSProxy:
         
         # 如果所有重试都失败，抛出异常
         raise RuntimeError("TTS synthesis failed after all retries")
+    
     
     async def set_character_weights(self, character: str, gpt_path: str, sovits_path: str) -> bool:
         """
@@ -317,6 +326,7 @@ class TTSProxy:
         """
         return list(self.characters.keys())
     
+    
     async def get_character_config(self, character: str) -> Optional[Dict[str, Any]]:
         """
         获取角色配置
@@ -328,6 +338,7 @@ class TTSProxy:
             Dict[str, Any]: 角色配置，如果不存在返回None
         """
         return self.characters.get(character)
+    
     
     async def check_health(self) -> bool:
         """
@@ -346,6 +357,7 @@ class TTSProxy:
         except Exception as e:
             self.logger.warning(f"Health check failed: {e}")
             return False
+        
     
     async def reconnect(self):
         """重新连接TTS服务"""
@@ -361,6 +373,7 @@ class TTSProxy:
         except Exception as e:
             self.logger.error(f"TTS服务重连失败: {e}")
             raise
+        
     
     async def cleanup(self):
         """清理资源"""

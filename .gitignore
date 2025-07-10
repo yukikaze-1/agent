@@ -21,3 +21,7 @@ Users/Config/*
 *.pyd
 Users/Config/*
 Users/Files/*
+${AGENT_HOME}/Temp/*
+${AGENT_HOME}/Temp/Log/*
+Other/*.log.*
+Other/*.log

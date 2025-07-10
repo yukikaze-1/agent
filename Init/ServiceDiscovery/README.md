@@ -211,6 +211,57 @@ tts_proxy:
       ref_audio_text: "你好，我是爱莉希雅。"
 ```
 
+# 服务发现配置文件说明
+
+## 配置文件列表
+
+### 1. config.yml (主配置文件)
+包含所有外部服务的完整配置，用于需要访问多个服务的模块。
+
+### 2. 专用配置文件
+为了避免单一模块等待不相关的服务，我们为每个模块创建了专用的配置文件：
+
+- **tts_config.yml**: TTS模块专用配置
+  - 只包含 GPTSoVits_server
+  - 用于 `Module/TTS/TTSProxy.py`
+
+- **stt_config.yml**: STT模块专用配置
+  - 只包含 SenseVoice_server
+  - 用于 `Module/STT/STTProxy.py`
+
+- **llm_config.yml**: LLM模块专用配置
+  - 只包含 ollama_server
+  - 用于 `Module/LLM/LLMProxy.py`
+
+## 使用原则
+
+1. **单一职责**: 每个模块只发现自己需要的服务
+2. **快速启动**: 避免等待不相关的服务
+3. **配置隔离**: 不同模块的配置相互独立
+
+## 配置文件格式
+
+所有配置文件都遵循相同的格式，只是 `required_services` 和 `service_mapping` 不同：
+
+```yaml
+service_discovery:
+  required_services:
+    - "service_name"
+  
+  service_mapping:
+    "service_name": "internal_name"
+  
+  # ... 其他通用配置
+```
+
+## 修改建议
+
+如果需要添加新的服务或修改现有配置：
+
+1. 优先考虑创建专用配置文件
+2. 避免修改 config.yml 除非是全局变更
+3. 确保服务名称映射的一致性
+
 ## 🔧 故障排除
 
 ### 常见问题

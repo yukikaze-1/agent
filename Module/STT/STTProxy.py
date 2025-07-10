@@ -5,6 +5,7 @@ STT服务代理
 替代原来的SenseVoiceAgent FastAPI服务。
 """
 
+from email.policy import default
 import os
 import asyncio
 import httpx
@@ -60,13 +61,15 @@ class STTProxy:
                 self.logger.warning(f"Failed to load config: {e}")
         
         # 默认配置
-        return {
+        default_config = {
             "request_timeout": 30.0,
             "max_retries": 3,
             "retry_delay": 2.0,
             "supported_formats": [".wav", ".mp3", ".m4a", ".flac", ".aac"],
             "max_file_size": 100 * 1024 * 1024  # 100MB
         }
+        return default_config
+    
     
     async def initialize(self):
         """初始化服务连接"""
@@ -75,7 +78,8 @@ class STTProxy:
         try:
             # 创建服务发现管理器
             consul_url = self.config.get("consul_url", "http://127.0.0.1:8500")
-            discovery_config_path = "Init/ServiceDiscovery/config.yml"
+            # 使用STT专用的服务发现配置
+            discovery_config_path = "Init/ServiceDiscovery/stt_config.yml"
             
             self.discovery_manager = ServiceDiscoveryManager(
                 consul_url=consul_url,
@@ -100,6 +104,7 @@ class STTProxy:
         except Exception as e:
             self.logger.error(f"STT服务初始化失败: {e}")
             raise
+        
     
     async def transcribe(self, audio_file_path: str, language: Optional[str] = None, 
                         **kwargs) -> Dict[str, Any]:
@@ -108,7 +113,7 @@ class STTProxy:
         
         Args:
             audio_file_path: 音频文件路径
-            language: 语言代码（如 'zh', 'en'）
+            language: 语言代码（如 'zh', 'en', 'auto'）
             **kwargs: 其他参数
             
         Returns:
@@ -121,21 +126,24 @@ class STTProxy:
         self._validate_audio_file(audio_file_path)
         
         try:
-            # 准备请求数据
-            data = {
-                "audio_path": audio_file_path,
-                "language": language or "auto",
+            # 读取音频文件
+            with open(audio_file_path, 'rb') as f:
+                audio_data = f.read()
+            
+            # 使用文件名作为key
+            filename = os.path.basename(audio_file_path)
+            
+            return await self.transcribe_with_upload(
+                audio_data, 
+                filename=filename, 
+                language=language, 
                 **kwargs
-            }
-            
-            result = await self._make_request("/transcribe", data)
-            
-            self.logger.info(f"STT transcription completed for: {audio_file_path}")
-            return result
+            )
             
         except Exception as e:
             self.logger.error(f"STT transcription failed: {e}")
             raise
+        
     
     async def transcribe_with_upload(self, audio_data: bytes, filename: str = "audio.wav",
                                    language: Optional[str] = None, **kwargs) -> Dict[str, Any]:
@@ -145,7 +153,7 @@ class STTProxy:
         Args:
             audio_data: 音频数据
             filename: 文件名
-            language: 语言代码
+            language: 语言代码（'zh', 'en', 'auto'）
             **kwargs: 其他参数
             
         Returns:
@@ -160,17 +168,15 @@ class STTProxy:
             raise ValueError(f"Audio file too large: {len(audio_data)} bytes > {max_size}")
         
         try:
-            # 准备多部分上传数据
-            files = {
-                "audio": (filename, audio_data, "audio/wav")
-            }
+            # 使用流式预测或句子预测
+            use_stream = kwargs.get("use_stream", False)
             
-            data = {
-                "language": language or "auto",
-                **kwargs
-            }
-            
-            result = await self._upload_request("/transcribe_upload", files, data)
+            if use_stream:
+                # 使用 /predict/stream 端点
+                result = await self._stream_request(audio_data, filename, language)
+            else:
+                # 使用 /predict/sentences 端点
+                result = await self._sentences_request(audio_data, filename, language)
             
             self.logger.info(f"STT transcription completed for uploaded audio: {filename}")
             return result
@@ -178,6 +184,7 @@ class STTProxy:
         except Exception as e:
             self.logger.error(f"STT transcription with upload failed: {e}")
             raise
+        
     
     async def get_supported_languages(self) -> List[str]:
         """
@@ -186,24 +193,10 @@ class STTProxy:
         Returns:
             List[str]: 支持的语言代码列表
         """
-        if not self.service_client:
-            await self.initialize()
+        # SenseVoice支持的语言（基于其API设计）
+        # 通常支持中文(zh)、英文(en)和自动检测(auto)
+        return ["zh", "en", "auto", "ja", "ko"]
         
-        if self.service_client is None:
-            self.logger.error("服务客户端未能初始化")
-            return ["zh", "en", "auto"]
-        
-        try:
-            response = await self.service_client.get("/languages")
-            response.raise_for_status()
-            result = response.json()
-            
-            return result.get("languages", ["zh", "en", "auto"])
-            
-        except Exception as e:
-            self.logger.warning(f"Failed to get supported languages: {e}")
-            # 返回默认支持的语言
-            return ["zh", "en", "auto"]
     
     def _validate_audio_file(self, file_path: str):
         """验证音频文件"""
@@ -226,6 +219,7 @@ class STTProxy:
             raise ValueError(f"Audio file too large: {file_size} bytes > {max_size}")
         
         self.logger.debug(f"Audio file validation passed: {file_path}")
+        
     
     async def _make_request(self, path: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """发起JSON请求"""
@@ -269,6 +263,7 @@ class STTProxy:
         # 如果所有重试都失败，返回空字典
         return {}
     
+    
     async def _upload_request(self, path: str, files: Dict, data: Dict[str, Any]) -> Dict[str, Any]:
         """发起文件上传请求"""
         if self.service_client is None:
@@ -311,6 +306,7 @@ class STTProxy:
         # 如果所有重试都失败，返回空字典
         return {}
     
+    
     async def check_health(self) -> bool:
         """
         检查STT服务健康状态
@@ -328,6 +324,7 @@ class STTProxy:
         except Exception as e:
             self.logger.warning(f"Health check failed: {e}")
             return False
+        
     
     async def reconnect(self):
         """重新连接STT服务"""
@@ -343,6 +340,7 @@ class STTProxy:
         except Exception as e:
             self.logger.error(f"STT服务重连失败: {e}")
             raise
+        
     
     async def cleanup(self):
         """清理资源"""
@@ -360,6 +358,96 @@ class STTProxy:
             
         except Exception as e:
             self.logger.warning(f"资源清理时出错: {e}")
+    
+    
+    async def _stream_request(self, audio_data: bytes, filename: str, language: Optional[str]) -> Dict[str, Any]:
+        """
+        使用流式预测端点进行转录
+        
+        Args:
+            audio_data: 音频数据
+            filename: 文件名
+            language: 语言代码
+            
+        Returns:
+            Dict[str, Any]: 转录结果
+        """
+        if self.service_client is None:
+            self.logger.error("服务客户端未初始化")
+            return {}
+        
+        max_retries = self.config.get("max_retries", 3)
+        retry_delay = self.config.get("retry_delay", 2.0)
+        
+        for attempt in range(max_retries):
+            try:
+                files = {
+                    "file": (filename, audio_data, "audio/wav")
+                }
+                
+                response = await self.service_client.post(
+                    "/predict/stream",
+                    files=files,
+                    timeout=self.request_timeout
+                )
+                response.raise_for_status()
+                return response.json()
+                
+            except Exception as e:
+                self.logger.error(f"Stream request error (attempt {attempt + 1}): {e}")
+                if attempt == max_retries - 1:
+                    raise
+                await asyncio.sleep(retry_delay * (attempt + 1))
+        
+        return {}
+    
+    async def _sentences_request(self, audio_data: bytes, filename: str, language: Optional[str]) -> Dict[str, Any]:
+        """
+        使用句子预测端点进行转录
+        
+        Args:
+            audio_data: 音频数据  
+            filename: 文件名
+            language: 语言代码
+            
+        Returns:
+            Dict[str, Any]: 转录结果
+        """
+        if self.service_client is None:
+            self.logger.error("服务客户端未初始化")
+            return {}
+        
+        max_retries = self.config.get("max_retries", 3)
+        retry_delay = self.config.get("retry_delay", 2.0)
+        
+        for attempt in range(max_retries):
+            try:
+                # 准备multipart form数据
+                files = [
+                    ("files", (filename, audio_data, "audio/wav"))
+                ]
+                
+                data = {
+                    "keys": filename,  # 使用文件名作为key
+                    "lang": language or "auto"
+                }
+                
+                response = await self.service_client.post(
+                    "/predict/sentences",
+                    files=files,
+                    data=data,
+                    timeout=self.request_timeout
+                )
+                response.raise_for_status()
+                return response.json()
+                
+            except Exception as e:
+                self.logger.error(f"Sentences request error (attempt {attempt + 1}): {e}")
+                if attempt == max_retries - 1:
+                    raise
+                await asyncio.sleep(retry_delay * (attempt + 1))
+        
+        return {}
 
 
 # 便捷函数
@@ -388,9 +476,25 @@ if __name__ == "__main__":
             languages = await proxy.get_supported_languages()
             print(f"Supported languages: {languages}")
             
-            # 如果有测试音频文件，可以取消注释下面的代码
-            # result = await proxy.transcribe("/path/to/test/audio.wav")
-            # print(f"Transcription result: {result}")
+            # 测试健康检查
+            health = await proxy.check_health()
+            print(f"STT service health: {health}")
+            
+            # 测试转录功能
+            try:
+                result = await proxy.transcribe("/home/yomu/data/audio/reference/audio/elysia.wav")
+                print(f"Transcription result: {result}")
+            except Exception as e:
+                print(f"Transcription test failed: {e}")
+                
+            # 测试流式转录
+            try:
+                with open("/home/yomu/data/audio/reference/audio/elysia.wav", 'rb') as f:
+                    audio_data = f.read()
+                result = await proxy.transcribe_with_upload(audio_data, "test.wav", use_stream=True)
+                print(f"Stream transcription result: {result}")
+            except Exception as e:
+                print(f"Stream transcription test failed: {e}")
             
         finally:
             await proxy.cleanup()
