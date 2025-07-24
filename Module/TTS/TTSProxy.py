@@ -67,6 +67,7 @@ class TTSProxy:
                 return load_config(config_path, "tts_proxy", self.logger)
             except Exception as e:
                 self.logger.warning(f"Failed to load config: {e}")
+                self.logger.info("Using default configuration.")
         
         # 默认配置
         default_config: Dict[str, Any] = {

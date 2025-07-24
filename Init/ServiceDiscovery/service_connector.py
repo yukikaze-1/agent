@@ -313,9 +313,12 @@ class ExternalServiceConnector:
         self.logger.info("服务连接清理完成")
     
     def __del__(self):
-        """析构函数"""
-        try:
-            if hasattr(self, 'service_clients') and self.service_clients:
-                asyncio.create_task(self.cleanup())
-        except Exception:
-            pass
+        """析构函数 - 不执行异步操作以避免警告"""
+        # 不在析构函数中执行异步操作，只做标记
+        if hasattr(self, 'service_clients') and self.service_clients:
+            import warnings
+            warnings.warn(
+                "ExternalServiceConnector资源未正确清理，请确保调用cleanup()方法",
+                ResourceWarning,
+                stacklevel=2
+            )

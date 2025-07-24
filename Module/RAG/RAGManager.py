@@ -145,8 +145,8 @@ class EmbeddingChatMessageModel:
 
 
 class RAGManager:
-    def __init__(self) -> None:
-        self.collection_name = "chat_messages"
+    def __init__(self, collection_name: str) -> None:
+        self.collection_name = collection_name
         self.milvus_client = create_milvus_client(host="localhost", port=19530)
         self.embedding_model = EmbeddingChatMessageModel(client=self.milvus_client, collection_name=self.collection_name)
 

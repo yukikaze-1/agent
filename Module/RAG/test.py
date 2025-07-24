@@ -7,6 +7,9 @@ from typing import List
 from Module.RAG.RAGManager import RAGManager
 from time import sleep
 
+from Module.LLM.LLMProxy import create_llm_proxy
+from Module.RAG.MergeChatMessage import ChatMessageMerger
+
 
 test_text_00 = f"""
 【规则】
@@ -58,33 +61,19 @@ test_text_04 = f"""
 /你扮演一只猫娘。名为软糖。你所扮演的猫娘是有只有猫耳、猫尾这两个猫类特征的，而其余与人类无异。身高150cm，体重45kg。长发及膝，头发白色，红瞳，皮肤白皙。喜欢穿白色丝袜与连裤袜。内衣偏好为可爱的白色蕾丝类型。发型为长直发，偶尔也喜欢扎双马尾。娇小可爱、小鸟依人，深爱着主人。喜欢涩涩和涩涩的事情。现在的场景是在卧室中，我（主人）与软糖正坐在床准备做爱。
 """    
 
-test_text_05 = f"""
-运行lolife_chs.exe进入汉化版游戏
-
-本汉化严禁直播录播汉化游戏，用于商业或营利等行为，
-本补丁仅供学习交流使用，请于下载后24小时内删除。
-
-本补丁说明：
-①本补丁由【脸肿汉化组】制作。本补丁仅供学习交流使用，请于下载后24小时内删除。如喜欢本作品，请购买正版。
-②不得将本补丁或以本补丁制作的产品用于商业或营利，也不应使用以任何形式盗版的本补丁及以其制作的产品，造成的一切后果自行承担。
-③禁移植，禁转ACGF，禁转黙示。其他非盈利网站可任意转载本补丁，转载者必须保证本补丁的完整性，不得作出任何的修改。（移植的拉出去打断第三条腿）
-④本补丁可能会受到杀毒软件的误报，如不放心，请勿使用
-⑤禁止黙示制作汉化硬盘版
-"""
-    
-async def main():
-    global test_text_01, test_text_02, test_text_03, test_text_04, test_text_05
-    
-    messages = [ChatMessage(role="user", content=test_text_01, message_id=1),
+messages = [ChatMessage(role="user", content=test_text_01, message_id=1),
                 ChatMessage(role="assistant", content=test_text_02, message_id=2),
                 ChatMessage(role="user", content=test_text_03, message_id=3),
                 ChatMessage(role="user", content=test_text_04, message_id=4),
-                ChatMessage(role="user", content=test_text_05, message_id=5),
-                ChatMessage(role="user", content="Hello there?", message_id=6),
-                ChatMessage(role="assistant", content="Hi! How can I assist you today?", message_id=7)]
+                ChatMessage(role="user", content="Hello there?", message_id=5),
+                ChatMessage(role="assistant", content="Hi! How can I assist you today?", message_id=6)]
+    
+async def main():
+    global test_text_01, test_text_02, test_text_03, test_text_04, messages
+    
     print(messages)
     
-    rag_manager = RAGManager()
+    rag_manager = RAGManager(collection_name="chat_messages")
 
     res = await rag_manager.messages_to_RAG(messages, clear=True)
     print(f"Messages to RAG result: {res}")
@@ -100,26 +89,40 @@ async def main():
     
     
     
-def test():
-    from langchain.text_splitter import RecursiveCharacterTextSplitter
+async def test():
+    global test_text_01, test_text_02, test_text_03, test_text_04, messages
     
-    global test_text_00
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=500,
-        chunk_overlap=100
-    )
+    print(messages)
+
+    llm_proxy = None
+    merger = None
     
-    chunks = splitter.split_text(test_text_00)
-    print(f"Split into {len(chunks)} chunks:")
-    for i, chunk in enumerate(chunks):
-        print(f"Chunk {i+1}: {chunk}...")
+    try:
+        llm_proxy = await create_llm_proxy()
+        merger = ChatMessageMerger(rag=RAGManager(collection_name="chat_messages"), llm_proxy=llm_proxy)
+            
+        res = await merger.summary_messages_daily(messages=messages)
         
+        print(f"llm response: {res}")
+    
+    except Exception as e:
+        print(f"测试失败: {e}")
+        raise
+    
+    finally:
+        # 确保资源清理
+        if llm_proxy:
+            await llm_proxy.cleanup()
         
 
 if __name__ == "__main__":
     import asyncio
-    asyncio.run(main())
-    # test()
+    try:
+        asyncio.run(test())
+    except KeyboardInterrupt:
+        print("程序被中断")
+    except Exception as e:
+        print(f"程序异常: {e}")
     
     
     

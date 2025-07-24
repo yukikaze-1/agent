@@ -16,6 +16,7 @@ Module/Chat/user_audio_input
 Users/Files/*
 Users/Config/*
 *.log
+*.log.*
 *.pyc
 *.pyo
 *.pyd

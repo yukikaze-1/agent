@@ -87,6 +87,7 @@ class ServiceDiscoveryManager:
                 return load_config(config_path, "service_discovery", self.logger)
             except Exception as e:
                 self.logger.warning(f"Failed to load config from {config_path}: {e}")
+                self.logger.info("Using default configuration.")
         
         # 默认配置
         return {
@@ -339,13 +340,22 @@ class ServiceDiscoveryManager:
     
     async def cleanup(self):
         """清理资源"""
-        if self.client:
-            await self.client.aclose()
+        self.logger.info("清理ServiceDiscoveryManager资源...")
+        try:
+            if hasattr(self, 'client') and self.client and not self.client.is_closed:
+                await self.client.aclose()
+                self.logger.debug("HTTP客户端已关闭")
+            self.client = None
+        except Exception as e:
+            self.logger.warning(f"清理ServiceDiscoveryManager资源时出错: {e}")
     
     def __del__(self):
-        """析构函数"""
-        try:
-            if hasattr(self, 'client') and self.client:
-                asyncio.create_task(self.client.aclose())
-        except Exception:
-            pass
+        """析构函数 - 不执行异步操作以避免警告"""
+        # 不在析构函数中执行异步操作，只做标记
+        if hasattr(self, 'client') and self.client and not getattr(self.client, 'is_closed', True):
+            import warnings
+            warnings.warn(
+                "ServiceDiscoveryManager客户端未正确关闭，请确保调用cleanup()方法",
+                ResourceWarning,
+                stacklevel=2
+            )
