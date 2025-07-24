@@ -25,3 +25,4 @@ ${AGENT_HOME}/Temp/*
 ${AGENT_HOME}/Temp/Log/*
 Other/*.log.*
 Other/*.log
+model_cache/*
